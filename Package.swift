@@ -7,6 +7,7 @@ let package = Package(
     products: [
         .library(name: "IMProto", targets: ["IMProto"]),
         .library(name: "IMTransport", targets: ["IMTransport"]),
+        .library(name: "IMClient", targets: ["IMClient"]),
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-protobuf.git", from: "1.25.0"),
@@ -21,5 +22,7 @@ let package = Package(
         .testTarget(name: "IMProtoTests", dependencies: ["IMProto"]),
         .target(name: "IMTransport"),
         .testTarget(name: "IMTransportTests", dependencies: ["IMTransport"]),
+        .target(name: "IMClient", dependencies: ["IMTransport", "IMProto"]),
+        .testTarget(name: "IMClientTests", dependencies: ["IMClient"]),
     ]
 )
