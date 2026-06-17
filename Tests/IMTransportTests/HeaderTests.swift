@@ -46,4 +46,11 @@ final class HeaderTests: XCTestCase {
         bytes[2] = Signal.none.rawValue
         XCTAssertNil(Header.decode(Data(bytes)))
     }
+
+    func test_decodeMasksReservedBitOnSignalByte() {
+        var bytes = [UInt8](Header(signal: .connect, subSignal: .none, bodyLength: 0, messageId: 1).encode())
+        bytes[2] |= 0x80 // set the reserved bit 7 on the signal byte, as a malformed/adversarial peer might
+        let decoded = Header.decode(Data(bytes))
+        XCTAssertEqual(decoded?.signal, .connect)
+    }
 }

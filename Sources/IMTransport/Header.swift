@@ -38,6 +38,9 @@ public struct Header: Equatable {
         guard data.count >= length else { return nil }
         let bytes = [UInt8](data.prefix(length))
         guard bytes[0] == magicByte else { return nil }
+        // Bit 7 of the signal/subSignal bytes is a reserved flag bit on the wire (mirroring
+        // Android's `Header.java`, which masks the same bit when reading Signal/SubSignal);
+        // this codebase always treats it as 0 when masking on read.
         guard let signal = Signal(rawValue: bytes[2] & 0x7f), signal != .none else { return nil }
         let subSignal = SubSignal(rawValue: bytes[7] & 0x7f) ?? .none
         let bodyLength = (UInt32(bytes[3]) << 24) | (UInt32(bytes[4]) << 16) | (UInt32(bytes[5]) << 8) | UInt32(bytes[6])
