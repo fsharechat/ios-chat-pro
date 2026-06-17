@@ -39,6 +39,16 @@ final class UserStoreTests: XCTestCase {
         XCTAssertEqual(users.map { $0.displayName }, ["Alice", "Bob"])
     }
 
+    func test_allUsers_sortsNilDisplayNameLastNotFirst() throws {
+        try store.upsert(StoredUser(uid: "u1", name: "bob", displayName: "Bob", portrait: nil, mobile: nil, gender: 0, updateDt: 1))
+        try store.upsert(StoredUser(uid: "u2", name: "no-name-yet", displayName: nil, portrait: nil, mobile: nil, gender: 0, updateDt: 1))
+        try store.upsert(StoredUser(uid: "u3", name: "alice", displayName: "Alice", portrait: nil, mobile: nil, gender: 0, updateDt: 1))
+
+        let users = try store.allUsers()
+
+        XCTAssertEqual(users.map { $0.uid }, ["u3", "u1", "u2"]) // Alice, Bob, then the nil-displayName contact last
+    }
+
     func test_usersPublisher_emitsOnUpsert() throws {
         var receivedCounts: [Int] = []
         let expectation = expectation(description: "received at least 2 updates")
