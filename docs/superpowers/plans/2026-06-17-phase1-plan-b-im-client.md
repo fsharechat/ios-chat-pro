@@ -397,28 +397,34 @@ final class HeartbeatManagerTests: XCTestCase {
 
     func test_reportException_midRangeAbsDiff_subtractsHalfTheDiff() {
         let manager = HeartbeatManager(isNightModeProvider: { false })
-        manager.reportHeartbeatScheduleTime(0)
-        // interval = 30_000 + 15_000 = 45_000; diff = 45_000-30_000=15_000; absDiff=15_000 is in [4*5000,12*5000) = [20_000,60_000)? No: 15_000 < 20_000, so this lands in the 10_000<=absDiff<20_000 branch (subtract absDiff/2).
-        manager.reportHeartbeatExceptionTime(45_000)
+        // scheduleTime must be non-zero: both `currentScheduleTime` and `currentSendSuccessTime`
+        // default to 0, and the Java guards treat 0 as "never scheduled" (`currentScheduleTime != 0`).
+        // Passing literal 0 here would make reportHeartbeatExceptionTime's adjustment block a silent
+        // no-op — every test below uses a non-zero schedule time for the same reason.
+        manager.reportHeartbeatScheduleTime(1_000)
+        // interval = 46_000 - 1_000 = 45_000; diff = 45_000-30_000=15_000; absDiff=15_000 is in [2*5000,4*5000)=[10_000,20_000), so this lands in the "subtract absDiff/2" branch.
+        manager.reportHeartbeatExceptionTime(1_000 + 45_000)
 
         XCTAssertEqual(manager.currentHeartInterval(), 30_000 - 15_000 / 2) // 22_500
     }
 
     func test_reportException_largeAbsDiff_disablesUpSearchingAndSubtractsFourSteps() {
         let manager = HeartbeatManager(isNightModeProvider: { false })
-        manager.reportHeartbeatScheduleTime(0)
-        // absDiff = 70_000, which is >= 12*5_000=60_000 => disableUpSearchingMaxInterval=true, subtract 4*step=20_000
-        manager.reportHeartbeatExceptionTime(30_000 + 70_000)
+        manager.reportHeartbeatScheduleTime(1_000)
+        // interval = 100_000; diff = 100_000 - 30_000 = 70_000, which is >= 12*5_000=60_000
+        // => disableUpSearchingMaxInterval=true, subtract 4*step=20_000 => 30_000-20_000=10_000,
+        // which is then floor-clamped back up to MIN_HEARTBEAT_INTERVAL since 10_000 < 15_000.
+        // (The intermediate 10_000 is never observable through the public API — only the final,
+        // fully-clamped value is — so there is exactly one assertion here, not two.)
+        manager.reportHeartbeatExceptionTime(1_000 + 100_000)
 
-        XCTAssertEqual(manager.currentHeartInterval(), 30_000 - 20_000) // 10_000, but floor-clamped...
-        // ...to MIN_HEARTBEAT_INTERVAL since 10_000 < 15_000
-        XCTAssertEqual(manager.currentHeartInterval(), 30_000)
+        XCTAssertEqual(manager.currentHeartInterval(), HeartbeatManager.minHeartbeatInterval) // 30_000
     }
 
     func test_reportException_resultBelowFifteenSeconds_resetsToMinInterval() {
         let manager = HeartbeatManager(isNightModeProvider: { false })
-        manager.reportHeartbeatScheduleTime(0)
-        manager.reportHeartbeatExceptionTime(30_000 + 70_000) // drives currentMaxHeartbeatInterval to 10_000, below the 15_000 floor
+        manager.reportHeartbeatScheduleTime(1_000)
+        manager.reportHeartbeatExceptionTime(1_000 + 100_000) // same large-abs-diff path as above: drives currentMaxHeartbeatInterval to 10_000, below the 15_000 floor
 
         XCTAssertEqual(manager.currentHeartInterval(), HeartbeatManager.minHeartbeatInterval)
     }
@@ -428,12 +434,23 @@ final class HeartbeatManagerTests: XCTestCase {
             random: FixedRandomSource([0]),
             isNightModeProvider: { false }
         )
-        // Drive currentMaxHeartbeatInterval up near the 60_000 day ceiling first via the up-searching success path, then verify a *successful* recalculation can't push it past the ceiling.
-        manager.reportHeartbeatScheduleTime(0)
-        manager.reportHeartbeatSendSuccessTime(90_000) // interval=90_000 is NOT < 90_000, so guarded out — use a value just under it instead.
-        manager.reportHeartbeatScheduleTime(0)
-        manager.reportHeartbeatSendSuccessTime(89_000) // interval=89_000, diff=89_000-30_000=59_000, in (0,90_000) => upSearching path sets currentMaxHeartbeatInterval=min(89_000, dayMax 60_000) = 60_000
+        manager.reportHeartbeatScheduleTime(1_000)
+        // interval = 90_000; diff = interval - currentMaxHeartbeatInterval(30_000) = 60_000, which is
+        // in (0, 90_000) so recalculateMaxHeartbeatInterval's adjustment runs (note: the guard checks
+        // `diff`, the *gap from the current max*, not `interval` directly). Since upSearchingMaxInterval
+        // is still true (the default), currentMaxHeartbeatInterval is set to `interval` (90_000) and then
+        // immediately clamped down to the day ceiling (60_000) because 90_000 > maxHeartBeatInterval().
+        manager.reportHeartbeatSendSuccessTime(1_000 + 90_000)
 
+        // currentHeartInterval() reads currentHeartbeatInterval/tempHeartbeatInterval, neither of which
+        // recalculateMaxHeartbeatInterval() touches directly — only nextHeartbeatInterval() (or
+        // reportHeartbeatExceptionTime) syncs currentHeartbeatInterval from currentMaxHeartbeatInterval.
+        // upSearchingMaxInterval is still true and currentHeartbeatIntervalSuccessNum is still 0, so this
+        // call takes the else-branch, syncs currentHeartbeatInterval = currentMaxHeartbeatInterval (60_000),
+        // then immediately falls into the "at or above max" branch (60_000 >= maxHeartBeatInterval()=60_000)
+        // and returns a jittered value — with FixedRandomSource([0]), randomInt=0, so the jitter is exactly 60_000.
+        let result = manager.nextHeartbeatInterval()
+        XCTAssertEqual(result, 60_000)
         XCTAssertEqual(manager.currentHeartInterval(), 60_000)
     }
 
@@ -2086,6 +2103,7 @@ git commit -m "feat(IMClient): add ConnectAckHandler for sync-state payload pars
 
 ## Plan Self-Review Notes
 
+- **Task 4 test fixtures were corrected during implementation (caught by the implementer subagent, then independently re-verified):** three of the original `HeartbeatManagerTests` cases passed `0` as a schedule time, which collides with `currentScheduleTime`/`currentSendSuccessTime`'s own zero-initialized "never scheduled" sentinel — the adjustment block they were meant to exercise silently no-op'd, and two of the three happened to still pass by coincidence (the untouched initial value matched the asserted value for the wrong reason). A fourth test additionally asserted on `currentHeartInterval()` after a sequence of calls that never touches the fields that getter reads. All four are fixed in the Task 4 test code above (now using non-zero schedule times throughout, and the day-max test now calls `nextHeartbeatInterval()` to actually observe the recalculated value). This is exactly the kind of subtle bug the plan asked implementers to escalate rather than silently "fix" by adjusting either side — which is what happened here.
 - **Spec coverage:** This plan implements migration-design-doc §5.2–§5.6 (heartbeat, reconnect/cluster, login/CONNECT handshake, handler dispatch) in full for the Phase 1 scope. §5.1 (frame protocol) was Plan A. Business-level message handling beyond CONNECT_ACK (receive/send/recall/delivery-report/read-report handlers) is explicitly **not** in this plan — those are Plan C/D's job once `IMStorage` exists to persist what they parse.
 - **Migration design doc correction:** §5.4 of `docs/superpowers/specs/2026-06-17-ios-chat-pro-migration-design.md` describes the `/login` response as `{"code":0,"data":{"token":"...","uid":"..."}}`. Having now read the actual server source (`LoginResponse.java`, `RestResult.java`), the real shape is `{"code":0,"message":"...","result":{"userId":"...","token":"...","register":false}}` — `result` not `data`, `userId` not `uid`. This plan's `LoginClient` (Task 7) implements the corrected shape; the design doc should be patched to match in a follow-up edit (tracked, not done as part of this plan to avoid scope creep into a different document's review cycle).
 - **Reconnect gives up after 4 attempts, by design (matching Android):** `AbstractProtoService.receiveException` only schedules a reconnect while `reconnectNum <= 3` (checked before incrementing), so after 4 consecutive failures it stops scheduling entirely until something external calls `reconnect()`/`connect()` again. `IMClient` replicates this exactly (`maxAutomaticReconnectAttempts = 4`). On Android, app-foreground and network-reachability listeners outside `AbstractProtoService` are what re-trigger connection after exhaustion — equivalent triggers (e.g. `UIApplication` foreground notifications, `NWPathMonitor`) are explicitly **out of scope for Plan B** and should be a tracked Plan D (or a small Plan B-follow-up) item, otherwise a real device that loses network for a few minutes will never reconnect on its own.
