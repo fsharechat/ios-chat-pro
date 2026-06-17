@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "IMCore",
-    platforms: [.iOS(.v15)],
+    platforms: [.iOS(.v15), .macOS(.v12)],
     products: [
         .library(name: "IMProto", targets: ["IMProto"]),
         .library(name: "IMTransport", targets: ["IMTransport"]),
