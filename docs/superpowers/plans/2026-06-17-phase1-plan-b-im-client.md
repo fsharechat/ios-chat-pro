@@ -967,7 +967,7 @@ public enum WireCrypto {
 - [ ] **Step 5: Run tests to verify they pass**
 
 Run: `swift test --filter WireCryptoTests`
-Expected: `Executed 9 tests, with 0 failures`
+Expected: `Executed 10 tests, with 0 failures` (the plan's test list above has 10 methods — an earlier miscount said 9)
 
 - [ ] **Step 6: Commit**
 
