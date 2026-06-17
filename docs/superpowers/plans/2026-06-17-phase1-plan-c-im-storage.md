@@ -643,9 +643,19 @@ public final class MessageStore {
         return message
     }
 
+    /// `localMessageId` is only guaranteed unique among my own **sent**
+    /// messages (see Task 2's partial unique index and its doc comment) — a
+    /// received message can legitimately carry a `localMessageId` chosen by
+    /// a different sender's device that coincides with one of mine. This
+    /// lookup is scoped to `direction = .send` for exactly that reason: it
+    /// must never return/touch a received message as a side effect of an
+    /// unrelated collision.
     public func message(localMessageId: Int64) throws -> StoredMessage? {
         try dbQueue.read { db in
-            try StoredMessage.filter(Column("localMessageId") == localMessageId).fetchOne(db)
+            try StoredMessage
+                .filter(Column("localMessageId") == localMessageId)
+                .filter(Column("direction") == MessageDirection.send.rawValue)
+                .fetchOne(db)
         }
     }
 
@@ -666,20 +676,30 @@ public final class MessageStore {
         }
     }
 
+    /// Scoped to `direction = .send` for the same reason as `message(localMessageId:)`
+    /// above — without this, a colliding received-message `localMessageId`
+    /// would also get its status silently overwritten by an unrelated ack.
+    /// A `localMessageId` that doesn't match any sent row is a silent no-op
+    /// (no row updated, no error) — this mirrors GRDB's own `db.execute`
+    /// semantics (it doesn't report affected-row counts) and is acceptable
+    /// for Phase 1's only caller (a future `SendMessageHandler` that already
+    /// knows the row exists, having just inserted it itself).
     public func updateStatus(localMessageId: Int64, status: MessageStatus) throws {
         try dbQueue.write { db in
             try db.execute(
-                sql: "UPDATE message SET status = ? WHERE localMessageId = ?",
-                arguments: [status.rawValue, localMessageId]
+                sql: "UPDATE message SET status = ? WHERE localMessageId = ? AND direction = ?",
+                arguments: [status.rawValue, localMessageId, MessageDirection.send.rawValue]
             )
         }
     }
 
+    /// Scoped to `direction = .send`; see `updateStatus` above for why, and
+    /// for the no-op-on-not-found behavior.
     public func updateMessageUid(localMessageId: Int64, messageUid: Int64) throws {
         try dbQueue.write { db in
             try db.execute(
-                sql: "UPDATE message SET messageUid = ? WHERE localMessageId = ?",
-                arguments: [messageUid, localMessageId]
+                sql: "UPDATE message SET messageUid = ? WHERE localMessageId = ? AND direction = ?",
+                arguments: [messageUid, localMessageId, MessageDirection.send.rawValue]
             )
         }
     }
@@ -1332,6 +1352,9 @@ git commit -m "feat(IMStorage): add IMStorage facade tying database and stores t
 
 ## Plan Self-Review Notes
 
+- **Task 4 code-quality review found the query layer hadn't carried forward Task 2's `direction = .send` scoping decision:** `message(localMessageId:)`, `updateStatus`, and `updateMessageUid` originally filtered only by `localMessageId`, with no `direction` filter — meaning a received message that happened to collide with one of my sent `localMessageId`s (the exact scenario Task 2's partial unique index defends against at the schema level) could be silently returned/updated alongside, or instead of, the intended sent message. Fixed by adding the same `direction = .send` scoping to all three methods. This is a good example of a schema-level fix not automatically propagating to the query layer built on top of it — worth double-checking in future tasks whenever a schema constraint encodes a business rule.
+- **Deferred, not fixed:** `messages(conversationType:target:line:limit:)` returns only the newest N rows (`ORDER BY timestamp DESC LIMIT n`), with no `before:`/cursor parameter for fetching older pages. This is "most-recent-N," not true pagination. Plan D's chat UI will need to reverse this list for oldest-at-top display and will need a `before:` parameter added here for "load earlier messages" — flagged now so it isn't discovered mid-Plan-D-implementation as a surprise gap. Not fixed in Plan C because nothing in this plan's own scope (or its tests) needs it yet (YAGNI) — Plan D's task list should include it.
+- Also deferred: `updateStatus`/`updateMessageUid` silently no-op if `localMessageId` doesn't match any sent row (no thrown error, no affected-row signal) — acceptable for Phase 1's only caller (a handler that just inserted the row itself and knows it exists), revisit if a future caller needs to detect "the row I expected to update doesn't exist."
 - **Task 2 code-quality review found a real schema gap, fixed with a partial (not blanket) unique index:** the original migration only had a plain non-unique index on `message.localMessageId`, despite that column's entire purpose being dedup of a sender's own pending messages. The obvious-looking fix (a global `UNIQUE` constraint) was investigated and **rejected** after reading `MessageShardingUtil.generateId()` on the Android side: `local_message_id` is a Snowflake-style ID (timestamp + nodeId + rotating counter) generated independently by whichever device sends a given message — it is quasi-unique *per sender*, with no cross-device coordination preventing two different senders' IDs from coinciding. A blanket `UNIQUE` constraint spanning both sent and received rows could therefore reject a legitimate received message because of an unrelated collision with a different sender's ID. The actual fix is a **partial unique index** (`message_on_local_message_id_for_sent`, `WHERE direction = 0`) scoped to my own sent messages only — the only scope where this column's dedup guarantee is meaningful and safe to enforce at the database level.
 - **Spec coverage:** This plan implements migration-design-doc §6 (`IMStorage` data layer architecture: messages/conversations/users/sync_state tables, GRDB `ValueObservation` for Combine-driven UI updates) for the Phase 1 scope (text + image messages, single-chat, static contact list). Groups/channels/friend-requests are explicitly out of scope (Phase 2+), reflected in the trimmed `MessageStatus`/`MessageContentType` enums and the absence of a `groups`/`group_members` table — adding those later is additive (new tables, new enum cases), not a breaking migration.
 - **Who builds the wire ↔ storage bridge:** This plan's "Scope boundary" section (top of file) is the single source of truth: `IMStorage` has zero `IMProto`/`IMClient` dependency by design, so it's independently testable. The `ReceiveMessageHandler`/`SendMessageHandler` that actually call into these stores from real wire frames are Plan D's responsibility. The exact wire-field mapping Plan D needs (text → `searchable_content`; image → `searchable_content` digest + `data` thumbnail + `remoteMediaUrl`, `localMediaPath` is local-only) is recorded in this plan's "Reference facts" section specifically so that research doesn't need to be redone.
