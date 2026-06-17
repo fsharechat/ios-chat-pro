@@ -1,3 +1,4 @@
+import GRDB
 import XCTest
 @testable import IMStorage
 
@@ -80,5 +81,49 @@ final class MessageStoreTests: XCTestCase {
         let updated = try store.message(localMessageId: 7)
         XCTAssertEqual(updated?.messageUid, 123_456)
         XCTAssertEqual(updated?.content, .text("keep me"))
+    }
+
+    func test_messageByLocalId_ignoresCollidingReceivedMessageWithSameLocalId() throws {
+        let collidingId: Int64 = 555
+        try store.insert(StoredMessage(
+            localMessageId: collidingId, conversationType: .single, target: "someone-else", from: "someone-else",
+            content: .text("not mine"), timestamp: 1_000, status: .unread, direction: .receive
+        ))
+
+        // No sent message with this localMessageId exists yet — must not
+        // find the received one as a substitute.
+        XCTAssertNil(try store.message(localMessageId: collidingId))
+
+        try store.insert(StoredMessage(
+            localMessageId: collidingId, conversationType: .single, target: "u2", from: "u1",
+            content: .text("mine"), timestamp: 2_000, status: .sending, direction: .send
+        ))
+
+        // Now it must find my sent message, not the unrelated received one.
+        XCTAssertEqual(try store.message(localMessageId: collidingId)?.content, .text("mine"))
+    }
+
+    func test_updateStatus_doesNotAffectCollidingReceivedMessageWithSameLocalId() throws {
+        let collidingId: Int64 = 556
+        try store.insert(StoredMessage(
+            localMessageId: collidingId, conversationType: .single, target: "someone-else", from: "someone-else",
+            content: .text("not mine"), timestamp: 1_000, status: .unread, direction: .receive
+        ))
+        try store.insert(StoredMessage(
+            localMessageId: collidingId, conversationType: .single, target: "u2", from: "u1",
+            content: .text("mine"), timestamp: 2_000, status: .sending, direction: .send
+        ))
+
+        try store.updateStatus(localMessageId: collidingId, status: .sent)
+
+        XCTAssertEqual(try store.message(localMessageId: collidingId)?.status, .sent)
+        // The received message's status must be untouched.
+        let received = try database.dbQueue.read { db in
+            try StoredMessage
+                .filter(Column("localMessageId") == collidingId)
+                .filter(Column("direction") == MessageDirection.receive.rawValue)
+                .fetchOne(db)
+        }
+        XCTAssertEqual(received?.status, .unread)
     }
 }

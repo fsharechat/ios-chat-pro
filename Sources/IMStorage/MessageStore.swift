@@ -17,9 +17,19 @@ public final class MessageStore {
         return message
     }
 
+    /// `localMessageId` is only guaranteed unique among my own **sent**
+    /// messages (see Task 2's partial unique index and its doc comment) — a
+    /// received message can legitimately carry a `localMessageId` chosen by
+    /// a different sender's device that coincides with one of mine. This
+    /// lookup is scoped to `direction = .send` for exactly that reason: it
+    /// must never return/touch a received message as a side effect of an
+    /// unrelated collision.
     public func message(localMessageId: Int64) throws -> StoredMessage? {
         try dbQueue.read { db in
-            try StoredMessage.filter(Column("localMessageId") == localMessageId).fetchOne(db)
+            try StoredMessage
+                .filter(Column("localMessageId") == localMessageId)
+                .filter(Column("direction") == MessageDirection.send.rawValue)
+                .fetchOne(db)
         }
     }
 
@@ -40,20 +50,30 @@ public final class MessageStore {
         }
     }
 
+    /// Scoped to `direction = .send` for the same reason as `message(localMessageId:)`
+    /// above — without this, a colliding received-message `localMessageId`
+    /// would also get its status silently overwritten by an unrelated ack.
+    /// A `localMessageId` that doesn't match any sent row is a silent no-op
+    /// (no row updated, no error) — this mirrors GRDB's own `db.execute`
+    /// semantics (it doesn't report affected-row counts) and is acceptable
+    /// for Phase 1's only caller (a future `SendMessageHandler` that already
+    /// knows the row exists, having just inserted it itself).
     public func updateStatus(localMessageId: Int64, status: MessageStatus) throws {
         try dbQueue.write { db in
             try db.execute(
-                sql: "UPDATE message SET status = ? WHERE localMessageId = ?",
-                arguments: [status.rawValue, localMessageId]
+                sql: "UPDATE message SET status = ? WHERE localMessageId = ? AND direction = ?",
+                arguments: [status.rawValue, localMessageId, MessageDirection.send.rawValue]
             )
         }
     }
 
+    /// Scoped to `direction = .send`; see `updateStatus` above for why, and
+    /// for the no-op-on-not-found behavior.
     public func updateMessageUid(localMessageId: Int64, messageUid: Int64) throws {
         try dbQueue.write { db in
             try db.execute(
-                sql: "UPDATE message SET messageUid = ? WHERE localMessageId = ?",
-                arguments: [messageUid, localMessageId]
+                sql: "UPDATE message SET messageUid = ? WHERE localMessageId = ? AND direction = ?",
+                arguments: [messageUid, localMessageId, MessageDirection.send.rawValue]
             )
         }
     }
