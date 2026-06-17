@@ -83,4 +83,36 @@ final class FrameDecoderTests: XCTestCase {
         let nextFrames = decoder.feed(makeFrameBytes(signal: .ping, subSignal: .none, messageId: 1, body: []))
         XCTAssertEqual(nextFrames.count, 1)
     }
+
+    func test_feedingEmptyDataReturnsNoFramesAndPreservesState() {
+        let decoder = FrameDecoder()
+        let bytes = makeFrameBytes(signal: .ping, subSignal: .none, messageId: 1, body: [0x01])
+
+        let firstHalf = decoder.feed(bytes.prefix(3))
+        XCTAssertEqual(firstHalf.count, 0)
+
+        let emptyFeedFrames = decoder.feed(Data())
+        XCTAssertEqual(emptyFeedFrames.count, 0)
+
+        let rest = decoder.feed(bytes.suffix(from: 3))
+        XCTAssertEqual(rest.count, 1)
+        XCTAssertEqual(rest[0].body, Data([0x01]))
+    }
+
+    func test_twoFramesSplitByteByByteAcrossTheirSharedBoundary() {
+        let decoder = FrameDecoder()
+        var combined = makeFrameBytes(signal: .ping, subSignal: .none, messageId: 1, body: [0xaa])
+        combined.append(makeFrameBytes(signal: .pubAck, subSignal: .ms, messageId: 2, body: [0xbb, 0xcc]))
+
+        var collected: [Frame] = []
+        for byte in combined {
+            collected += decoder.feed(Data([byte]))
+        }
+
+        XCTAssertEqual(collected.count, 2)
+        XCTAssertEqual(collected[0].header.signal, .ping)
+        XCTAssertEqual(collected[0].body, Data([0xaa]))
+        XCTAssertEqual(collected[1].header.signal, .pubAck)
+        XCTAssertEqual(collected[1].body, Data([0xbb, 0xcc]))
+    }
 }
