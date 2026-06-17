@@ -1021,6 +1021,16 @@ final class UserStoreTests: XCTestCase {
         XCTAssertEqual(users.map { $0.displayName }, ["Alice", "Bob"])
     }
 
+    func test_allUsers_sortsNilDisplayNameLastNotFirst() throws {
+        try store.upsert(StoredUser(uid: "u1", name: "bob", displayName: "Bob", portrait: nil, mobile: nil, gender: 0, updateDt: 1))
+        try store.upsert(StoredUser(uid: "u2", name: "no-name-yet", displayName: nil, portrait: nil, mobile: nil, gender: 0, updateDt: 1))
+        try store.upsert(StoredUser(uid: "u3", name: "alice", displayName: "Alice", portrait: nil, mobile: nil, gender: 0, updateDt: 1))
+
+        let users = try store.allUsers()
+
+        XCTAssertEqual(users.map { $0.uid }, ["u3", "u1", "u2"]) // Alice, Bob, then the nil-displayName contact last
+    }
+
     func test_usersPublisher_emitsOnUpsert() throws {
         var receivedCounts: [Int] = []
         let expectation = expectation(description: "received at least 2 updates")
@@ -1104,15 +1114,26 @@ public final class UserStore {
         try dbQueue.read { db in try StoredUser.fetchOne(db, key: uid) }
     }
 
+    /// Sorted with NULL `displayName`s last, not first: plain `ORDER BY
+    /// displayName` puts SQLite NULLs ahead of every real name, which would
+    /// float not-yet-synced contacts to the top of the list. `displayName
+    /// IS NULL` evaluates to 0 for a populated name and 1 for NULL, so
+    /// ordering by that first pushes NULLs to the end before the secondary
+    /// alphabetical sort takes over. Plain SQL (rather than the query
+    /// interface) here since it's the simplest way to express this exact,
+    /// well-known SQLite "NULLs last" idiom without depending on a specific
+    /// GRDB query-interface ordering-expression API.
+    private static let allUsersOrderedSQL = "SELECT * FROM user ORDER BY displayName IS NULL, displayName"
+
     public func allUsers() throws -> [StoredUser] {
         try dbQueue.read { db in
-            try StoredUser.order(Column("displayName")).fetchAll(db)
+            try StoredUser.fetchAll(db, sql: Self.allUsersOrderedSQL)
         }
     }
 
     public func usersPublisher() -> AnyPublisher<[StoredUser], Error> {
         ValueObservation
-            .tracking { db in try StoredUser.order(Column("displayName")).fetchAll(db) }
+            .tracking { db in try StoredUser.fetchAll(db, sql: Self.allUsersOrderedSQL) }
             .publisher(in: dbQueue, scheduling: .immediate)
             .eraseToAnyPublisher()
     }
