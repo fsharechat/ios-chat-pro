@@ -25,14 +25,21 @@ public final class NWConnectionTransport: IMTransportConnection {
     public var onDataReceived: ((Data) -> Void)?
 
     private let connection: NWConnection
-    private let queue = DispatchQueue(label: "im.transport.nwconnection")
+    /// Queue all `Network.framework` callbacks (state updates, receive,
+    /// send completion) are delivered on. Defaults to `.main` to match
+    /// `DispatchQueueScheduler`'s default and `IMClient`'s single-queue-caller
+    /// contract (see `IMClient`'s doc comment) — most callers will drive
+    /// `IMClient` from main, so this avoids a real cross-queue race without
+    /// requiring `IMClient` to do its own internal locking.
+    private let queue: DispatchQueue
 
-    public init(host: String, port: UInt16) {
+    public init(host: String, port: UInt16, callbackQueue: DispatchQueue = .main) {
         connection = NWConnection(
             host: NWEndpoint.Host(host),
             port: NWEndpoint.Port(rawValue: port)!,
             using: .tcp
         )
+        queue = callbackQueue
     }
 
     public func start() {

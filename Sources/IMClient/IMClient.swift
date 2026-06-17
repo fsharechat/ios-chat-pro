@@ -30,8 +30,36 @@ enum LoginHandshakeError: Error, Equatable {
 
 /// Owns the TCP connection lifecycle: connect, the AES login handshake,
 /// adaptive heartbeat, and host-failover reconnect with backoff. Mirrors
-/// `AbstractProtoService`'s control flow — see the doc comment at the top
-/// of Task 10 in the plan for the line-by-line mapping.
+/// `AbstractProtoService`'s control flow:
+/// - `onEvent(.connected)` → `sendConnectMessage()` (Java: `onConnected()`)
+/// - a `Signal.CONNECT_ACK` frame → reset reconnect counter, mark connected,
+///   start the heartbeat loop (Java: `onConnected()`'s `reconnectNum = 0` +
+///   `sendHeartbeat(...)`); note this never branches on the refusal
+///   `SubSignal` codes, matching `ConnectAckMessageHandler.match()`, which
+///   only checks the `Signal`
+/// - `onEvent(.failed)`/`.cancelled` → report the failure to
+///   `HeartbeatManager`, schedule a reconnect with backoff capped at 4
+///   automatic attempts then stop (Java: `receiveException`'s
+///   `reconnectNum <= 3` guard, checked *before* incrementing — so this is
+///   shared by every failure source, including a `sendConnectMessage` token
+///   decode error, not just transport failures)
+/// - heartbeat send completion → `reportHeartbeatSendSuccessTime`/
+///   `reportHeartbeatExceptionTime`, then (success only) reschedule via
+///   `scheduleNextHeartbeatTimer`, whose *fired* action computes
+///   `nextHeartbeatInterval()` for the **next** send — this two-step
+///   "schedule with current, compute next on fire" split mirrors
+///   `schedule()`/`sendHeartbeat()` in `AbstractProtoService.java` exactly;
+///   collapsing it into one step would change the algorithm's timing.
+///
+/// **Threading contract:** no internal locking — all public methods
+/// (`connect()`, `disconnect()`, `register(_:)`) and all transport/scheduler
+/// callbacks must be invoked from the same queue. By convention this is the
+/// main queue: `DispatchQueueScheduler` and `NWConnectionTransport` both
+/// default their callback delivery to `.main`. This mirrors how most iOS
+/// networking clients (e.g. `URLSession`'s default delegate queue) are
+/// driven — callers don't need their own lock as long as they stick to one
+/// queue. A caller needing background-queue operation must inject a
+/// `Scheduler` and `transportFactory` that both deliver on that same queue.
 public final class IMClient {
     public private(set) var connectionStatus: IMConnectionStatus = .disconnected {
         didSet { onConnectionStatusChange?(connectionStatus) }
@@ -83,6 +111,8 @@ public final class IMClient {
         userDisconnect = true
         heartbeatToken?.cancel()
         reconnectToken?.cancel()
+        transport?.onEvent = nil
+        transport?.onDataReceived = nil
         transport?.cancel()
         transport = nil
         connectionStatus = .disconnected
@@ -121,6 +151,7 @@ public final class IMClient {
     }
 
     private func sendConnectMessage() {
+        guard !userDisconnect else { return }
         do {
             guard let tokenData = Data(base64Encoded: configuration.token) else {
                 throw LoginHandshakeError.invalidTokenEncoding

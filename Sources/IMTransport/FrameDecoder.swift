@@ -2,7 +2,8 @@ import Foundation
 
 /// Buffers a raw incoming byte stream and emits complete `Frame`s as they
 /// become available. Not thread-safe — callers must serialize access
-/// (the owning `NWConnection` receive queue in IMClient does this).
+/// (by convention, `IMClient` and its transport both default to delivering
+/// on the main queue — see `IMClient`'s threading-contract doc comment).
 ///
 /// Buffer is a plain `[UInt8]` rather than `Data` on purpose: `Data` does not
 /// guarantee `startIndex == 0` after slicing/`removeSubrange`, which makes
