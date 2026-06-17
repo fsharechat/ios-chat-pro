@@ -119,10 +119,50 @@ final class HeartbeatManagerTests: XCTestCase {
 
     func test_nightMode_usesTwoMinuteCeilingInsteadOfOneMinute() {
         let manager = HeartbeatManager(isNightModeProvider: { true })
-        manager.setStateForTesting(currentHeartbeatInterval: 130_000, currentMaxHeartbeatInterval: 130_000, upSearchingMaxInterval: false, currentHeartbeatIntervalSuccessNum: 0)
+        // `upSearchingMaxInterval: false` paired with an interval above any ceiling is a
+        // combination the real algorithm can never reach on its own (every writer that runs
+        // while upSearchingMaxInterval is false also clamps to the ceiling in the same call) —
+        // use `true` here instead, which the success path can legitimately leave at an
+        // above-ceiling value transiently. The clamp being tested doesn't read
+        // upSearchingMaxInterval at all, so this doesn't change what's being verified.
+        manager.setStateForTesting(currentHeartbeatInterval: 130_000, currentMaxHeartbeatInterval: 130_000, upSearchingMaxInterval: true, currentHeartbeatIntervalSuccessNum: 0)
         manager.reportHeartbeatScheduleTime(0)
         manager.reportHeartbeatExceptionTime(1) // any failure path re-clamps against maxHeartBeatInterval()
 
         XCTAssertEqual(manager.currentHeartInterval(), 120_000) // night ceiling, not the 60_000 day ceiling
+    }
+
+    func test_recalculate_afterFourConsecutiveNonUpSearchingSuccesses_reenablesUpSearching() {
+        let manager = HeartbeatManager(isNightModeProvider: { false })
+        // Trip upSearchingMaxInterval to false via one failure first (absDiff=1_000 < 10_000,
+        // smallest bracket — doesn't set disableUpSearchingMaxInterval, so nothing will block
+        // the re-enable we're about to drive). currentMaxHeartbeatInterval becomes 25_000.
+        manager.reportHeartbeatScheduleTime(1_000)
+        manager.reportHeartbeatExceptionTime(1_000 + 31_000)
+
+        // 4 consecutive successful schedule/success cycles, each with `diff` in (0, 90_000) so
+        // recalculateMaxHeartbeatInterval's outer guard passes. Since upSearchingMaxInterval is
+        // false, the `if(upSearchingMaxInterval)` branch is skipped each time (currentMaxHeartbeatInterval
+        // stays 25_000) but `currentHeartbeatSuccessNum` increments every call; on the 4th call it
+        // exceeds 3 and (since disableUpSearchingMaxInterval was never set) upSearchingMaxInterval
+        // flips back to true.
+        for i in 0..<4 {
+            let base = Int64(100_000 * (i + 1))
+            manager.reportHeartbeatScheduleTime(base)
+            manager.reportHeartbeatSendSuccessTime(base + 30_000) // interval=30_000, diff=30_000-25_000=5_000
+        }
+
+        // upSearchingMaxInterval has no public getter, so observe it indirectly: with
+        // currentHeartbeatInterval=25_000, maxSuccessTime=25_000/5_000=5. Calling
+        // nextHeartbeatInterval() 7 times only steps the interval up by ONE_STEP_INTERVAL on the
+        // 7th call if upSearchingMaxInterval is true (the only branch that can ever increase
+        // currentHeartbeatInterval requires it) — if the re-enable above had failed to happen,
+        // all 7 calls would keep returning the unchanged 25_000 forever.
+        var lastResult: Int64 = 0
+        for _ in 0..<7 {
+            lastResult = manager.nextHeartbeatInterval()
+        }
+
+        XCTAssertEqual(lastResult, 30_000) // 25_000 + ONE_STEP_INTERVAL — only reachable if upSearchingMaxInterval is true
     }
 }
