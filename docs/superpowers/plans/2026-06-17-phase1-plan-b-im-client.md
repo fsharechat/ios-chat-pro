@@ -487,11 +487,51 @@ final class HeartbeatManagerTests: XCTestCase {
 
     func test_nightMode_usesTwoMinuteCeilingInsteadOfOneMinute() {
         let manager = HeartbeatManager(isNightModeProvider: { true })
-        manager.setStateForTesting(currentHeartbeatInterval: 130_000, currentMaxHeartbeatInterval: 130_000, upSearchingMaxInterval: false, currentHeartbeatIntervalSuccessNum: 0)
+        // `upSearchingMaxInterval: false` paired with an interval above any ceiling is a
+        // combination the real algorithm can never reach on its own (every writer that runs
+        // while upSearchingMaxInterval is false also clamps to the ceiling in the same call) —
+        // use `true` here instead, which the success path can legitimately leave at an
+        // above-ceiling value transiently. The clamp being tested doesn't read
+        // upSearchingMaxInterval at all, so this doesn't change what's being verified.
+        manager.setStateForTesting(currentHeartbeatInterval: 130_000, currentMaxHeartbeatInterval: 130_000, upSearchingMaxInterval: true, currentHeartbeatIntervalSuccessNum: 0)
         manager.reportHeartbeatScheduleTime(0)
         manager.reportHeartbeatExceptionTime(1) // any failure path re-clamps against maxHeartBeatInterval()
 
         XCTAssertEqual(manager.currentHeartInterval(), 120_000) // night ceiling, not the 60_000 day ceiling
+    }
+
+    func test_recalculate_afterFourConsecutiveNonUpSearchingSuccesses_reenablesUpSearching() {
+        let manager = HeartbeatManager(isNightModeProvider: { false })
+        // Trip upSearchingMaxInterval to false via one failure first (absDiff=1_000 < 10_000,
+        // smallest bracket — doesn't set disableUpSearchingMaxInterval, so nothing will block
+        // the re-enable we're about to drive). currentMaxHeartbeatInterval becomes 25_000.
+        manager.reportHeartbeatScheduleTime(1_000)
+        manager.reportHeartbeatExceptionTime(1_000 + 31_000)
+
+        // 4 consecutive successful schedule/success cycles, each with `diff` in (0, 90_000) so
+        // recalculateMaxHeartbeatInterval's outer guard passes. Since upSearchingMaxInterval is
+        // false, the `if(upSearchingMaxInterval)` branch is skipped each time (currentMaxHeartbeatInterval
+        // stays 25_000) but `currentHeartbeatSuccessNum` increments every call; on the 4th call it
+        // exceeds 3 and (since disableUpSearchingMaxInterval was never set) upSearchingMaxInterval
+        // flips back to true.
+        for i in 0..<4 {
+            let base = Int64(100_000 * (i + 1))
+            manager.reportHeartbeatScheduleTime(base)
+            manager.reportHeartbeatSendSuccessTime(base + 30_000) // interval=30_000, diff=30_000-25_000=5_000
+        }
+
+        // upSearchingMaxInterval has no public getter, so observe it indirectly: with
+        // currentHeartbeatInterval=25_000, maxSuccessTime=25_000/5_000=5. Calling
+        // nextHeartbeatInterval() 7 times only steps the interval up by ONE_STEP_INTERVAL on the
+        // 7th call if upSearchingMaxInterval is true (the only branch that can ever increase
+        // currentHeartbeatInterval requires it) — if the re-enable above had failed to happen,
+        // all 7 calls would keep returning the unchanged 25_000 forever.
+        var lastResult: Int64 = 0
+        for _ in 0..<7 {
+            lastResult = manager.nextHeartbeatInterval()
+        }
+
+        XCTAssertEqual(lastResult, 30_000) // 25_000 + ONE_STEP_INTERVAL — only reachable if upSearchingMaxInterval is true
     }
 }
 ```
@@ -684,7 +724,7 @@ Note: `FixedRandomSource` in the test file is declared `mutating` to match the `
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `swift test --filter HeartbeatManagerTests`
-Expected: `Executed 9 tests, with 0 failures`
+Expected: `Executed 10 tests, with 0 failures`
 
 - [ ] **Step 5: Commit**
 
@@ -2103,6 +2143,7 @@ git commit -m "feat(IMClient): add ConnectAckHandler for sync-state payload pars
 
 ## Plan Self-Review Notes
 
+- **Task 4 code-quality review (post-implementation) found two more issues, both addressed:** (1) the night-mode test seeded `upSearchingMaxInterval: false` together with an above-ceiling interval — a combination the real algorithm can never reach (every code path that runs while that flag is false also clamps to the ceiling in the same call) — fixed by seeding `true` instead, which doesn't change what the test verifies since the clamp never reads that flag; (2) `recalculateMaxHeartbeatInterval`'s "re-enable `upSearchingMaxInterval` after 3+ consecutive successes" recovery branch had zero test coverage — added `test_recalculate_afterFourConsecutiveNonUpSearchingSuccesses_reenablesUpSearching`, which observes the flag indirectly (it has no public getter) via whether `nextHeartbeatInterval()` ever takes the step-up branch again. **Deliberately not added:** a test for `disableUpSearchingMaxInterval`'s own re-enable threshold (`currentHeartbeatSuccessNum > 20 || currentMaxHeartbeatInterval < middleHeartbeatInterval`) — reaching that branch requires first tripping the large-abs-diff failure path (which also sets `disableUpSearchingMaxInterval = true`) and then driving 20+ successful cycles, which is a lot of test setup for one more corner of an already-rigorously-verified algorithm; tracked here as a known, explicit coverage gap rather than silently dropped, to be picked up if a real heartbeat-stability bug ever traces back to this latch.
 - **Task 4 test fixtures were corrected during implementation (caught by the implementer subagent, then independently re-verified):** three of the original `HeartbeatManagerTests` cases passed `0` as a schedule time, which collides with `currentScheduleTime`/`currentSendSuccessTime`'s own zero-initialized "never scheduled" sentinel — the adjustment block they were meant to exercise silently no-op'd, and two of the three happened to still pass by coincidence (the untouched initial value matched the asserted value for the wrong reason). A fourth test additionally asserted on `currentHeartInterval()` after a sequence of calls that never touches the fields that getter reads. All four are fixed in the Task 4 test code above (now using non-zero schedule times throughout, and the day-max test now calls `nextHeartbeatInterval()` to actually observe the recalculated value). This is exactly the kind of subtle bug the plan asked implementers to escalate rather than silently "fix" by adjusting either side — which is what happened here.
 - **Spec coverage:** This plan implements migration-design-doc §5.2–§5.6 (heartbeat, reconnect/cluster, login/CONNECT handshake, handler dispatch) in full for the Phase 1 scope. §5.1 (frame protocol) was Plan A. Business-level message handling beyond CONNECT_ACK (receive/send/recall/delivery-report/read-report handlers) is explicitly **not** in this plan — those are Plan C/D's job once `IMStorage` exists to persist what they parse.
 - **Migration design doc correction:** §5.4 of `docs/superpowers/specs/2026-06-17-ios-chat-pro-migration-design.md` describes the `/login` response as `{"code":0,"data":{"token":"...","uid":"..."}}`. Having now read the actual server source (`LoginResponse.java`, `RestResult.java`), the real shape is `{"code":0,"message":"...","result":{"userId":"...","token":"...","register":false}}` — `result` not `data`, `userId` not `uid`. This plan's `LoginClient` (Task 7) implements the corrected shape; the design doc should be patched to match in a follow-up edit (tracked, not done as part of this plan to avoid scope creep into a different document's review cycle).
