@@ -90,6 +90,7 @@ git commit -m "chore: scaffold IMProto and IMTransport SwiftPM targets"
 - Create: `Proto/WFCMessage.proto` (copied verbatim from `../chat-proto/WFCMessage.proto`)
 - Create: `Scripts/generate-proto.sh`
 - Create: `Sources/IMProto/Generated/WFCMessage.pb.swift` (generated output, committed to git)
+- Modify: `.gitignore` (add `.tools/`)
 - Test: `Tests/IMProtoTests/ConnectAckPayloadCodingTests.swift`
 
 - [ ] **Step 1: Vendor the proto source**
@@ -110,33 +111,77 @@ option java_outer_classname = "WFCMessage";
 message ConnectAckPayload
 ```
 
-- [ ] **Step 2: Install the codegen toolchain**
+- [ ] **Step 2: Get a codegen toolchain that does NOT touch the system `protoc`**
 
-```bash
-brew install protobuf swift-protobuf
-protoc --version
-protoc-gen-swift --version
-```
+This repo's host already has a system `protoc` at `/usr/local/bin/protoc`, version **2.5.0** — pinned there because the sibling `chat-proto` repo's Java codegen pipeline requires exactly that version. Do not `brew install`/upgrade it; a 2.5.0-vs-modern mismatch was confirmed in practice to make `protoc-gen-swift` crash (SIGILL) when fed a `CodeGeneratorRequest` built by protoc 2.5 — the plugin wire format isn't compatible across that big a version gap. Everything below is scoped to this repo only and never modifies `/usr/local/bin/protoc`.
 
-Expected: both commands print a version string (protoc 3.x+, protoc-gen-swift 1.x). If `protoc-gen-swift` is not found on `PATH` after install, locate it with `brew --prefix swift-protobuf` and add `<prefix>/bin` to `PATH` for the current shell session.
+1. Build `protoc-gen-swift` from the `swift-protobuf` SPM dependency already checked out by `swift build` in Task 1:
+   ```bash
+   cd .build/checkouts/swift-protobuf
+   swift build -c release --product protoc-gen-swift
+   cd -
+   find .build/checkouts/swift-protobuf/.build -name protoc-gen-swift -type f
+   ```
+   Expected: one path printed, e.g. `.build/checkouts/swift-protobuf/.build/<arch>-apple-macosx/release/protoc-gen-swift`.
+
+2. Download a modern `protoc` binary, scoped to this repo, into a gitignored `.tools/` directory (never installed system-wide, never affects `/usr/local/bin/protoc`):
+   ```bash
+   mkdir -p .tools
+   curl -sL -o .tools/protoc.zip \
+     https://github.com/protocolbuffers/protobuf/releases/download/v35.1/protoc-35.1-osx-universal_binary.zip
+   unzip -q -o .tools/protoc.zip -d .tools/protoc-35.1
+   rm .tools/protoc.zip
+   .tools/protoc-35.1/bin/protoc --version
+   ```
+   Expected: `libprotoc 35.1`. Add `.tools/` to `.gitignore` (the binaries should never be committed).
 
 - [ ] **Step 3: Write the regeneration script**
+
+The script resolves both tools from within the repo (building the plugin on demand if it's missing) and never touches anything outside this repo's `.build`/`.tools` directories or the system `protoc`.
 
 ```bash
 #!/usr/bin/env bash
 # Scripts/generate-proto.sh
 # Regenerates Sources/IMProto/Generated/WFCMessage.pb.swift from Proto/WFCMessage.proto.
 # Run this after chat-proto/WFCMessage.proto changes; commit the regenerated output.
+#
+# Uses a repo-local modern protoc (.tools/protoc-35.1) and a protoc-gen-swift
+# plugin built from the swift-protobuf SPM checkout — NEVER the system protoc,
+# which is intentionally pinned to 2.5.0 for the sibling chat-proto Java build
+# and is binary-incompatible with this plugin (confirmed: SIGILL on a modern
+# CodeGeneratorRequest payload).
 set -euo pipefail
 cd "$(dirname "$0")/.."
+
+PROTOC_BIN="${PROTOC_BIN:-.tools/protoc-35.1/bin/protoc}"
+if [ ! -x "$PROTOC_BIN" ]; then
+  echo "error: $PROTOC_BIN not found. Run the Step 2 download commands first." >&2
+  exit 1
+fi
+
+PROTOC_GEN_SWIFT="${PROTOC_GEN_SWIFT:-}"
+if [ -z "$PROTOC_GEN_SWIFT" ]; then
+  PROTOC_GEN_SWIFT="$(find .build/checkouts/swift-protobuf/.build -name protoc-gen-swift -type f 2>/dev/null | head -1)"
+fi
+if [ -z "$PROTOC_GEN_SWIFT" ] || [ ! -x "$PROTOC_GEN_SWIFT" ]; then
+  echo "Building protoc-gen-swift from the swift-protobuf SPM checkout..."
+  (cd .build/checkouts/swift-protobuf && swift build -c release --product protoc-gen-swift)
+  PROTOC_GEN_SWIFT="$(find .build/checkouts/swift-protobuf/.build -name protoc-gen-swift -type f | head -1)"
+fi
+echo "Using protoc: $PROTOC_BIN"
+echo "Using protoc-gen-swift plugin: $PROTOC_GEN_SWIFT"
+
 mkdir -p Sources/IMProto/Generated
-protoc \
+"$PROTOC_BIN" \
   --proto_path=Proto \
+  --plugin=protoc-gen-swift="$PROTOC_GEN_SWIFT" \
   --swift_out=Sources/IMProto/Generated \
   --swift_opt=Visibility=Public \
   Proto/WFCMessage.proto
 echo "Generated Sources/IMProto/Generated/WFCMessage.pb.swift"
 ```
+
+Note: modern `protoc` (3.5+) supports the generic `--swift_opt=` flag used above. This would NOT have worked with the system protoc 2.5.0 (`Unknown flag: --swift_opt` — confirmed), which is exactly why Step 2 vendors a modern one rather than trying to make 2.5.0 work.
 
 ```bash
 chmod +x Scripts/generate-proto.sh
@@ -148,8 +193,10 @@ Run: `./Scripts/generate-proto.sh`
 Expected: prints `Generated Sources/IMProto/Generated/WFCMessage.pb.swift` and the file exists with a `import SwiftProtobuf` line near the top and a `public struct ConnectAckPayload` definition.
 
 Verify:
-Run: `grep -n "public struct ConnectAckPayload" Sources/IMProto/Generated/WFCMessage.pb.swift`
+Run: `grep -n "public struct Im_ConnectAckPayload" Sources/IMProto/Generated/WFCMessage.pb.swift`
 Expected: one match.
+
+**Naming note:** `WFCMessage.proto` declares `package im;`. SwiftProtobuf has no concept of Java-style packages, so it prefixes every generated type with the package name: `ConnectAckPayload` in the `.proto` becomes `Im_ConnectAckPayload` in Swift, `Message` becomes `Im_Message`, `Conversation` becomes `Im_Conversation`, and so on for every message in the file. This is standard SwiftProtobuf behavior, not a workaround — every future task (Plan B/C/D) that references a generated message type must use the `Im_`-prefixed name.
 
 - [ ] **Step 5: Remove the Task 1 scaffold file now that real source exists**
 
@@ -166,7 +213,7 @@ import XCTest
 
 final class ConnectAckPayloadCodingTests: XCTestCase {
     func test_roundTripBinarySerialization() throws {
-        var payload = ConnectAckPayload()
+        var payload = Im_ConnectAckPayload()
         payload.msgHead = 1001
         payload.friendHead = 5
         payload.friendRqHead = 2
@@ -174,7 +221,7 @@ final class ConnectAckPayloadCodingTests: XCTestCase {
         payload.serverTime = 1_750_000_000
 
         let bytes = try payload.serializedData()
-        let decoded = try ConnectAckPayload(serializedBytes: bytes)
+        let decoded = try Im_ConnectAckPayload(serializedBytes: bytes)
 
         XCTAssertEqual(decoded.msgHead, 1001)
         XCTAssertEqual(decoded.friendHead, 5)
@@ -184,11 +231,11 @@ final class ConnectAckPayloadCodingTests: XCTestCase {
     }
 
     func test_optionalFieldsDefaultToZeroWhenAbsent() throws {
-        var payload = ConnectAckPayload()
+        var payload = Im_ConnectAckPayload()
         payload.msgHead = 1
 
         let bytes = try payload.serializedData()
-        let decoded = try ConnectAckPayload(serializedBytes: bytes)
+        let decoded = try Im_ConnectAckPayload(serializedBytes: bytes)
 
         XCTAssertEqual(decoded.msgHead, 1)
         XCTAssertEqual(decoded.friendHead, 0)
@@ -205,7 +252,7 @@ Expected: `Executed 2 tests, with 0 failures`
 - [ ] **Step 8: Commit**
 
 ```bash
-git add Proto Scripts Sources/IMProto Tests/IMProtoTests Package.resolved
+git add Proto Scripts Sources/IMProto Tests/IMProtoTests Package.resolved .gitignore
 git commit -m "feat(IMProto): vendor WFCMessage.proto and generate SwiftProtobuf types"
 ```
 
