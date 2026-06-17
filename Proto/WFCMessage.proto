@@ -1,0 +1,436 @@
+package im;
+option java_package = "cn.wildfirechat.proto";
+option java_outer_classname = "WFCMessage";
+
+message ConnectAckPayload
+{
+	optional int64 msg_head = 1;
+	optional int64 friend_head = 2;
+	optional int64 friend_rq_head = 3;
+	optional int64 setting_head = 4;
+	optional string node_addr = 5;
+	optional int32 node_port = 6;
+	optional int64 server_time = 7;
+}
+
+message AddFriendRequest
+{
+  required string target_uid = 1;
+  required string reason = 2;
+}
+
+message AddGroupMemberRequest 
+{
+	required string group_id = 1;
+	repeated GroupMember added_member = 2;
+	repeated int32 to_line = 3;
+	optional MessageContent notify_content = 4;
+}
+
+message CreateGroupRequest
+{
+	required Group group = 1;
+	repeated int32 to_line = 2;
+	optional MessageContent notify_content = 3;
+}
+
+message DismissGroupRequest
+{
+	required string group_id = 1;
+	repeated int32 to_line = 2;
+	optional MessageContent notify_content = 3;
+}
+
+message PullUserRequest
+{
+	repeated UserRequest request = 1;
+}
+
+message UserRequest
+{
+	required string uid = 1;
+	optional int64 update_dt = 2;
+}
+
+message PullGroupMemberRequest
+{
+	required string target = 1;
+	required int64 head = 2;
+}
+
+message HandleFriendRequest
+{
+	required string target_uid = 1;
+	required int32 status = 2;
+}
+
+message RemoveGroupMemberRequest
+{
+	required string group_id = 1;
+	repeated string removed_member = 2;
+	repeated int32 to_line = 3;
+	optional MessageContent notify_content = 4;
+}
+
+message ModifyGroupInfoRequest
+{
+	required string group_id = 1;
+	required int32 type = 2;
+	required string value = 3;
+	repeated int32 to_line = 4;
+	optional MessageContent notify_content = 5;
+}
+
+message QuitGroupRequest
+{
+	required string group_id = 1;
+	repeated int32 to_line = 2;
+	optional MessageContent notify_content = 3;
+}
+
+message TransferGroupRequest
+{
+	required string group_id = 1;
+	required string new_owner = 2;
+	repeated int32 to_line = 3;
+	optional MessageContent notify_content = 4;
+}
+
+message ModifyMyInfoRequest
+{
+	repeated InfoEntry entry = 1;
+}
+
+message InfoEntry
+{
+	required int32 type = 1;
+	required string value = 2;
+}
+
+message SearchUserRequest
+{
+	required string keyword = 1;
+	optional int32 fuzzy = 2;
+	optional int32 page = 3;
+}
+
+message INT64Buf
+{
+	required int64 id = 1;
+}
+
+message PullMessageRequest
+{
+	required int64 id = 1;
+	required int32 type = 2;
+	optional int64 delay = 3;
+}
+
+message PullMessageResult
+{
+	repeated Message message = 1;
+	required int64 current = 2;
+	required int64 head = 3;
+}
+
+message PullGroupInfoResult
+{
+	repeated GroupInfo info = 1;
+}
+
+message PullGroupMemberResult
+{
+	repeated GroupMember member = 1;
+}
+
+message Message
+{
+	required Conversation conversation = 1;
+	required string from_user = 2;
+	required MessageContent content = 3;
+	optional int64 message_id = 4;
+	optional int64 server_timestamp = 5;
+	optional string to_user = 6;
+	repeated string to = 7;
+	optional int64 local_message_id = 8;
+}
+
+message LoadRemoteMessages
+{
+	required Conversation conversation = 1;
+	required int64 before_uid = 2;
+	required int32 count = 3;
+}
+
+message Conversation
+{
+	required int32 type = 1;
+	required string target = 2;
+	required int32 line = 3;
+}
+
+message Version
+{
+	required int64 version = 1;
+}
+
+message Group
+{
+	required GroupInfo group_info = 1;
+	repeated GroupMember members = 2;
+}
+
+message GroupInfo
+{
+	optional string target_id = 1;
+	required string name = 2;
+	optional string portrait = 3;
+	optional string owner = 4;
+	required int32 type = 5;
+	optional int32 member_count = 6;
+	optional string extra = 7;
+	optional int64 update_dt = 8;
+	optional int64 member_update_dt = 9;
+}
+
+message GroupMember
+{
+	required string memberId = 1;
+	optional string alias = 2;
+	required int32 type = 3;
+	optional int64 update_dt = 4;
+}
+
+message MessageContent
+{
+	required int32 type = 1;
+	optional string searchable_content = 2;
+	optional string push_content = 3;
+	optional string content = 4;
+	optional bytes data = 5;
+	optional int32 mediaType = 6;
+	optional string remoteMediaUrl = 7;
+	optional int32 persist_flag = 8;
+	optional int32 expire_duration = 9;
+	optional int32 mentioned_type = 10;
+	repeated string mentioned_target = 11;
+}
+
+message SearchUserResult
+{
+	repeated User entry = 1;
+}
+
+message GetUploadTokenResult
+{
+	required string domain = 1;
+	required string token = 2;
+	required string server = 3;
+	optional int32 port = 4;
+}
+
+message GetMinioUploadUrlRequest{
+	required int32 type = 1;
+	required string key = 2;
+}
+
+message GetMinioUploadUrlResult{
+    optional string domain = 1;
+	optional string server = 2;
+	optional int32 port = 3;
+	required string url = 4;
+}
+
+message PullUserResult
+{
+	repeated UserResult result = 1;
+}
+
+message UserResult
+{
+	required User user = 1;
+	required int32 code = 2;
+}
+
+message GetFriendsResult
+{
+	repeated Friend entry = 1;
+}
+
+message GetFriendRequestResult
+{
+	repeated FriendRequest entry = 1;
+}
+
+message FriendRequest
+{
+	optional string from_uid = 1;
+	required string to_uid = 2;
+	required string reason = 3;
+	optional int32 status = 4;
+	optional int64 update_dt = 5;
+	optional bool from_read_status = 6;
+	optional bool to_read_status = 7;
+}
+
+message Friend
+{
+	required string uid = 1;
+	required int32 state = 2;
+	required int64 update_dt = 3;
+	optional string alias = 4;
+}
+
+message User
+{
+	required string uid = 1;
+	optional string name = 2;
+	optional string display_name = 3;
+	optional string portrait = 4;
+	optional string mobile = 5;
+	optional string email = 6;
+	optional string address = 7;
+	optional string company = 8;
+	optional string extra = 9;
+	optional int64 update_dt = 10;
+	optional int32 gender = 11;
+	optional string social = 12;
+	optional int32 type = 13;
+}
+
+message NotifyMessage
+{
+	required int32 type = 1;
+	required int64 head = 2;
+	optional string target = 3;
+}
+
+message NotifyRecallMessage
+{
+	required int64 id = 1;
+	required string from_user = 2;
+}
+
+message UserSettingEntry
+{
+	required int32 scope = 1;
+	required string key = 2;
+	required string value = 3;
+	required int64 update_dt = 4;
+}
+
+message ModifyUserSettingReq
+{
+	required int32 scope = 1;
+	required string key = 2;
+	required string value = 3;
+}
+
+message GetUserSettingResult
+{
+	repeated UserSettingEntry entry = 1;
+}
+
+message ChannelInfo
+{
+	optional string target_id = 1;
+	required string name = 2;
+	optional string portrait = 3;
+	optional string owner = 4;
+	optional int32 status = 5;
+	optional string desc = 6;
+	optional string extra = 7;
+	optional int64 update_dt = 8;
+	optional string secret = 9;
+	optional string callback = 10;
+	optional int32 automatic = 11;
+}
+
+message ChatroomInfo
+{
+	required string title = 1;
+	optional string desc = 2;
+	optional string portrait = 3;
+	optional int32 member_count = 4;
+	optional int64 create_dt = 5;
+	optional int64 update_dt = 6;
+	optional string extra = 7;
+	optional int32 state = 8;
+}
+
+message ChatroomMemberInfo
+{
+	optional int32 member_count = 1;
+	repeated string members = 2;
+}
+
+message Robot
+{
+	required string uid = 1;
+	required int32 state = 2;
+	optional string owner = 3;
+	optional string secret = 4;
+	optional string callback = 5;
+	optional string extra = 6;
+}
+
+message RouteRequest
+{
+	optional string app = 1;
+	optional int32 platform = 2;
+	optional int32 push_type = 3;
+	optional string device_name = 4;
+	optional string device_version = 5;
+	optional string phone_name = 6;
+	optional string language = 7;
+	optional string carrier_name = 8;
+	optional string app_version = 9;
+	optional string sdk_version = 10;
+}
+
+message DeliveryReport
+{
+	required int64 date = 1;
+	required string target = 2;
+    optional string uid = 3;
+    optional int64 rid = 4;
+}
+
+message ReadReport
+{
+	optional int32 type = 1;
+	optional int32 line = 2;
+	required string target = 3;
+	required int64 date = 4;
+	optional string uid = 5;
+	optional int64 rid = 6;
+	repeated string tos = 7;
+}
+
+message PullMessageReportRequest
+{
+	required int64 id = 1;
+	required int32 type = 2;
+}
+
+message MessageReport
+{
+    required int32 report_type = 1;
+	required string uid = 2;
+	required int64 date = 3;
+	required string target = 4;
+}
+
+message PullMessageReportResult
+{
+	repeated MessageReport report = 1;
+	required int64 current = 2;
+	required int64 head = 3;
+}
+
+message NotifyMessageReport
+{
+	required int32 type = 1;
+	required int64 head = 2;
+}
+
