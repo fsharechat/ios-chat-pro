@@ -96,6 +96,11 @@ public final class IMDatabase {
                 t.column("settingHead", .integer).notNull().defaults(to: 0)
             }
         }
+        migrator.registerMigration("v2_addUserIsFriend") { db in
+            try db.alter(table: "user") { t in
+                t.add(column: "isFriend", .boolean).notNull().defaults(to: false)
+            }
+        }
         return migrator
     }
 }

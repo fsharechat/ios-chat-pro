@@ -39,4 +39,56 @@ public final class UserStore {
             .publisher(in: dbQueue, scheduling: .immediate)
             .eraseToAnyPublisher()
     }
+
+    private static let friendsOrderedSQL = "SELECT * FROM user WHERE isFriend = 1 ORDER BY displayName IS NULL, displayName"
+
+    public func friends() throws -> [StoredUser] {
+        try dbQueue.read { db in
+            try StoredUser.fetchAll(db, sql: Self.friendsOrderedSQL)
+        }
+    }
+
+    public func friendsPublisher() -> AnyPublisher<[StoredUser], Error> {
+        ValueObservation
+            .tracking { db in try StoredUser.fetchAll(db, sql: Self.friendsOrderedSQL) }
+            .publisher(in: dbQueue, scheduling: .immediate)
+            .eraseToAnyPublisher()
+    }
+
+    /// Replaces the entire friend-UID set: every currently-`isFriend`
+    /// user not in `uids` is unflagged (not deleted — their cached profile,
+    /// if any, is kept), and every uid in `uids` is flagged, creating a
+    /// placeholder row (all profile fields `nil`) if none exists yet.
+    /// Mirrors Android's `setFriendArr(refresh: true)` full-replace
+    /// semantics.
+    public func replaceFriendList(uids: [String]) throws {
+        try dbQueue.write { db in
+            try db.execute(sql: "UPDATE user SET isFriend = 0")
+            for uid in uids {
+                if var existing = try StoredUser.fetchOne(db, key: uid) {
+                    existing.isFriend = true
+                    try existing.save(db)
+                } else {
+                    try StoredUser(uid: uid, name: nil, displayName: nil, portrait: nil, mobile: nil, gender: 0, updateDt: 0, isFriend: true).save(db)
+                }
+            }
+        }
+    }
+
+    /// Merges profile fields into the row for `uid`, creating it if it
+    /// doesn't exist yet. Never touches `isFriend` — a naive whole-row
+    /// upsert here would be a real bug (it would clobber friend status on
+    /// every profile refresh).
+    public func upsertProfile(uid: String, name: String?, displayName: String?, portrait: String?, mobile: String?, gender: Int, updateDt: Int64) throws {
+        try dbQueue.write { db in
+            var user = try StoredUser.fetchOne(db, key: uid) ?? StoredUser(uid: uid, name: nil, displayName: nil, portrait: nil, mobile: nil, gender: 0, updateDt: 0)
+            user.name = name
+            user.displayName = displayName
+            user.portrait = portrait
+            user.mobile = mobile
+            user.gender = gender
+            user.updateDt = updateDt
+            try user.save(db)
+        }
+    }
 }
