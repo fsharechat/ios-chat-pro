@@ -8,6 +8,10 @@ import IMStorage
 /// `MessageSendAckHandler`/`ReceiveMessageHandler`/`NotifyMessageHandler`
 /// into the given `IMClient`, and exposes `sendText`/`sendImage`/
 /// `pullMessagesSinceLastSync`.
+///
+/// **Threading contract:** like the rest of this codebase (see `IMClient`'s
+/// own threading-contract doc comment), this has no internal locking and
+/// must be called from a single consistent queue.
 public final class MessagingService {
     private let imClient: IMClient
     private let storage: IMStorage
@@ -70,6 +74,11 @@ public final class MessagingService {
             conversationType: conversationType, target: target, line: line,
             messageUid: 0, timestamp: timestamp, incrementUnread: false
         )
+        // No transaction wraps the two calls above: if `recordIncomingMessage`
+        // throws after `insert` succeeds, this function returns early (never
+        // reaching `sendFrame`/`tracker.track`), leaving a message row stuck
+        // in `.sending` with no conversation update — the same accepted-for-
+        // Phase-1 gap documented in `ReceiveMessageHandler.persist`.
 
         var wireMessage = Im_Message()
         wireMessage.conversation.type = Int32(conversationType.rawValue)
