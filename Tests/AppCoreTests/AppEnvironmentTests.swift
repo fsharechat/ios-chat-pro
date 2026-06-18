@@ -97,4 +97,21 @@ final class AppEnvironmentTests: XCTestCase {
         let parent = (path as NSString).deletingLastPathComponent
         XCTAssertTrue(FileManager.default.fileExists(atPath: parent))
     }
+
+    func test_connectIfPossible_withCredentials_alsoConstructsMediaUploadService() throws {
+        credentialsStore.save(Credentials(userId: "u1", token: "dG9rZW4="))
+
+        XCTAssertTrue(environment.connectIfPossible())
+
+        XCTAssertNotNil(environment.mediaUploadService)
+    }
+
+    func test_logOut_clearsMediaUploadService() throws {
+        credentialsStore.save(Credentials(userId: "u1", token: "dG9rZW4="))
+        environment.connectIfPossible()
+
+        environment.logOut()
+
+        XCTAssertNil(environment.mediaUploadService)
+    }
 }
