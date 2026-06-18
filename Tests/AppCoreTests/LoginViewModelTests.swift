@@ -115,6 +115,31 @@ final class LoginViewModelTests: XCTestCase {
         XCTAssertEqual(apiClient.lastLoginArgs?.clientId, deviceIdentifierProvider.currentIdentifier())
     }
 
+    // NOTE: `startCountdown()` defensively cancels any existing
+    // `countdownToken` before starting a new chain (see LoginViewModel.swift),
+    // guarding against double-decrementing `requestCodeCountdown` if
+    // `startCountdown()` were ever re-entered while a previous chain is still
+    // in flight. Today, `requestCode()`'s `isRequestCodeEnabled` guard keeps
+    // `isRequestCodeEnabled` and `requestCodeCountdown` in lockstep — both are
+    // `private(set)`/private to this type, so there is no reachable path,
+    // even via `@testable import`, to force a second `startCountdown()` call
+    // while the first chain is still pending. This test instead locks in
+    // that reachable invariant: calling `requestCode()` again while a
+    // countdown is already running is a no-op, so the scheduler never has
+    // more than one pending tick at a time.
+    func test_requestCode_calledAgainWhileCountdownAlreadyRunning_isNoOpAndLeavesOnlyOneTickPending() async {
+        viewModel.phoneNumber = "13800000000"
+        await viewModel.requestCode() // starts the only countdown chain
+
+        XCTAssertEqual(scheduler.pendingCount, 1)
+
+        await viewModel.requestCode() // guarded no-op: isRequestCodeEnabled is false
+
+        XCTAssertEqual(apiClient.requestCodeCallCount, 1) // API not called again
+        XCTAssertEqual(scheduler.pendingCount, 1) // still only the original tick pending
+        XCTAssertEqual(viewModel.requestCodeCountdown, 60) // untouched by the no-op call
+    }
+
     func test_login_onFailure_setsErrorMessageAndDoesNotInvokeCallback() async {
         apiClient.loginResult = .failure(LoginAPIError.server(code: 6, message: "incorrect code"))
         viewModel.phoneNumber = "13800000000"

@@ -69,6 +69,13 @@ public final class LoginViewModel {
     }
 
     private func startCountdown() {
+        // Defensive: `requestCode()`'s `isRequestCodeEnabled` guard keeps
+        // `requestCodeCountdown` and `isRequestCodeEnabled` in lockstep today,
+        // so `countdownToken` should already be nil here. Cancel anyway so a
+        // future change to that guard (or any direct call to
+        // `startCountdown()`) can't leave two tick chains running at once and
+        // double-decrementing `requestCodeCountdown`.
+        countdownToken?.cancel()
         requestCodeCountdown = 60
         isRequestCodeEnabled = false
         tickCountdown()
@@ -107,6 +114,8 @@ public final class LoginViewModel {
         if let apiError = error as? LoginAPIError, case .server(_, let message) = apiError {
             return message
         }
+        // Intentionally copied verbatim from Android's SMSLoginActivity.java
+        // reference UX copy for parity — not a placeholder/typo, do not "fix".
         return "网络出来问题了。。。"
     }
 }
