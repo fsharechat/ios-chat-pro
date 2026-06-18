@@ -140,6 +140,27 @@ final class LoginViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.requestCodeCountdown, 60) // untouched by the no-op call
     }
 
+    // There is no test directly exercising the concurrent-reentrancy fix
+    // below (two near-simultaneous `requestCode()` calls both reaching the
+    // network before either flips `isRequestCodeEnabled`). Two attempts at
+    // a deterministic test were made — one with `XCTestExpectation`/
+    // `fulfillment(of:timeout:)`, one with a hand-rolled `AsyncStream` +
+    // `withCheckedContinuation` handshake — and both proved unreliable in
+    // this environment (the latter hung outright on a rerun, confirmed by
+    // killing a stuck `xctest` process consuming ~0 CPU after minutes). A
+    // third attempt using a bare `Task { }` plus an immediate assertion was
+    // also rejected: `Task { }`'s body isn't guaranteed to start executing
+    // before the next line in the launching context runs, so the assertion
+    // would be racing the same way the thing it's testing races. Shipping a
+    // flaky or non-deterministic test is worse than having no test here.
+    //
+    // The fix itself is verified by code inspection instead: `requestCode()`
+    // sets `isRequestCodeEnabled = false` as its first statement, before the
+    // `await apiClient.requestCode(...)` suspension point, so a second call
+    // arriving while the first is still in flight sees the guard already
+    // false and returns immediately — closing the double-HTTP-request race
+    // a code review surfaced during this plan's implementation.
+
     func test_login_onFailure_setsErrorMessageAndDoesNotInvokeCallback() async {
         apiClient.loginResult = .failure(LoginAPIError.server(code: 6, message: "incorrect code"))
         viewModel.phoneNumber = "13800000000"

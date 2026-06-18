@@ -59,25 +59,20 @@ public final class LoginViewModel {
 
     public func requestCode() async {
         guard isRequestCodeEnabled else { return }
+        isRequestCodeEnabled = false // disable immediately, before the network round-trip, so a near-simultaneous second call's guard check can't race through before this takes effect
         errorMessage = nil
         do {
             try await apiClient.requestCode(mobile: phoneNumber)
             startCountdown()
         } catch {
             errorMessage = Self.describe(error)
+            updateButtonStates(phone: phoneNumber, code: code) // no countdown started — re-enable based on current validity
         }
     }
 
     private func startCountdown() {
-        // Defensive: `requestCode()`'s `isRequestCodeEnabled` guard keeps
-        // `requestCodeCountdown` and `isRequestCodeEnabled` in lockstep today,
-        // so `countdownToken` should already be nil here. Cancel anyway so a
-        // future change to that guard (or any direct call to
-        // `startCountdown()`) can't leave two tick chains running at once and
-        // double-decrementing `requestCodeCountdown`.
-        countdownToken?.cancel()
+        countdownToken?.cancel() // defensive: shouldn't be reachable given the guard above, but cheap to keep
         requestCodeCountdown = 60
-        isRequestCodeEnabled = false
         tickCountdown()
     }
 
