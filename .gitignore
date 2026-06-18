@@ -5,6 +5,7 @@
 .build/
 *.xcodeproj/xcuserdata/
 *.xcworkspace/xcuserdata/
+xcuserdata/
 DerivedData/
 .swiftpm/
 .tools/
