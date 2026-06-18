@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		25D0AC4139A0950DB0CD2B4B /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0E388EB556B39D1EFCF7DEA /* SceneDelegate.swift */; };
 		3C61AE5D1A72B08EF5F3EC6D /* IMStorage in Frameworks */ = {isa = PBXBuildFile; productRef = 07ADF191AD7039FA6B899E7E /* IMStorage */; };
+		9E209FB56ACB4975796F5B20 /* AppCore in Frameworks */ = {isa = PBXBuildFile; productRef = AF6EC4831921C0CD2F8F91AD /* AppCore */; };
 		A1611CC727D61FF89025CA77 /* IMClient in Frameworks */ = {isa = PBXBuildFile; productRef = 99257818497BC42EED99DC6C /* IMClient */; };
 		AC4CF93C08183929C472085A /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93FA326C9B762DCAB590F502 /* AppDelegate.swift */; };
 		EEAD53A71EAD7C968380673B /* IMMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = E0AB875DDD2DC10A0CEAA624 /* IMMessaging */; };
@@ -30,6 +31,7 @@
 				A1611CC727D61FF89025CA77 /* IMClient in Frameworks */,
 				3C61AE5D1A72B08EF5F3EC6D /* IMStorage in Frameworks */,
 				EEAD53A71EAD7C968380673B /* IMMessaging in Frameworks */,
+				9E209FB56ACB4975796F5B20 /* AppCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -90,6 +92,7 @@
 				99257818497BC42EED99DC6C /* IMClient */,
 				07ADF191AD7039FA6B899E7E /* IMStorage */,
 				E0AB875DDD2DC10A0CEAA624 /* IMMessaging */,
+				AF6EC4831921C0CD2F8F91AD /* AppCore */,
 			);
 			productName = App;
 			productReference = 5498ADC10D1D656C19EC7A4E /* App.app */;
@@ -330,6 +333,10 @@
 		99257818497BC42EED99DC6C /* IMClient */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = IMClient;
+		};
+		AF6EC4831921C0CD2F8F91AD /* AppCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = AppCore;
 		};
 		E0AB875DDD2DC10A0CEAA624 /* IMMessaging */ = {
 			isa = XCSwiftPackageProductDependency;

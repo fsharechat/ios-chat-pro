@@ -40,6 +40,8 @@ targets:
         product: IMStorage
       - package: IMCore
         product: IMMessaging
+      - package: IMCore
+        product: AppCore
 schemes:
   App:
     build:
