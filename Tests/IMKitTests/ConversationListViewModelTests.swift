@@ -104,5 +104,6 @@ final class ConversationListViewModelTests: XCTestCase {
         wait(for: [expectation], timeout: 2)
 
         XCTAssertEqual(viewModel.rows.first?.displayName, "rawname")
+        XCTAssertTrue(fetcher.fetchedUids.isEmpty) // name is resolved, even though displayName isn't — no fetch needed
     }
 }

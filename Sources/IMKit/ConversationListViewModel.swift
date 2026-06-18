@@ -32,7 +32,7 @@ public final class ConversationListViewModel {
             ))?.first
             let user = try? storage.users.user(uid: conversation.target)
 
-            if user?.displayName == nil {
+            if user?.displayName == nil && user?.name == nil {
                 unresolvedUids.append(conversation.target)
             }
 
