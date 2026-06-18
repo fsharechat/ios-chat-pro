@@ -6,6 +6,10 @@ import IMStorage
 /// Parses a `PUB_ACK`/`MP` pulled-message batch, persists new messages,
 /// updates the affected conversations, and advances the local sync state.
 /// See this plan's "Reference facts" for the own-message-race handling.
+///
+/// **Threading contract:** like the rest of this codebase (see `IMClient`'s
+/// own threading-contract doc comment), this has no internal locking and
+/// must be called from a single consistent queue.
 public final class ReceiveMessageHandler: MessageHandler {
     private let storage: IMStorage
     private let myUserId: () -> String
@@ -41,6 +45,9 @@ public final class ReceiveMessageHandler: MessageHandler {
             // arrived (e.g. a reconnect race) — update in place rather than
             // risk a duplicate-row insert against the
             // (localMessageId, direction = .send) unique index.
+            // If either update silently fails, the row is left stuck in
+            // .sending with no diagnostic trail — accepted for Phase 1 since
+            // there's no logging facility yet.
             try? storage.messages.updateMessageUid(localMessageId: wireMessage.localMessageID, messageUid: wireMessage.messageID)
             try? storage.messages.updateStatus(localMessageId: wireMessage.localMessageID, status: .sent)
             return
@@ -74,6 +81,10 @@ public final class ReceiveMessageHandler: MessageHandler {
             )
         } catch {
             // Best-effort: one malformed/unexpected row shouldn't abort the rest of the batch.
+            // Note: no transaction wraps the two calls above, so if `insert`
+            // succeeds but `recordIncomingMessage` throws, we're left with a
+            // persisted message row with no conversation/unread update — an
+            // accepted inconsistency for Phase 1.
         }
     }
 
