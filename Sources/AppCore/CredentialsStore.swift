@@ -16,6 +16,12 @@ public struct Credentials: Equatable {
 /// `"\(userId)|\(token)"` — `userId`s never contain `"|"` per
 /// `chat-server-pro`'s mobile/email-derived id format, so this is an
 /// unambiguous, good-enough encoding without reaching for JSON).
+///
+/// **Threading contract:** like the rest of this codebase, this has no
+/// internal locking and must be called from a single consistent queue — by
+/// convention the main queue (unlike `DeviceIdentifierProvider`'s
+/// `UserDefaults` backing, `SecItem*` Keychain calls are not internally
+/// thread-safe across concurrent callers).
 public final class CredentialsStore {
     private let service: String
     private static let account = "credentials"
@@ -34,6 +40,11 @@ public final class CredentialsStore {
 
     public func save(_ credentials: Credentials) {
         let payload = Data("\(credentials.userId)|\(credentials.token)".utf8)
+        // Status codes intentionally not checked: a rare Keychain-quota/
+        // permission failure would silently no-op rather than surface an
+        // error — accepted for Phase 1 since there's no logging facility
+        // yet, the same accepted gap documented in `ReceiveMessageHandler`'s
+        // persist method and `MessagingService`'s send method.
         SecItemDelete(query as CFDictionary)
         var addQuery = query
         addQuery[kSecValueData as String] = payload
@@ -57,6 +68,7 @@ public final class CredentialsStore {
     }
 
     public func clear() {
+        // Status code intentionally not checked — same accepted gap as in `save()` above.
         SecItemDelete(query as CFDictionary)
     }
 }
