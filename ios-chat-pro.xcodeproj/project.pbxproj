@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		1A8F5F1C4845AC9F553E5CAE /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = E696B814AB99A34483A11EA8 /* Theme.swift */; };
 		25D0AC4139A0950DB0CD2B4B /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0E388EB556B39D1EFCF7DEA /* SceneDelegate.swift */; };
+		2B03B7D44659C520AEFC917E /* AvatarImageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5ACDCE0BC8F9E8EF7A77D603 /* AvatarImageView.swift */; };
 		3C61AE5D1A72B08EF5F3EC6D /* IMStorage in Frameworks */ = {isa = PBXBuildFile; productRef = 07ADF191AD7039FA6B899E7E /* IMStorage */; };
 		48F388AE384B5D8B88F3FB78 /* HomeViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = D32767C4CBB917CA824B2C1B /* HomeViewController.swift */; };
 		8671C543D4A6428B08FE1E74 /* LoginViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38D6C28B7BC3F34AF2780264 /* LoginViewController.swift */; };
@@ -23,6 +24,7 @@
 		29D71A57B85DC64E3CCC00C7 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		38D6C28B7BC3F34AF2780264 /* LoginViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginViewController.swift; sourceTree = "<group>"; };
 		5498ADC10D1D656C19EC7A4E /* App.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = App.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		5ACDCE0BC8F9E8EF7A77D603 /* AvatarImageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AvatarImageView.swift; sourceTree = "<group>"; };
 		93FA326C9B762DCAB590F502 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		A0E388EB556B39D1EFCF7DEA /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
 		B766EE90E234D3816221C5E5 /* ios-chat-pro */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "ios-chat-pro"; path = .; sourceTree = SOURCE_ROOT; };
@@ -75,6 +77,7 @@
 			isa = PBXGroup;
 			children = (
 				93FA326C9B762DCAB590F502 /* AppDelegate.swift */,
+				5ACDCE0BC8F9E8EF7A77D603 /* AvatarImageView.swift */,
 				D32767C4CBB917CA824B2C1B /* HomeViewController.swift */,
 				29D71A57B85DC64E3CCC00C7 /* Info.plist */,
 				38D6C28B7BC3F34AF2780264 /* LoginViewController.swift */,
@@ -149,6 +152,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				AC4CF93C08183929C472085A /* AppDelegate.swift in Sources */,
+				2B03B7D44659C520AEFC917E /* AvatarImageView.swift in Sources */,
 				48F388AE384B5D8B88F3FB78 /* HomeViewController.swift in Sources */,
 				8671C543D4A6428B08FE1E74 /* LoginViewController.swift in Sources */,
 				25D0AC4139A0950DB0CD2B4B /* SceneDelegate.swift in Sources */,
