@@ -33,6 +33,18 @@ public final class MessageStore {
         }
     }
 
+    /// Looks up a message by server-assigned `messageUid` — used by
+    /// `IMMessaging`'s receive path to dedup pulled messages against ones
+    /// already stored (pull windows can overlap). `messageUid == 0` means
+    /// "not yet acked" and is shared by every pending sent message, so it
+    /// would be ambiguous to look up — short-circuits to `nil`.
+    public func message(uid: Int64) throws -> StoredMessage? {
+        guard uid != 0 else { return nil }
+        return try dbQueue.read { db in
+            try StoredMessage.filter(Column("messageUid") == uid).fetchOne(db)
+        }
+    }
+
     public func messages(
         conversationType: ConversationType,
         target: String,

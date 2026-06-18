@@ -126,4 +126,28 @@ final class MessageStoreTests: XCTestCase {
         }
         XCTAssertEqual(received?.status, .unread)
     }
+
+    func test_messageByUid_findsInsertedMessage() throws {
+        let inserted = try store.insert(makeMessage(localMessageId: 50, text: "has a uid"))
+        try store.updateMessageUid(localMessageId: 50, messageUid: 777)
+
+        let found = try store.message(uid: 777)
+
+        XCTAssertEqual(found?.content, .text("has a uid"))
+        _ = inserted
+    }
+
+    func test_messageByUid_returnsNilWhenNotFound() throws {
+        XCTAssertNil(try store.message(uid: 12345))
+    }
+
+    func test_messageByUid_withUidZero_alwaysReturnsNil() throws {
+        // messageUid defaults to 0 for every not-yet-acked sent message —
+        // querying uid 0 would be ambiguous across multiple pending sends,
+        // so it must short-circuit to nil rather than returning an arbitrary row.
+        try store.insert(makeMessage(localMessageId: 51))
+        try store.insert(makeMessage(localMessageId: 52))
+
+        XCTAssertNil(try store.message(uid: 0))
+    }
 }
