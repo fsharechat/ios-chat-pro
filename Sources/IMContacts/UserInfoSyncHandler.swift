@@ -7,7 +7,15 @@ import IMStorage
 /// each user's profile fields into `IMStorage`. Same "1 byte error code,
 /// then protobuf" wire format as `FriendSyncHandler`. Uses
 /// `UserStore.upsertProfile(...)`, never the raw whole-row `upsert(_:)`,
-/// so an existing `isFriend` flag is never clobbered by a profile refresh.
+/// so an existing `isFriend` flag is never clobbered — `isFriend` isn't
+/// part of the wire `User` message at all (it comes from a separate `FP`
+/// pull), so a `UPUI` response has no opinion on it either way. Every
+/// other field (name/displayName/portrait/mobile/gender/updateDt) is
+/// intentionally overwritten with whatever the response says, including
+/// clearing a field the server no longer reports: `UPUI` always returns
+/// the full current profile for the queried uid, never a partial patch,
+/// so "the server omitted this field" means "this field is genuinely
+/// unset now," not "leave the old value alone."
 ///
 /// **Threading contract:** like the rest of this codebase, this has no
 /// internal locking and must be called from a single consistent queue.
