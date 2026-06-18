@@ -5,6 +5,10 @@ import IMClient
 /// `AbstractProtoService`'s `requestMap`. Schedules a 5-second timeout
 /// (matching the Android `sendMsTimer` constant) that resolves as `.failed`
 /// if no ack arrives in time.
+///
+/// **Threading contract:** like the rest of this codebase (see `IMClient`'s
+/// own threading-contract doc comment), this has no internal locking and
+/// must be called from a single consistent queue.
 public final class OutgoingMessageTracker {
     public enum SendResult {
         case acked(messageUid: Int64, timestamp: Int64)
