@@ -2,6 +2,7 @@ import Foundation
 import IMClient
 import IMStorage
 import IMMessaging
+import IMContacts
 
 /// The app's dependency container: owns the long-lived `IMStorage`, and
 /// constructs `IMClient`/`MessagingService`/`ConnectAckHandler` once
@@ -19,6 +20,7 @@ public final class AppEnvironment {
 
     public private(set) var imClient: IMClient?
     public private(set) var messagingService: MessagingService?
+    public private(set) var contactSyncService: ContactSyncService?
 
     public init(
         config: AppConfig = .production,
@@ -66,13 +68,16 @@ public final class AppEnvironment {
 
         let service = MessagingService(imClient: client, storage: storage)
         let connectAckHandler = ConnectAckHandler()
-        connectAckHandler.onSyncState = { [weak service] syncState in
+        let contactSync = ContactSyncService(imClient: client, storage: storage)
+        connectAckHandler.onSyncState = { [weak service, weak contactSync] syncState in
             service?.pullMessagesSinceLastSync(syncState: syncState)
+            contactSync?.syncFriendList()
         }
         client.register(connectAckHandler)
 
         imClient = client
         messagingService = service
+        contactSyncService = contactSync
         client.connect()
         return true
     }
@@ -81,6 +86,7 @@ public final class AppEnvironment {
         imClient?.disconnect()
         imClient = nil
         messagingService = nil
+        contactSyncService = nil
         credentialsStore.clear()
     }
 

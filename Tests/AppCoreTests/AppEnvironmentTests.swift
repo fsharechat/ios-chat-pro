@@ -1,6 +1,8 @@
 import XCTest
 import IMClient
 import IMStorage
+import IMProto
+import IMTransport
 @testable import AppCore
 
 final class AppEnvironmentTests: XCTestCase {
@@ -62,6 +64,30 @@ final class AppEnvironmentTests: XCTestCase {
         XCTAssertNil(environment.imClient)
         XCTAssertNil(environment.messagingService)
         XCTAssertNil(credentialsStore.load())
+    }
+
+    func test_connectIfPossible_withCredentials_alsoTriggersAFriendListSync() throws {
+        credentialsStore.save(Credentials(userId: "u1", token: "dG9rZW4="))
+
+        XCTAssertTrue(environment.connectIfPossible())
+
+        // The CONNECT frame's send is the only thing the fake transport has
+        // recorded so far — connectIfPossible() itself doesn't send FP, only
+        // the post-CONNECT_ACK callback does (friend sync triggers from the
+        // same hook as message catch-up). Simulate the server's CONNECT_ACK
+        // to fire that callback.
+        var payload = Im_ConnectAckPayload()
+        payload.msgHead = 0
+        payload.friendHead = 0
+        payload.friendRqHead = 0
+        payload.settingHead = 0
+        payload.serverTime = 0
+        let body = try payload.serializedData()
+        let frameBytes = FrameEncoder.encode(signal: .connectAck, subSignal: .none, messageId: 1, body: body)
+        fakeTransport.simulateReceivedData(frameBytes)
+
+        let sentSignals = fakeTransport.sentFrames.compactMap { try? FrameDecoder().feed($0).first?.header.subSignal }
+        XCTAssertTrue(sentSignals.contains(.fp))
     }
 
     func test_defaultDatabasePath_endsWithExpectedFileNameAndParentDirectoryExists() {

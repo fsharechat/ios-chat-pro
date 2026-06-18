@@ -36,6 +36,6 @@ let package = Package(
         .target(name: "IMContacts", dependencies: ["IMClient", "IMStorage", "IMProto", "IMTransport"]),
         .testTarget(name: "IMContactsTests", dependencies: ["IMContacts"]),
         .target(name: "AppCore", dependencies: ["IMClient", "IMStorage", "IMMessaging", "IMContacts"]),
-        .testTarget(name: "AppCoreTests", dependencies: ["AppCore", "IMClient"]),
+        .testTarget(name: "AppCoreTests", dependencies: ["AppCore", "IMClient", "IMProto", "IMTransport"]),
     ]
 )

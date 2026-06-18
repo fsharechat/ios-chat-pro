@@ -13,6 +13,12 @@ final class FakeTransportConnection: IMTransportConnection {
     private(set) var sentFrames: [Data] = []
 
     func start() { startCallCount += 1 }
-    func send(_ data: Data, completion: @escaping (Result<Void, Error>) -> Void) { sentFrames.append(data) }
+    func send(_ data: Data, completion: @escaping (Result<Void, Error>) -> Void) {
+        sentFrames.append(data)
+        completion(.success(()))
+    }
     func cancel() {}
+
+    func simulate(_ event: IMTransportEvent) { onEvent?(event) }
+    func simulateReceivedData(_ data: Data) { onDataReceived?(data) }
 }
