@@ -114,6 +114,12 @@ final class LoginViewController: UIViewController {
         viewModel.code = codeField.text ?? ""
     }
 
+    // These unstructured `Task { ... }` calls are not cancelled if this view
+    // controller is dismissed mid-request (no cancellation hookup in
+    // `viewWillDisappear`/`deinit`) — harmless since `LoginViewModel` simply
+    // outlives the dismissal briefly, but untracked. Accepted for Phase 1,
+    // the same accepted gap documented in `AppEnvironment` and
+    // `ReceiveMessageHandler`.
     @objc private func requestCodeTapped() {
         Task { await viewModel.requestCode() }
     }
