@@ -23,7 +23,10 @@ public final class MinioUploadURLHandler: MessageHandler {
     public func handle(frame: Frame) {
         guard let errorCode = frame.body.first else { return }
         if errorCode == 0 {
-            guard let result = try? Im_GetMinioUploadUrlResult(serializedBytes: frame.body.dropFirst()) else { return }
+            guard let result = try? Im_GetMinioUploadUrlResult(serializedBytes: frame.body.dropFirst()) else {
+                tracker.resolve(wireMessageId: frame.header.messageId, result: .failure(.malformedResponse))
+                return
+            }
             tracker.resolve(wireMessageId: frame.header.messageId, result: .success(result))
         } else {
             tracker.resolve(wireMessageId: frame.header.messageId, result: .failure(.serverError(errorCode: Int32(errorCode))))

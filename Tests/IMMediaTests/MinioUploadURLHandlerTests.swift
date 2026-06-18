@@ -60,8 +60,42 @@ final class MinioUploadURLHandlerTests: XCTestCase {
         }
     }
 
+    func test_handle_zeroErrorCodeButMalformedBody_resolvesTrackerWithMalformedResponseImmediately() {
+        var captured: Result<Im_GetMinioUploadUrlResult, MinioUploadURLTracker.TrackerError>?
+        tracker.track(wireMessageId: 9) { result in captured = result }
+
+        // errorCode == 0 (success signaled) but the remaining bytes are not a
+        // valid Im_GetMinioUploadUrlResult protobuf.
+        let body = Data([0]) + Data([0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF])
+        let frame = Frame(header: Header(signal: .pubAck, subSignal: .gmurl, bodyLength: UInt32(body.count), messageId: 9), body: body)
+        handler.handle(frame: frame)
+
+        switch captured {
+        case .failure(.malformedResponse): break
+        default: XCTFail("expected .failure(.malformedResponse) to resolve immediately rather than waiting on the timeout, got \(String(describing: captured))")
+        }
+    }
+
     func test_handle_emptyBody_doesNothingNoCrash() {
         let frame = Frame(header: Header(signal: .pubAck, subSignal: .gmurl, bodyLength: 0, messageId: 9), body: Data())
         handler.handle(frame: frame) // must not crash
+
+        XCTAssertEqual(scheduler.scheduledDelays, [])
+    }
+
+    func test_handle_emptyBody_doesNotResolveTracker_pendingEntryStillWaitsOnTimeout() {
+        var captured: Result<Im_GetMinioUploadUrlResult, MinioUploadURLTracker.TrackerError>?
+        tracker.track(wireMessageId: 9) { result in captured = result }
+
+        let frame = Frame(header: Header(signal: .pubAck, subSignal: .gmurl, bodyLength: 0, messageId: 9), body: Data())
+        handler.handle(frame: frame)
+
+        XCTAssertNil(captured, "an empty body carries no error code at all, so it intentionally leaves the pending entry untouched (the 5s timeout remains the safety net)")
+
+        XCTAssertTrue(scheduler.fireNext())
+        switch captured {
+        case .failure(.timeout): break
+        default: XCTFail("expected the pre-existing timeout to eventually resolve it, got \(String(describing: captured))")
+        }
     }
 }

@@ -44,6 +44,18 @@ final class MinioUploadURLTrackerTests: XCTestCase {
         }
     }
 
+    func test_resolve_withMalformedResponse_invokesCompletionWithFailure() {
+        var captured: Result<Im_GetMinioUploadUrlResult, MinioUploadURLTracker.TrackerError>?
+        tracker.track(wireMessageId: 7) { result in captured = result }
+
+        tracker.resolve(wireMessageId: 7, result: .failure(.malformedResponse))
+
+        switch captured {
+        case .failure(.malformedResponse): break
+        default: XCTFail("expected .failure(.malformedResponse), got \(String(describing: captured))")
+        }
+    }
+
     func test_resolve_unknownWireMessageId_doesNothingNoCrash() {
         tracker.resolve(wireMessageId: 42, result: .success(makeResult(url: "https://put.example.com/x"))) // no track() call first
     }

@@ -13,6 +13,7 @@ import IMProto
 public final class MinioUploadURLTracker {
     public enum TrackerError: Error, Equatable {
         case serverError(errorCode: Int32)
+        case malformedResponse
         case timeout
     }
 
