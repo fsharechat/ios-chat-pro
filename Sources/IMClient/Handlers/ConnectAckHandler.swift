@@ -7,6 +7,14 @@ public struct ConnectAckSyncState: Equatable {
     public let friendRequestHead: Int64
     public let settingHead: Int64
     public let serverTime: Int64
+
+    public init(messageHead: Int64, friendHead: Int64, friendRequestHead: Int64, settingHead: Int64, serverTime: Int64) {
+        self.messageHead = messageHead
+        self.friendHead = friendHead
+        self.friendRequestHead = friendRequestHead
+        self.settingHead = settingHead
+        self.serverTime = serverTime
+    }
 }
 
 /// Parses `Im_ConnectAckPayload` off a CONNECT_ACK frame and surfaces the
