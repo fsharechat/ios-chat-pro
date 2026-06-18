@@ -50,6 +50,11 @@ public final class ContactSyncService {
             // placeholder as "already cached" and never fetch the real
             // profile. displayName == nil is the same "not yet resolved"
             // signal UserStore.friends() already sorts by elsewhere.
+            // Trade-off: a genuinely-resolved user whose server profile never
+            // sets display_name (only name/mobile, say) would keep matching
+            // this check and get redundantly re-requested on every call —
+            // accepted for Phase 1 (extra network traffic, no data
+            // corruption) rather than adding a dedicated placeholder marker.
             targetUids = uids.filter { uid in
                 guard let user = try? storage.users.user(uid: uid) else { return true }
                 return user.displayName == nil
