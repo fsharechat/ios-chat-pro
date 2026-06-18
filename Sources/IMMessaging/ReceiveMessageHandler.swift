@@ -35,9 +35,8 @@ public final class ReceiveMessageHandler: MessageHandler {
     }
 
     public func handle(frame: Frame) {
-        let bytes = [UInt8](frame.body)
-        guard let errorCode = bytes.first, errorCode == 0 else { return }
-        guard let result = try? Im_PullMessageResult(serializedBytes: Data(bytes.dropFirst())) else { return }
+        guard let errorCode = frame.body.first, errorCode == 0 else { return }
+        guard let result = try? Im_PullMessageResult(serializedBytes: frame.body.dropFirst()) else { return }
         for wireMessage in result.message {
             persist(wireMessage)
         }
