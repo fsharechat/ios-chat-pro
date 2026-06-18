@@ -2,6 +2,7 @@
 import UIKit
 import AppCore
 import IMStorage
+import IMKit
 
 final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     var window: UIWindow?
@@ -29,7 +30,16 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     }
 
     private func rootViewController() -> UIViewController {
-        environment.connectIfPossible() ? HomeViewController() : makeLoginViewController()
+        environment.connectIfPossible() ? makeConversationListNavigationController() : makeLoginViewController()
+    }
+
+    private func makeConversationListNavigationController() -> UIViewController {
+        let viewModel = ConversationListViewModel(storage: environment.storage, contactSync: environment.contactSyncService)
+        let listViewController = ConversationListViewController(viewModel: viewModel)
+        listViewController.onConversationSelected = { [weak listViewController] row in
+            listViewController?.navigationController?.pushViewController(ConversationViewController(row: row), animated: true)
+        }
+        return UINavigationController(rootViewController: listViewController)
     }
 
     private func makeLoginViewController() -> UIViewController {
@@ -41,7 +51,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         viewModel.onLoginSucceeded = { [weak self] _ in
             guard let self else { return }
             self.environment.connectIfPossible()
-            self.window?.rootViewController = HomeViewController()
+            self.window?.rootViewController = self.makeConversationListNavigationController()
         }
         return LoginViewController(viewModel: viewModel)
     }
