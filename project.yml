@@ -42,6 +42,8 @@ targets:
         product: IMMessaging
       - package: IMCore
         product: AppCore
+      - package: IMCore
+        product: IMKit
 schemes:
   App:
     build:

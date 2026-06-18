@@ -12,6 +12,7 @@ let package = Package(
         .library(name: "IMMessaging", targets: ["IMMessaging"]),
         .library(name: "AppCore", targets: ["AppCore"]),
         .library(name: "IMContacts", targets: ["IMContacts"]),
+        .library(name: "IMKit", targets: ["IMKit"]),
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-protobuf.git", from: "1.25.0"),
@@ -35,6 +36,8 @@ let package = Package(
         .testTarget(name: "IMMessagingTests", dependencies: ["IMMessaging"]),
         .target(name: "IMContacts", dependencies: ["IMClient", "IMStorage", "IMProto", "IMTransport"]),
         .testTarget(name: "IMContactsTests", dependencies: ["IMContacts"]),
+        .target(name: "IMKit", dependencies: ["IMStorage", "IMContacts"]),
+        .testTarget(name: "IMKitTests", dependencies: ["IMKit"]),
         .target(name: "AppCore", dependencies: ["IMClient", "IMStorage", "IMMessaging", "IMContacts"]),
         .testTarget(name: "AppCoreTests", dependencies: ["AppCore", "IMClient", "IMProto", "IMTransport"]),
     ]
