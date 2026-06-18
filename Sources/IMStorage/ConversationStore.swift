@@ -22,13 +22,13 @@ public final class ConversationStore {
 
     public func conversations() throws -> [StoredConversation] {
         try dbQueue.read { db in
-            try StoredConversation.order(Column("timestamp").desc).fetchAll(db)
+            try StoredConversation.order(Column("isTop").desc, Column("timestamp").desc).fetchAll(db)
         }
     }
 
     public func conversationsPublisher() -> AnyPublisher<[StoredConversation], Error> {
         ValueObservation
-            .tracking { db in try StoredConversation.order(Column("timestamp").desc).fetchAll(db) }
+            .tracking { db in try StoredConversation.order(Column("isTop").desc, Column("timestamp").desc).fetchAll(db) }
             .publisher(in: dbQueue, scheduling: .immediate)
             .eraseToAnyPublisher()
     }
@@ -68,6 +68,15 @@ public final class ConversationStore {
             try db.execute(
                 sql: "UPDATE conversation SET unreadCount = 0 WHERE conversationType = ? AND target = ? AND line = ?",
                 arguments: [conversationType.rawValue, target, line]
+            )
+        }
+    }
+
+    public func setTop(_ isTop: Bool, conversationType: ConversationType, target: String, line: Int = 0) throws {
+        try dbQueue.write { db in
+            try db.execute(
+                sql: "UPDATE conversation SET isTop = ? WHERE conversationType = ? AND target = ? AND line = ?",
+                arguments: [isTop, conversationType.rawValue, target, line]
             )
         }
     }

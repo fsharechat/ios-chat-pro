@@ -82,4 +82,14 @@ final class ConversationStoreTests: XCTestCase {
         wait(for: [expectation], timeout: 2)
         XCTAssertEqual(receivedCounts, [0, 1]) // initial empty list, then one conversation
     }
+
+    func test_conversations_sortsPinnedConversationsFirstRegardlessOfTimestamp() throws {
+        try store.recordIncomingMessage(conversationType: .single, target: "newer", line: 0, messageUid: 1, timestamp: 2_000, incrementUnread: false)
+        try store.recordIncomingMessage(conversationType: .single, target: "olderButPinned", line: 0, messageUid: 2, timestamp: 1_000, incrementUnread: false)
+        try store.setTop(true, conversationType: .single, target: "olderButPinned", line: 0)
+
+        let conversations = try store.conversations()
+
+        XCTAssertEqual(conversations.map { $0.target }, ["olderButPinned", "newer"])
+    }
 }
