@@ -66,13 +66,26 @@ public final class LoginAPIClient: LoginAPIClientProtocol {
     /// decoding it eagerly as `T` would crash on a perfectly normal error
     /// reply instead of surfacing `.server(code:message:)`.
     private func post<T: Decodable>(_ path: String, params: [String: String]) async throws -> T {
-        var request = URLRequest(url: baseURL.appendingPathComponent(path))
+        // Strip any trailing slash from `baseURL` defensively before appending
+        // `path` (which always starts with "/"): `appendingPathComponent`
+        // would otherwise double the slash if `baseURL` ever has a trailing
+        // one. `AppConfig.production`'s value happens not to have one today,
+        // but `AppConfig` is a public, freely-constructible struct, so this
+        // guards against a future custom-server value that does.
+        let baseURLString = baseURL.absoluteString
+        let trimmedBase = baseURLString.hasSuffix("/") ? String(baseURLString.dropLast()) : baseURLString
+        var request = URLRequest(url: URL(string: trimmedBase + path)!)
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
-        request.httpBody = Data(params.map { "\($0.key)=\($0.value)" }.joined(separator: "&").utf8)
+        request.httpBody = Data(params.map { "\($0.key)=\($0.value.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? $0.value)" }.joined(separator: "&").utf8)
 
         let (data, _) = try await session.data(for: request)
 
+        // Decode failures (malformed/unexpected JSON shape) collapse to
+        // `.invalidResponse` without preserving the underlying
+        // `DecodingError` — accepted for Phase 1 since there's no logging
+        // facility yet, the same accepted gap documented in
+        // `ReceiveMessageHandler` and `CredentialsStore`.
         guard let envelope = try? JSONDecoder().decode(RestEnvelope.self, from: data) else {
             throw LoginAPIError.invalidResponse
         }
