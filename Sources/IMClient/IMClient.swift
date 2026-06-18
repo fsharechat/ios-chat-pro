@@ -102,6 +102,11 @@ public final class IMClient {
         handlerRegistry.register(handler)
     }
 
+    /// The logged-in user's id, needed by `IMMessaging` to set `fromUser`
+    /// on outgoing messages and to distinguish "my own message coming back
+    /// through a pull" from a genuinely received one.
+    public var userId: String { configuration.userId }
+
     public func connect() {
         userDisconnect = false
         startConnection()
@@ -178,15 +183,22 @@ public final class IMClient {
         }
     }
 
-    private func sendFrame(
+    /// Encodes and sends one frame, returning the wire `messageId` it was
+    /// allocated. Public so `IMMessaging` (Plan D) can send business
+    /// messages and correlate their acks by this id, exactly like
+    /// `AbstractProtoService`'s `requestMap` does in the Android reference.
+    @discardableResult
+    public func sendFrame(
         signal: Signal,
         subSignal: SubSignal,
         body: Data,
         completion: @escaping (Result<Void, Error>) -> Void = { _ in }
-    ) {
+    ) -> UInt16 {
         nextMessageId = nextMessageId &+ 1
-        let bytes = FrameEncoder.encode(signal: signal, subSignal: subSignal, messageId: nextMessageId, body: body)
+        let messageId = nextMessageId
+        let bytes = FrameEncoder.encode(signal: signal, subSignal: subSignal, messageId: messageId, body: body)
         transport?.send(bytes, completion: completion)
+        return messageId
     }
 
     private func handleReceivedData(_ data: Data) {
