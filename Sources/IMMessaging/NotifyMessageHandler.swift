@@ -7,6 +7,10 @@ import IMProto
 /// `ProtoService.pullMessage` is called with in the Android reference, so
 /// whoever wires `onNotify` (see `MessagingService`, Task 10) can pass them
 /// straight through to a pull request.
+///
+/// **Threading contract:** like the rest of this codebase (see `IMClient`'s
+/// own threading-contract doc comment), this has no internal locking and
+/// must be called from a single consistent queue.
 public final class NotifyMessageHandler: MessageHandler {
     public var onNotify: ((Int64, Int32) -> Void)?
 
