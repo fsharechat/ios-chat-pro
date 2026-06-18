@@ -90,7 +90,8 @@ final class MessagingServiceTests: XCTestCase {
         pullResult.message = [wireMessage]
         pullResult.current = 100 // `required` on the wire
         pullResult.head = 100
-        let body = try pullResult.serializedData()
+        var body = Data([0x00]) // success error-code byte — every PUB_ACK response has this prefix, enforced server-side
+        body += try pullResult.serializedData()
         let frameBytes = FrameEncoder.encode(signal: .pubAck, subSignal: .mp, messageId: 1, body: body)
 
         fakeTransport.simulateReceivedData(frameBytes)

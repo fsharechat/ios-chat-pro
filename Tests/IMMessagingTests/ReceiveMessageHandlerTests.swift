@@ -33,7 +33,8 @@ final class ReceiveMessageHandlerTests: XCTestCase {
         result.message = messages
         result.head = head
         result.current = head
-        let body = try result.serializedData()
+        var body = Data([0x00]) // success error-code byte — every PUB_ACK response has this prefix, enforced server-side; see ReceiveMessageHandler's doc comment
+        body += try result.serializedData()
         return Frame(header: Header(signal: .pubAck, subSignal: .mp, bodyLength: UInt32(body.count), messageId: 1), body: body)
     }
 
@@ -99,5 +100,23 @@ final class ReceiveMessageHandlerTests: XCTestCase {
         let state = try storage.syncState.get()
         XCTAssertEqual(state.msgHead, 500) // unchanged, not regressed to 100
         XCTAssertEqual(state.friendHead, 1) // other fields preserved
+    }
+
+    func test_handle_nonZeroErrorCode_doesNothingNoCrash() throws {
+        let initialMsgHead = try storage.syncState.get().msgHead
+        let frame = Frame(header: Header(signal: .pubAck, subSignal: .mp, bodyLength: 1, messageId: 1), body: Data([0x01]))
+
+        handler.handle(frame: frame)
+
+        XCTAssertEqual(try storage.syncState.get().msgHead, initialMsgHead)
+    }
+
+    func test_handle_emptyBody_doesNothingNoCrash() throws {
+        let initialMsgHead = try storage.syncState.get().msgHead
+        let frame = Frame(header: Header(signal: .pubAck, subSignal: .mp, bodyLength: 0, messageId: 1), body: Data())
+
+        handler.handle(frame: frame)
+
+        XCTAssertEqual(try storage.syncState.get().msgHead, initialMsgHead)
     }
 }

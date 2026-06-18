@@ -1,3 +1,4 @@
+import Foundation
 import IMClient
 import IMTransport
 import IMProto
@@ -6,6 +7,16 @@ import IMStorage
 /// Parses a `PUB_ACK`/`MP` pulled-message batch, persists new messages,
 /// updates the affected conversations, and advances the local sync state.
 /// See this plan's "Reference facts" for the own-message-race handling.
+///
+/// **Wire format:** like every `PUB_ACK` response (enforced server-side at
+/// `IMHandler`'s base class level in chat-server-pro — this isn't specific
+/// to `PUB_ACK`/`MS`, it's universal to all `PUB_ACK` responses), the body
+/// is 1 byte error code followed by the actual payload — here, the
+/// `Im_PullMessageResult` protobuf. This matches `MessageSendAckHandler`'s
+/// same convention for `PUB_ACK`/`MS`, and Android's reference client
+/// (`ReceiveMessageHandler.processMessage`), which reads the error code
+/// first and only parses `WFCMessage.PullMessageResult` when
+/// `errorCode == 0` — a non-zero error code means no parse attempt at all.
 ///
 /// **Threading contract:** like the rest of this codebase (see `IMClient`'s
 /// own threading-contract doc comment), this has no internal locking and
@@ -24,7 +35,9 @@ public final class ReceiveMessageHandler: MessageHandler {
     }
 
     public func handle(frame: Frame) {
-        guard let result = try? Im_PullMessageResult(serializedBytes: frame.body) else { return }
+        let bytes = [UInt8](frame.body)
+        guard let errorCode = bytes.first, errorCode == 0 else { return }
+        guard let result = try? Im_PullMessageResult(serializedBytes: Data(bytes.dropFirst())) else { return }
         for wireMessage in result.message {
             persist(wireMessage)
         }
