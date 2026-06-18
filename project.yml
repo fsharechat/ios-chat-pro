@@ -1,0 +1,49 @@
+name: ios-chat-pro
+options:
+  bundleIdPrefix: com.fshare.ios-chat-pro
+  deploymentTarget:
+    iOS: "15.0"
+packages:
+  IMCore:
+    path: .
+targets:
+  App:
+    type: application
+    platform: iOS
+    sources:
+      - App
+    info:
+      path: App/Info.plist
+      properties:
+        UILaunchScreen: {}
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+          UISceneConfigurations:
+            UIWindowSceneSessionRoleApplication:
+              - UISceneConfigurationName: Default Configuration
+                UISceneDelegateClassName: $(PRODUCT_MODULE_NAME).SceneDelegate
+        # Phase 1 dev convenience: chat-server-pro's local deployment runs on
+        # plain HTTP (see this plan's "Reference facts"). Tighten this to a
+        # scoped NSExceptionDomains entry (or remove it entirely) once this
+        # app only ever talks to the HTTPS production host — tracked in this
+        # plan's self-review notes, not forgotten.
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.fshare.ios-chat-pro.App
+        ASSETCATALOG_COMPILER_APPICON_NAME: ""
+    dependencies:
+      - package: IMCore
+        product: IMClient
+      - package: IMCore
+        product: IMStorage
+      - package: IMCore
+        product: IMMessaging
+schemes:
+  App:
+    build:
+      targets:
+        App: all
+    run:
+      config: Debug
