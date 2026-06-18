@@ -23,6 +23,10 @@ public final class ConversationListViewModel {
     private func handleConversationsUpdate(_ conversations: [StoredConversation]) {
         var unresolvedUids: [String] = []
 
+        // If either lookup fails, this silently falls back to "no last
+        // message"/"no profile" with no diagnostic trail — accepted for
+        // Phase 1 since there's no logging facility yet, same as
+        // ReceiveMessageHandler/CredentialsStore/FriendSyncHandler/UserInfoSyncHandler.
         rows = conversations.map { conversation in
             let lastMessage = (try? storage.messages.messages(
                 conversationType: conversation.conversationType,
