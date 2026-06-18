@@ -1,16 +1,48 @@
 // App/SceneDelegate.swift
 import UIKit
+import AppCore
+import IMStorage
 
 final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     var window: UIWindow?
+    private var environment: AppEnvironment!
 
     func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
         guard let windowScene = scene as? UIWindowScene else { return }
+
+        let storage: IMStorage
+        do {
+            storage = try IMStorage.open(atPath: AppEnvironment.defaultDatabasePath())
+        } catch {
+            // Phase 1 has no DB-corruption-recovery UX yet — fail loudly
+            // rather than silently falling back to an in-memory store,
+            // which would silently lose the user's message history with no
+            // indication anything went wrong.
+            fatalError("Failed to open local database: \(error)")
+        }
+        environment = AppEnvironment(storage: storage)
+
         let window = UIWindow(windowScene: windowScene)
-        let placeholder = UIViewController()
-        placeholder.view.backgroundColor = .systemBackground
-        window.rootViewController = placeholder
+        window.rootViewController = rootViewController()
         window.makeKeyAndVisible()
         self.window = window
+    }
+
+    private func rootViewController() -> UIViewController {
+        environment.connectIfPossible() ? HomeViewController() : makeLoginViewController()
+    }
+
+    private func makeLoginViewController() -> UIViewController {
+        let viewModel = LoginViewModel(
+            apiClient: LoginAPIClient(baseURL: environment.config.apiBaseURL),
+            credentialsStore: environment.credentialsStore,
+            deviceIdentifierProvider: environment.deviceIdentifierProvider
+        )
+        viewModel.onLoginSucceeded = { [weak self] _ in
+            guard let self else { return }
+            self.environment.connectIfPossible()
+            self.window?.rootViewController = HomeViewController()
+        }
+        return LoginViewController(viewModel: viewModel)
     }
 }
