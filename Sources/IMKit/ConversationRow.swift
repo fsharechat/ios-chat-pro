@@ -1,0 +1,15 @@
+import IMStorage
+
+public struct ConversationRow: Equatable, Hashable {
+    public let conversationType: ConversationType
+    public let target: String
+    public let line: Int
+    public let displayName: String
+    public let avatarURL: String?
+    public let previewText: String
+    public let timestamp: Int64
+    public let unreadCount: Int
+    public let isTop: Bool
+    public let isMuted: Bool
+    public let lastMessageStatus: MessageStatus?
+}

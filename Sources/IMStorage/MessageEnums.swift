@@ -2,7 +2,7 @@
 /// (kept identical purely so anyone cross-referencing the Android source
 /// isn't surprised — there is no wire/storage compatibility requirement
 /// forcing this, local SQLite schemas don't need to match Android's).
-public enum ConversationType: Int, Codable, Equatable {
+public enum ConversationType: Int, Codable, Equatable, Hashable {
     case single = 0
     case group = 1
     case chatRoom = 2
@@ -20,7 +20,7 @@ public enum MessageDirection: Int, Codable, Equatable {
 /// to the Android subset in case a later phase needs the rest
 /// (`Mentioned=3, AllMentioned=4, Played=7`) — adding them later is a
 /// purely additive enum change, not a migration.
-public enum MessageStatus: Int, Codable, Equatable {
+public enum MessageStatus: Int, Codable, Equatable, Hashable {
     case sending = 0
     case sent = 1
     case sendFailure = 2
