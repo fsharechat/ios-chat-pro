@@ -8,6 +8,18 @@ public protocol AvatarLoading {
     func loadAvatarData(from urlString: String) async -> Data?
 }
 
+/// **Threading contract:** like the rest of this codebase, this has no
+/// internal locking. Unlike most of those types, the consequence here is
+/// benign rather than a correctness hazard: `NSCache`'s individual
+/// `object(forKey:)`/`setObject(forKey:)` calls are each thread-safe, so
+/// there's no crash or data corruption risk. But because the cache check
+/// and the network fetch aren't combined into one atomic operation, two
+/// near-simultaneous `loadAvatarData` calls for the same not-yet-cached URL
+/// can each miss the cache and both hit the network, redundantly fetching
+/// the same bytes. This is accepted for Phase 1 rather than adding
+/// in-flight-request deduplication, which would be unnecessary complexity
+/// for the actual usage pattern (a handful of avatar loads per screen, not
+/// a high-volume hot path).
 public final class AvatarLoader: AvatarLoading {
     private let session: URLSession
     private let cache = NSCache<NSString, NSData>()
