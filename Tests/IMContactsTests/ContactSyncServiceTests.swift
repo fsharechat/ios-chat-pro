@@ -51,6 +51,16 @@ final class ContactSyncServiceTests: XCTestCase {
         XCTAssertEqual(request.request.map(\.uid), ["uncached"])
     }
 
+    func test_fetchUserInfo_treatsPlaceholderRowFromFriendListAsUncached() throws {
+        try storage.users.replaceFriendList(uids: ["newFriend"]) // creates a placeholder row: uid set, every profile field nil
+
+        service.fetchUserInfo(uids: ["newFriend"], forceRefresh: false)
+
+        let frame = try decodeOnlySentFrame()
+        let request = try Im_PullUserRequest(serializedBytes: frame.body)
+        XCTAssertEqual(request.request.map(\.uid), ["newFriend"])
+    }
+
     func test_fetchUserInfo_withForceRefresh_requestsEveryRequestedUid() throws {
         try storage.users.upsertProfile(uid: "cached", name: nil, displayName: "Cached", portrait: nil, mobile: nil, gender: 0, updateDt: 0)
 

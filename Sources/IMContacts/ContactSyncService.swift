@@ -43,7 +43,17 @@ public final class ContactSyncService {
         if forceRefresh {
             targetUids = uids
         } else {
-            targetUids = uids.filter { (try? storage.users.user(uid: $0)) == nil }
+            // Not just "row doesn't exist" — FriendSyncHandler's
+            // replaceFriendList(uids:) creates an empty placeholder row (every
+            // profile field nil) for any newly-flagged friend before their
+            // profile is ever resolved. A presence-only check would treat that
+            // placeholder as "already cached" and never fetch the real
+            // profile. displayName == nil is the same "not yet resolved"
+            // signal UserStore.friends() already sorts by elsewhere.
+            targetUids = uids.filter { uid in
+                guard let user = try? storage.users.user(uid: uid) else { return true }
+                return user.displayName == nil
+            }
         }
         guard !targetUids.isEmpty else { return }
 
