@@ -5,6 +5,10 @@ import Foundation
 /// `ClientService.getDeviceType`'s `mars_core_uid` persistence — iOS has no
 /// hardware-identifier equivalent to Android ID, so this always generates a
 /// fresh `UUID()` the first time, then persists and reuses it.
+///
+/// **Threading contract:** safe to call from any queue — `UserDefaults`
+/// serializes its own reads/writes internally, unlike most of this
+/// codebase's no-internal-locking types.
 public final class DeviceIdentifierProvider {
     private static let key = "AppCore.deviceIdentifier"
 
