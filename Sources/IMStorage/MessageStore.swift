@@ -1,4 +1,5 @@
 import GRDB
+import Combine
 
 /// CRUD for `StoredMessage`. `message(localMessageId:)` is the dedup lookup
 /// a future `SendMessageHandler` (Plan D) needs after reconnecting, per the
@@ -60,6 +61,34 @@ public final class MessageStore {
                 .limit(limit)
                 .fetchAll(db)
         }
+    }
+
+    /// Reactive "latest `limit` messages" query, ascending by time (oldest
+    /// first) — the opposite order from `messages(...)` above, because this
+    /// feeds a chat screen that renders top-to-bottom. Re-fires on any
+    /// insert/update affecting this conversation (new sends, new receives,
+    /// ack status changes). See `olderMessages` below for paging further
+    /// back — this method's `limit` is fixed, not meant to grow as the user
+    /// scrolls.
+    public func messagesPublisher(
+        conversationType: ConversationType,
+        target: String,
+        line: Int = 0,
+        limit: Int = 50
+    ) -> AnyPublisher<[StoredMessage], Error> {
+        ValueObservation
+            .tracking { db in
+                try StoredMessage
+                    .filter(Column("conversationType") == conversationType.rawValue)
+                    .filter(Column("target") == target)
+                    .filter(Column("line") == line)
+                    .order(Column("timestamp").desc, Column("id").desc)
+                    .limit(limit)
+                    .fetchAll(db)
+            }
+            .publisher(in: dbQueue, scheduling: .immediate)
+            .map { Array($0.reversed()) }
+            .eraseToAnyPublisher()
     }
 
     /// Scoped to `direction = .send` for the same reason as `message(localMessageId:)`

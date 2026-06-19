@@ -1,10 +1,12 @@
 import GRDB
+import Combine
 import XCTest
 @testable import IMStorage
 
 final class MessageStoreTests: XCTestCase {
     private var database: IMDatabase!
     private var store: MessageStore!
+    private var cancellables: Set<AnyCancellable> = []
 
     override func setUpWithError() throws {
         try super.setUpWithError()
@@ -149,5 +151,45 @@ final class MessageStoreTests: XCTestCase {
         try store.insert(makeMessage(localMessageId: 52))
 
         XCTAssertNil(try store.message(uid: 0))
+    }
+
+    func test_messagesPublisher_emitsLatestMessagesInAscendingOrder() throws {
+        try store.insert(makeMessage(localMessageId: 1, timestamp: 1_000, text: "first"))
+        try store.insert(makeMessage(localMessageId: 2, timestamp: 2_000, text: "second"))
+
+        var received: [[MessageContent]] = []
+        let expectation = expectation(description: "received at least 2 updates")
+        expectation.expectedFulfillmentCount = 2
+
+        store.messagesPublisher(conversationType: .single, target: "u2")
+            .sink(receiveCompletion: { _ in }, receiveValue: { messages in
+                received.append(messages.map { $0.content })
+                expectation.fulfill()
+            })
+            .store(in: &cancellables)
+
+        try store.insert(makeMessage(localMessageId: 3, timestamp: 3_000, text: "third"))
+
+        wait(for: [expectation], timeout: 2)
+        XCTAssertEqual(received[0], [.text("first"), .text("second")])
+        XCTAssertEqual(received[1], [.text("first"), .text("second"), .text("third")])
+    }
+
+    func test_messagesPublisher_respectsLimit_keepingNewestWithinWindow() throws {
+        for i in 0..<5 {
+            try store.insert(makeMessage(localMessageId: Int64(i), timestamp: Int64(i), text: "msg\(i)"))
+        }
+
+        var received: [MessageContent] = []
+        let expectation = expectation(description: "received update")
+        store.messagesPublisher(conversationType: .single, target: "u2", limit: 2)
+            .sink(receiveCompletion: { _ in }, receiveValue: { messages in
+                received = messages.map { $0.content }
+                expectation.fulfill()
+            })
+            .store(in: &cancellables)
+
+        wait(for: [expectation], timeout: 2)
+        XCTAssertEqual(received, [.text("msg3"), .text("msg4")])
     }
 }
