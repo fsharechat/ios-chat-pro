@@ -36,8 +36,20 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     private func makeConversationListNavigationController() -> UIViewController {
         let viewModel = ConversationListViewModel(storage: environment.storage, contactSync: environment.contactSyncService)
         let listViewController = ConversationListViewController(viewModel: viewModel)
-        listViewController.onConversationSelected = { [weak listViewController] row in
-            listViewController?.navigationController?.pushViewController(ConversationViewController(row: row), animated: true)
+        listViewController.onConversationSelected = { [weak self, weak listViewController] row in
+            guard let self else { return }
+            let conversationViewModel = ConversationViewModel(
+                storage: self.environment.storage,
+                messageSending: self.environment.messagingService,
+                imageUploading: self.environment.mediaUploadService,
+                target: row.target,
+                conversationType: row.conversationType,
+                line: row.line
+            )
+            listViewController?.navigationController?.pushViewController(
+                ConversationViewController(row: row, viewModel: conversationViewModel),
+                animated: true
+            )
         }
         return UINavigationController(rootViewController: listViewController)
     }
