@@ -91,6 +91,37 @@ public final class MessageStore {
             .eraseToAnyPublisher()
     }
 
+    /// One-shot (non-reactive) page of history strictly before
+    /// `(beforeTimestamp, beforeId)` — `id` (GRDB's autoincrement primary
+    /// key) breaks ties when multiple messages share the same millisecond
+    /// timestamp, which plain `timestamp` comparison can't disambiguate.
+    /// Returns ascending order (oldest first), matching `messagesPublisher`'s
+    /// contract, so callers can simply prepend the result to what they
+    /// already have.
+    public func olderMessages(
+        conversationType: ConversationType,
+        target: String,
+        line: Int = 0,
+        beforeTimestamp: Int64,
+        beforeId: Int64,
+        limit: Int = 50
+    ) throws -> [StoredMessage] {
+        try dbQueue.read { db in
+            let rows = try StoredMessage.fetchAll(db, sql: """
+                SELECT * FROM message
+                WHERE conversationType = ? AND target = ? AND line = ?
+                  AND (timestamp < ? OR (timestamp = ? AND id < ?))
+                ORDER BY timestamp DESC, id DESC
+                LIMIT ?
+                """, arguments: [
+                    conversationType.rawValue, target, line,
+                    beforeTimestamp, beforeTimestamp, beforeId,
+                    limit,
+                ])
+            return Array(rows.reversed())
+        }
+    }
+
     /// Scoped to `direction = .send` for the same reason as `message(localMessageId:)`
     /// above — without this, a colliding received-message `localMessageId`
     /// would also get its status silently overwritten by an unrelated ack.

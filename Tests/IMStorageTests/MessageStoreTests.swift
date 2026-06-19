@@ -192,4 +192,42 @@ final class MessageStoreTests: XCTestCase {
         wait(for: [expectation], timeout: 2)
         XCTAssertEqual(received, [.text("msg3"), .text("msg4")])
     }
+
+    func test_olderMessages_returnsMessagesBeforeAnchorInAscendingOrder() throws {
+        try store.insert(makeMessage(localMessageId: 1, timestamp: 1_000, text: "first"))
+        try store.insert(makeMessage(localMessageId: 2, timestamp: 2_000, text: "second"))
+        try store.insert(makeMessage(localMessageId: 3, timestamp: 3_000, text: "third"))
+
+        let older = try store.olderMessages(conversationType: .single, target: "u2", beforeTimestamp: 3_000, beforeId: 3, limit: 50)
+
+        XCTAssertEqual(older.map { $0.content }, [.text("first"), .text("second")])
+    }
+
+    func test_olderMessages_respectsLimit() throws {
+        for i in 0..<5 {
+            try store.insert(makeMessage(localMessageId: Int64(i), timestamp: Int64(i), text: "msg\(i)"))
+        }
+
+        let older = try store.olderMessages(conversationType: .single, target: "u2", beforeTimestamp: 5_000, beforeId: 999, limit: 2)
+
+        XCTAssertEqual(older.map { $0.content }, [.text("msg3"), .text("msg4")])
+    }
+
+    func test_olderMessages_tieBreaksOnIdWhenTimestampsCollide() throws {
+        try store.insert(makeMessage(localMessageId: 1, timestamp: 1_000, text: "a"))
+        try store.insert(makeMessage(localMessageId: 2, timestamp: 1_000, text: "b"))
+        let third = try store.insert(makeMessage(localMessageId: 3, timestamp: 1_000, text: "c"))
+
+        let older = try store.olderMessages(conversationType: .single, target: "u2", beforeTimestamp: third.timestamp, beforeId: third.id!, limit: 50)
+
+        XCTAssertEqual(older.map { $0.content }, [.text("a"), .text("b")])
+    }
+
+    func test_olderMessages_emptyWhenNoOlderHistoryExists() throws {
+        try store.insert(makeMessage(localMessageId: 1, timestamp: 1_000, text: "only"))
+
+        let older = try store.olderMessages(conversationType: .single, target: "u2", beforeTimestamp: 1_000, beforeId: 1, limit: 50)
+
+        XCTAssertTrue(older.isEmpty)
+    }
 }
