@@ -37,7 +37,7 @@ let package = Package(
         .testTarget(name: "IMMessagingTests", dependencies: ["IMMessaging"]),
         .target(name: "IMContacts", dependencies: ["IMClient", "IMStorage", "IMProto", "IMTransport"]),
         .testTarget(name: "IMContactsTests", dependencies: ["IMContacts"]),
-        .target(name: "IMKit", dependencies: ["IMStorage", "IMContacts"]),
+        .target(name: "IMKit", dependencies: ["IMStorage", "IMContacts", "IMMessaging", "IMMedia"]),
         .testTarget(name: "IMKitTests", dependencies: ["IMKit"]),
         .target(name: "IMMedia", dependencies: ["IMClient", "IMProto", "IMTransport"]),
         .testTarget(name: "IMMediaTests", dependencies: ["IMMedia"]),
