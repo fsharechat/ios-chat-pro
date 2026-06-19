@@ -171,4 +171,15 @@ final class MessagingServiceTests: XCTestCase {
 
         XCTAssertEqual(fakeTransport.sentFrames.count, countBefore)
     }
+
+    func test_resend_onMessageNotInSendFailureState_isANoOp() throws {
+        try service.sendText(to: "them", text: "hello") // status is .sending, not .sendFailure
+        let pending = try storage.messages.messages(conversationType: .single, target: "them").first!
+        let countBefore = fakeTransport.sentFrames.count
+
+        try service.resend(localMessageId: pending.localMessageId)
+
+        XCTAssertEqual(fakeTransport.sentFrames.count, countBefore)
+        XCTAssertEqual(try storage.messages.messages(conversationType: .single, target: "them").first?.status, .sending)
+    }
 }

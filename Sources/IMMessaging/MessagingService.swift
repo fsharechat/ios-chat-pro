@@ -91,10 +91,12 @@ public final class MessagingService {
     /// Doesn't touch the conversation's last-message preview/timestamp —
     /// unlike a fresh `send`, this isn't a new logical message, so there's
     /// nothing new to reflect there. A no-op if no such sent-direction row
-    /// exists for `localMessageId` (mirrors `MessageStore.updateStatus`'s
-    /// own silent-no-op-on-not-found behavior).
+    /// exists for `localMessageId`, or if it isn't currently in
+    /// `.sendFailure` (this also means calling `resend` twice in quick
+    /// succession before the first attempt resolves is safe — the second
+    /// call sees `.sending`, not `.sendFailure`, and no-ops).
     public func resend(localMessageId: Int64) throws {
-        guard let message = try storage.messages.message(localMessageId: localMessageId) else { return }
+        guard let message = try storage.messages.message(localMessageId: localMessageId), message.status == .sendFailure else { return }
         try storage.messages.updateStatus(localMessageId: localMessageId, status: .sending)
         try sendWireMessage(localMessageId: localMessageId, conversationType: message.conversationType, target: message.target, line: message.line, content: message.content)
     }
