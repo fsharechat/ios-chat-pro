@@ -13,6 +13,7 @@
 		3C61AE5D1A72B08EF5F3EC6D /* IMStorage in Frameworks */ = {isa = PBXBuildFile; productRef = 07ADF191AD7039FA6B899E7E /* IMStorage */; };
 		40533D31B36757999CD71E73 /* ConversationListViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3FE0167E8E8C013706DF83B /* ConversationListViewController.swift */; };
 		58655D10A6FADB326DBF61E1 /* ConversationViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82A66CD515543FC918230A83 /* ConversationViewController.swift */; };
+		7AB9633A25E6AFDC3D82E429 /* ContactListCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8EB6D5DBC0051B5D576A085 /* ContactListCell.swift */; };
 		8671C543D4A6428B08FE1E74 /* LoginViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38D6C28B7BC3F34AF2780264 /* LoginViewController.swift */; };
 		925E32D89E4D590BFE89B808 /* TextMessageCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 648E9F022D0DE7CACE6E5C39 /* TextMessageCell.swift */; };
 		9D341582713FAD5C8A889E68 /* ImageMessageCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57813ACEB21053B529B765B0 /* ImageMessageCell.swift */; };
@@ -42,6 +43,7 @@
 		B766EE90E234D3816221C5E5 /* ios-chat-pro */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "ios-chat-pro"; path = .; sourceTree = SOURCE_ROOT; };
 		E3FE0167E8E8C013706DF83B /* ConversationListViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationListViewController.swift; sourceTree = "<group>"; };
 		E696B814AB99A34483A11EA8 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
+		F8EB6D5DBC0051B5D576A085 /* ContactListCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactListCell.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -90,6 +92,7 @@
 			children = (
 				93FA326C9B762DCAB590F502 /* AppDelegate.swift */,
 				5ACDCE0BC8F9E8EF7A77D603 /* AvatarImageView.swift */,
+				F8EB6D5DBC0051B5D576A085 /* ContactListCell.swift */,
 				60C53CDF7ECE24AB7925139E /* ConversationListCell.swift */,
 				E3FE0167E8E8C013706DF83B /* ConversationListViewController.swift */,
 				82A66CD515543FC918230A83 /* ConversationViewController.swift */,
@@ -171,6 +174,7 @@
 			files = (
 				AC4CF93C08183929C472085A /* AppDelegate.swift in Sources */,
 				2B03B7D44659C520AEFC917E /* AvatarImageView.swift in Sources */,
+				7AB9633A25E6AFDC3D82E429 /* ContactListCell.swift in Sources */,
 				D91FAF18E648543CFB927ED6 /* ConversationListCell.swift in Sources */,
 				40533D31B36757999CD71E73 /* ConversationListViewController.swift in Sources */,
 				58655D10A6FADB326DBF61E1 /* ConversationViewController.swift in Sources */,
