@@ -124,4 +124,51 @@ final class MessagingServiceTests: XCTestCase {
         let request = try Im_PullMessageRequest(serializedBytes: frame.body)
         XCTAssertEqual(request.id, 77)
     }
+
+    func test_resend_afterSendFailure_resetsStatusAndSendsNewWireFrame() throws {
+        try service.sendText(to: "them", text: "hello")
+        scheduler.fireNext() // 5s ack timeout fires -> .sendFailure
+        let failed = try storage.messages.messages(conversationType: .single, target: "them").first!
+        XCTAssertEqual(failed.status, .sendFailure)
+
+        try service.resend(localMessageId: failed.localMessageId)
+
+        let resending = try storage.messages.messages(conversationType: .single, target: "them").first
+        XCTAssertEqual(resending?.status, .sending)
+
+        let frame = try decodeOnlySentFrame()
+        XCTAssertEqual(frame.header.signal, .publish)
+        XCTAssertEqual(frame.header.subSignal, .ms)
+        let wireMessage = try Im_Message(serializedBytes: frame.body)
+        XCTAssertEqual(wireMessage.localMessageID, failed.localMessageId)
+        XCTAssertEqual(try MessageContentCodec.decode(wireMessage.content), .text("hello"))
+    }
+
+    func test_resend_ackArrival_updatesStatusAndMessageUid() throws {
+        try service.sendText(to: "them", text: "hello")
+        scheduler.fireNext()
+        let failed = try storage.messages.messages(conversationType: .single, target: "them").first!
+
+        try service.resend(localMessageId: failed.localMessageId)
+        let resendFrame = try decodeOnlySentFrame()
+
+        var ackBody: [UInt8] = [0x00]
+        let uidBytes = (0..<8).map { UInt8((UInt64(bitPattern: 999) >> (8 * (7 - $0))) & 0xFF) }
+        let tsBytes = (0..<8).map { UInt8((UInt64(bitPattern: 1_234) >> (8 * (7 - $0))) & 0xFF) }
+        ackBody += uidBytes + tsBytes
+        let ackFrameBytes = FrameEncoder.encode(signal: .pubAck, subSignal: .ms, messageId: resendFrame.header.messageId, body: Data(ackBody))
+        fakeTransport.simulateReceivedData(ackFrameBytes)
+
+        let updated = try storage.messages.messages(conversationType: .single, target: "them").first
+        XCTAssertEqual(updated?.status, .sent)
+        XCTAssertEqual(updated?.messageUid, 999)
+    }
+
+    func test_resend_unknownLocalMessageId_isANoOp() throws {
+        let countBefore = fakeTransport.sentFrames.count
+
+        try service.resend(localMessageId: 99999)
+
+        XCTAssertEqual(fakeTransport.sentFrames.count, countBefore)
+    }
 }

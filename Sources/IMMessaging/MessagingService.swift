@@ -76,10 +76,30 @@ public final class MessagingService {
         )
         // No transaction wraps the two calls above: if `recordIncomingMessage`
         // throws after `insert` succeeds, this function returns early (never
-        // reaching `sendFrame`/`tracker.track`), leaving a message row stuck
-        // in `.sending` with no conversation update — the same accepted-for-
+        // reaching `sendWireMessage`), leaving a message row stuck in
+        // `.sending` with no conversation update — the same accepted-for-
         // Phase-1 gap documented in `ReceiveMessageHandler.persist`.
 
+        try sendWireMessage(localMessageId: echo.localMessageId, conversationType: conversationType, target: target, line: line, content: content)
+    }
+
+    /// Re-sends an already-stored message that previously failed (`status
+    /// == .sendFailure`) — e.g. the user tapped a retry affordance on a
+    /// failed bubble. Reuses the existing row's `localMessageId`/content
+    /// rather than inserting a new row, so the UI sees the same message
+    /// transition back to `.sending` rather than a duplicate appearing.
+    /// Doesn't touch the conversation's last-message preview/timestamp —
+    /// unlike a fresh `send`, this isn't a new logical message, so there's
+    /// nothing new to reflect there. A no-op if no such sent-direction row
+    /// exists for `localMessageId` (mirrors `MessageStore.updateStatus`'s
+    /// own silent-no-op-on-not-found behavior).
+    public func resend(localMessageId: Int64) throws {
+        guard let message = try storage.messages.message(localMessageId: localMessageId) else { return }
+        try storage.messages.updateStatus(localMessageId: localMessageId, status: .sending)
+        try sendWireMessage(localMessageId: localMessageId, conversationType: message.conversationType, target: message.target, line: message.line, content: message.content)
+    }
+
+    private func sendWireMessage(localMessageId: Int64, conversationType: ConversationType, target: String, line: Int, content: MessageContent) throws {
         var wireMessage = Im_Message()
         wireMessage.conversation.type = Int32(conversationType.rawValue)
         wireMessage.conversation.target = target
@@ -90,7 +110,7 @@ public final class MessagingService {
 
         let body = try wireMessage.serializedData()
         let wireMessageId = imClient.sendFrame(signal: .publish, subSignal: .ms, body: body)
-        tracker.track(wireMessageId: wireMessageId, localMessageId: echo.localMessageId) { [weak self] localId, result in
+        tracker.track(wireMessageId: wireMessageId, localMessageId: localMessageId) { [weak self] localId, result in
             guard let self else { return }
             switch result {
             case .acked(let messageUid, _):
