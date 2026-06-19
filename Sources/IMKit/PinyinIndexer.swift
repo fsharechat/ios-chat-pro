@@ -30,7 +30,7 @@ public enum PinyinIndexer {
 
     private static func transliteratedFirstLetter(of name: String) -> String? {
         guard let latin = transliterate(name)?.uppercased(),
-              let firstLetter = latin.first(where: { $0 >= "A" && $0 <= "Z" }) else { return nil }
+              let firstLetter = latin.first(where: { $0.isASCII && $0.isLetter }) else { return nil }
         return String(firstLetter)
     }
 }
