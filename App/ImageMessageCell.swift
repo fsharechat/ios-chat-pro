@@ -35,6 +35,9 @@ final class ImageMessageCell: UITableViewCell {
         super.prepareForReuse()
         onTapped = nil
         onRetryTapped = nil
+        bubbleImageView.image = nil
+        activityIndicator.stopAnimating()
+        retryButton.isHidden = true
     }
 
     private func layoutViews() {
