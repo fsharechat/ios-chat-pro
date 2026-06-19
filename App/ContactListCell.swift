@@ -17,10 +17,6 @@ final class ContactListCell: UITableViewCell {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
 
-    override func prepareForReuse() {
-        super.prepareForReuse()
-    }
-
     private func layoutViews() {
         avatarImageView.translatesAutoresizingMaskIntoConstraints = false
 
