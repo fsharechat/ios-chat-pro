@@ -95,12 +95,15 @@ final class ConversationViewController: UIViewController {
     /// sensibly: a prepend (loaded older history — keep the user's current
     /// reading position by offsetting `contentOffset` by the inserted
     /// height), an append (a new message arrived — scroll to the bottom),
-    /// or an in-place update elsewhere (e.g. an ack status flip on a row
-    /// that isn't the last one — leave scroll position untouched).
+    /// or an in-place update elsewhere (e.g. an ack status flip — whether on
+    /// the last row or any other — leave scroll position untouched). Append
+    /// detection compares row *identity*, not full equality, so a status
+    /// flip on the last row (same message, new value) isn't mistaken for a
+    /// new row being appended.
     private func applySnapshot(rows: [ChatMessageRow]) {
         let oldRows = dataSource.snapshot().itemIdentifiers
         let isPrepend = !oldRows.isEmpty && rows.count > oldRows.count && Array(rows.suffix(oldRows.count)) == oldRows
-        let isAppend = rows.last != oldRows.last
+        let isAppend = Self.rowIdentity(rows.last) != Self.rowIdentity(oldRows.last)
         let previousContentHeight = tableView.contentSize.height
 
         var snapshot = NSDiffableDataSourceSnapshot<Int, ChatMessageRow>()
@@ -114,6 +117,20 @@ final class ConversationViewController: UIViewController {
             } else if isAppend {
                 self.scrollToBottom(animated: !oldRows.isEmpty)
             }
+        }
+    }
+
+    /// Identifies a row by its underlying message/upload identity, ignoring
+    /// any other field (e.g. `status`). Used to tell "the last row changed
+    /// because a new one was appended" (identity differs) apart from "the
+    /// last row is still the same message, just updated in place" (identity
+    /// unchanged) — `Equatable` alone can't make that distinction since an
+    /// in-place status flip changes the row's value but not its identity.
+    private static func rowIdentity(_ row: ChatMessageRow?) -> String? {
+        switch row {
+        case .message(let message): return "message-\(message.storageId)"
+        case .pendingImage(let pending): return "pending-\(pending.id)"
+        case nil: return nil
         }
     }
 
