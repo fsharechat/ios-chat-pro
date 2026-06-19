@@ -24,6 +24,17 @@ public final class ConversationViewModel {
     /// property's doc comment): once a message has ever been shown after
     /// paging began, it's migrated here rather than dropped, so it stays
     /// visible even after it falls out of the live window.
+    ///
+    /// Accepted Phase-1 gap: this uses `olderRows.isEmpty` as a proxy for
+    /// "has the user ever paged via `loadMore`". A conversation that starts
+    /// with fewer than `pageSize` messages and grows one at a time without
+    /// the user ever scrolling up (nothing to page in yet) can still lose
+    /// its earliest message the first time the live window naturally
+    /// exceeds `pageSize` — `olderRows` is still empty at that point, so
+    /// the eviction is (incorrectly) treated as transient cold-start churn
+    /// rather than migrated. Narrow edge case (requires a fresh
+    /// under-`pageSize` conversation that organically grows past it with
+    /// no pagination in between); not fixed for Phase 1.
     private var olderRows: [StoredMessageRow] = []
     /// The current page from `messagesPublisher` — a sliding "latest
     /// `pageSize`" window, so each emission **replaces** this array wholesale
