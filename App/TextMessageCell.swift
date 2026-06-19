@@ -25,6 +25,11 @@ final class TextMessageCell: UITableViewCell {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
 
+    override func prepareForReuse() {
+        super.prepareForReuse()
+        onRetryTapped = nil
+    }
+
     private func layoutViews() {
         bubbleView.layer.cornerRadius = Theme.bubbleCornerRadius
         messageTextLabel.numberOfLines = 0
