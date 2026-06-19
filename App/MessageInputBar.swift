@@ -82,7 +82,9 @@ final class MessageInputBar: UIView {
 
     private func updateHeight() {
         let size = textView.sizeThatFits(CGSize(width: textView.bounds.width, height: .greatestFiniteMagnitude))
-        textViewHeightConstraint.constant = min(max(size.height, 36), 120)
+        let cappedHeight = min(max(size.height, 36), 120)
+        textView.isScrollEnabled = size.height > 120
+        textViewHeightConstraint.constant = cappedHeight
     }
 }
 
