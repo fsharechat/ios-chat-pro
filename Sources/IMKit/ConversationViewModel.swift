@@ -19,13 +19,25 @@ public final class ConversationViewModel {
     /// Older history loaded via `loadMore`, strictly before `liveRows` —
     /// `olderMessages` is one-shot (not reactive), so these are frozen at
     /// fetch time and only ever grow at the front via further `loadMore`
-    /// calls.
+    /// calls. Once non-empty (i.e. paging has started), it also grows when
+    /// `handleMessagesUpdate` evicts a row from `liveRows` (see that
+    /// property's doc comment): once a message has ever been shown after
+    /// paging began, it's migrated here rather than dropped, so it stays
+    /// visible even after it falls out of the live window.
     private var olderRows: [StoredMessageRow] = []
     /// The current page from `messagesPublisher` — a sliding "latest
     /// `pageSize`" window, so each emission **replaces** this array wholesale
-    /// (rather than merging into it): a message that scrolled out of the
-    /// window must disappear from here even though it's still represented
-    /// in `olderRows` once paged in.
+    /// (rather than merging into it). Before `loadMore` has ever paged in
+    /// history (`olderRows` empty), a message that scrolls out of this
+    /// window is simply dropped from here with no special handling — early
+    /// on, a burst of writes (e.g. initial backlog sync) can slide the live
+    /// window through several transient intermediate states before the user
+    /// has done anything, and none of those transient rows were ever
+    /// durably "shown". Once paging has started, though, a message that
+    /// scrolls out is never simply dropped: `handleMessagesUpdate` detects
+    /// rows present in the old `liveRows` but absent from the new emission
+    /// and migrates them into `olderRows` first, so a message that has ever
+    /// been visible since paging began can't silently disappear from `rows`.
     private var liveRows: [StoredMessageRow] = []
     private var pendingImages: [PendingImageUpload] = []
     private var cancellable: AnyCancellable?
@@ -119,7 +131,27 @@ public final class ConversationViewModel {
         // `messagesPublisher` always reports the full current "latest
         // pageSize" window (already ascending), so it wholesale-replaces
         // `liveRows` rather than merging — see `liveRows`'s doc comment.
-        liveRows = messages.map(Self.makeRow)
+        // But once `loadMore()` has paged in real history (`olderRows`
+        // non-empty), anything that was visible in the OLD `liveRows` and
+        // isn't in the NEW one (because a newer message pushed the window
+        // forward) must not simply vanish — migrate it into `olderRows`
+        // instead. Before any paging has happened, `olderRows` is empty and
+        // this migration is skipped on purpose: early on, a burst of writes
+        // (e.g. initial backlog sync) can make the live window itself slide
+        // forward through several transient intermediate states before the
+        // very first page has ever been explicitly requested, and treating
+        // every one of those transient slides as a permanent boundary
+        // crossing would defeat the "latest pageSize" windowing entirely.
+        let newLiveRows = messages.map(Self.makeRow)
+        let newStorageIds = Set(newLiveRows.map { $0.storageId })
+        if !olderRows.isEmpty {
+            let evicted = liveRows.filter { !newStorageIds.contains($0.storageId) }
+            if !evicted.isEmpty {
+                olderRows.append(contentsOf: evicted)
+                olderRows.sort { $0.timestamp == $1.timestamp ? $0.storageId < $1.storageId : $0.timestamp < $1.timestamp }
+            }
+        }
+        liveRows = newLiveRows
         publishRows()
     }
 

@@ -180,4 +180,20 @@ final class ConversationViewModelTests: XCTestCase {
 
         XCTAssertFalse(viewModel.canLoadMore)
     }
+
+    func test_newLiveMessageArrivingAfterLoadMore_doesNotDropThePreviouslyVisibleOldestLiveRow() throws {
+        for i in 0..<5 {
+            try storage.messages.insert(StoredMessage(localMessageId: Int64(i), conversationType: .single, target: "them", from: "them", content: .text("msg\(i)"), timestamp: Int64(1_000 + i), status: .unread, direction: .receive))
+        }
+        waitForFirstNonEmptyRows()
+        viewModel.loadMore() // olderRows now holds msg0,msg1; liveRows holds msg2,msg3,msg4
+
+        let expectation = expectation(description: "new message arrives")
+        expectation.assertForOverFulfill = false
+        viewModel.$rows.dropFirst().sink { rows in if rows.count == 6 { expectation.fulfill() } }.store(in: &cancellables)
+        try storage.messages.insert(StoredMessage(localMessageId: 5, conversationType: .single, target: "them", from: "them", content: .text("msg5"), timestamp: 1_005, status: .unread, direction: .receive))
+        wait(for: [expectation], timeout: 2)
+
+        XCTAssertEqual(viewModel.rows.compactMap { row -> String? in if case .message(let m) = row { return m.text } else { return nil } }, ["msg0", "msg1", "msg2", "msg3", "msg4", "msg5"])
+    }
 }
