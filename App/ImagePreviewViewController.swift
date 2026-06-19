@@ -2,7 +2,7 @@ import UIKit
 import IMKit
 
 final class ImagePreviewViewController: UIViewController {
-    private let loader: AvatarLoading
+    private let loader: AvatarLoading // not shared with AvatarImageView's loader instances — see AvatarLoader's own doc comment on accepted redundant-fetch trade-offs; same class of gap, not new.
     private let localThumbnail: Data?
     private let remoteURL: String?
     private let scrollView = UIScrollView()
@@ -27,9 +27,10 @@ final class ImagePreviewViewController: UIViewController {
             imageView.image = image
         }
         if let remoteURL {
-            Task {
+            Task { [weak self] in
                 guard let data = await loader.loadAvatarData(from: remoteURL), let image = UIImage(data: data) else { return }
-                imageView.image = image
+                guard let self, self.isViewLoaded, self.view.window != nil else { return }
+                self.imageView.image = image
             }
         }
     }
