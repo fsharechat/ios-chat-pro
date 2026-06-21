@@ -101,6 +101,18 @@ public final class IMDatabase {
                 t.add(column: "isFriend", .boolean).notNull().defaults(to: false)
             }
         }
+        migrator.registerMigration("v3_addFriendRequestTable") { db in
+            try db.create(table: "friendRequest") { t in
+                t.column("fromUid", .text).notNull()
+                t.column("toUid", .text).notNull()
+                t.column("reason", .text).notNull().defaults(to: "")
+                t.column("status", .integer).notNull().defaults(to: 0)
+                t.column("updateDt", .integer).notNull().defaults(to: 0)
+                t.column("fromReadStatus", .boolean).notNull().defaults(to: false)
+                t.column("toReadStatus", .boolean).notNull().defaults(to: false)
+                t.primaryKey(["fromUid", "toUid"])
+            }
+        }
         return migrator
     }
 }

@@ -16,6 +16,14 @@ final class IMDatabaseTests: XCTestCase {
         XCTAssertTrue(tableNames.contains("syncState"))
     }
 
+    func test_openInMemory_createsFriendRequestTable() throws {
+        let database = try IMDatabase.openInMemory()
+        let exists = try database.dbQueue.read { db in
+            try db.tableExists("friendRequest")
+        }
+        XCTAssertTrue(exists)
+    }
+
     func test_openInMemory_runningMigrationTwiceIsHarmless() throws {
         // Simulates app relaunch: a fresh IMDatabase instance against the same
         // (here, file-backed) path must not fail because the schema already exists.
