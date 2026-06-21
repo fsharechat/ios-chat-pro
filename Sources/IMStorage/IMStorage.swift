@@ -12,12 +12,14 @@ public final class IMStorage {
     public let conversations: ConversationStore
     public let users: UserStore
     public let syncState: SyncStateStore
+    public let friendRequests: FriendRequestStore
 
     private init(database: IMDatabase) {
         messages = MessageStore(dbQueue: database.dbQueue)
         conversations = ConversationStore(dbQueue: database.dbQueue)
         users = UserStore(dbQueue: database.dbQueue)
         syncState = SyncStateStore(dbQueue: database.dbQueue)
+        friendRequests = FriendRequestStore(dbQueue: database.dbQueue)
     }
 
     public static func open(atPath path: String) throws -> IMStorage {

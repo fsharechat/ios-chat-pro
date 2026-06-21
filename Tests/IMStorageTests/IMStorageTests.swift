@@ -1,4 +1,5 @@
 import XCTest
+import Combine
 @testable import IMStorage
 
 final class IMStorageTests: XCTestCase {
@@ -30,5 +31,18 @@ final class IMStorageTests: XCTestCase {
 
         let second = try IMStorage.open(atPath: path)
         XCTAssertEqual(try second.users.user(uid: "u1")?.displayName, "Alice")
+    }
+
+    func test_friendRequests_isWiredIntoFacade() throws {
+        let storage = try IMStorage.openInMemory()
+        try storage.friendRequests.upsert(StoredFriendRequest(fromUid: "u1", toUid: "me", reason: "hi", status: StoredFriendRequest.Status.pending, updateDt: 100, fromReadStatus: false, toReadStatus: false))
+
+        let expectation = expectation(description: "row appears via facade")
+        var cancellables: Set<AnyCancellable> = []
+        storage.friendRequests.incomingRequestsPublisher()
+            .replaceError(with: [])
+            .sink { rows in if !rows.isEmpty { expectation.fulfill() } }
+            .store(in: &cancellables)
+        wait(for: [expectation], timeout: 2)
     }
 }
