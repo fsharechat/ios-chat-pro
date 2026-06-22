@@ -6,24 +6,23 @@ import IMStorage
 
 /// Parses a `PUB_ACK`/`MP` pulled-message batch, persists new messages,
 /// updates the affected conversations, and advances the local sync state.
-/// See this plan's "Reference facts" for the own-message-race handling.
 ///
-/// **Wire format:** like every `PUB_ACK` response (enforced server-side at
-/// `IMHandler`'s base class level in chat-server-pro — this isn't specific
-/// to `PUB_ACK`/`MS`, it's universal to all `PUB_ACK` responses), the body
-/// is 1 byte error code followed by the actual payload — here, the
-/// `Im_PullMessageResult` protobuf. This matches `MessageSendAckHandler`'s
-/// same convention for `PUB_ACK`/`MS`, and Android's reference client
-/// (`ReceiveMessageHandler.processMessage`), which reads the error code
-/// first and only parses `WFCMessage.PullMessageResult` when
-/// `errorCode == 0` — a non-zero error code means no parse attempt at all.
+/// **Wire format:** like every `PUB_ACK` response, the body is 1 byte error
+/// code followed by the `Im_PullMessageResult` protobuf.
 ///
-/// **Threading contract:** like the rest of this codebase (see `IMClient`'s
-/// own threading-contract doc comment), this has no internal locking and
-/// must be called from a single consistent queue.
+/// **Threading contract:** like the rest of this codebase, this has no
+/// internal locking and must be called from a single consistent queue.
 public final class ReceiveMessageHandler: MessageHandler {
     private let storage: IMStorage
     private let myUserId: () -> String
+
+    /// Fired after persisting any message whose decoded content is
+    /// `.groupNotification`, with the conversation `target` (the group id)
+    /// — the app wires this to `GroupSyncService.refreshGroup(targetId:)`
+    /// so a group neither tracked locally nor yet refreshed gets its
+    /// metadata/member list populated the first time any notification for
+    /// it arrives. Not fired for ordinary text/image messages.
+    public var onGroupNotificationMessage: ((String) -> Void)?
 
     public init(storage: IMStorage, myUserId: @escaping () -> String) {
         self.storage = storage
@@ -53,22 +52,27 @@ public final class ReceiveMessageHandler: MessageHandler {
 
         if direction == .send, wireMessage.localMessageID != 0,
            (try? storage.messages.message(localMessageId: wireMessage.localMessageID)) != nil {
-            // My own message, already locally echoed before its own ack
-            // arrived (e.g. a reconnect race) — update in place rather than
-            // risk a duplicate-row insert against the
-            // (localMessageId, direction = .send) unique index.
-            // If either update silently fails, the row is left stuck in
-            // .sending with no diagnostic trail — accepted for Phase 1 since
-            // there's no logging facility yet.
             try? storage.messages.updateMessageUid(localMessageId: wireMessage.localMessageID, messageUid: wireMessage.messageID)
             try? storage.messages.updateStatus(localMessageId: wireMessage.localMessageID, status: .sent)
             return
         }
 
-        guard let content = try? MessageContentCodec.decode(wireMessage.content) else { return }
+        guard var content = try? MessageContentCodec.decode(wireMessage.content) else { return }
+        // The server's group-notification fallback payload sometimes omits
+        // (or, for quitGroup, never reliably carries) the operator uid —
+        // `fromUser` is always the true actor regardless, so it's used
+        // whenever the decoded payload came back empty.
+        if case .groupNotification(let type, let operatorUid, let memberUids, let value) = content, operatorUid.isEmpty {
+            content = .groupNotification(type: type, operatorUid: wireMessage.fromUser, memberUids: memberUids, value: value)
+        }
+
         let conversationType = ConversationType(rawValue: Int(wireMessage.conversation.type)) ?? .single
         let target = wireMessage.conversation.target
         let line = Int(wireMessage.conversation.line)
+        let mentionedType = Int(wireMessage.content.mentionedType)
+        let mentionedTargets = wireMessage.content.mentionedTarget
+        let isMentioned = conversationType == .group && direction == .receive
+            && (mentionedType == 2 || (mentionedType == 1 && mentionedTargets.contains(myUserId())))
 
         do {
             try storage.messages.insert(StoredMessage(
@@ -81,7 +85,9 @@ public final class ReceiveMessageHandler: MessageHandler {
                 content: content,
                 timestamp: wireMessage.serverTimestamp,
                 status: direction == .send ? .sent : .unread,
-                direction: direction
+                direction: direction,
+                mentionedType: mentionedType,
+                mentionedTargets: mentionedTargets
             ))
             try storage.conversations.recordIncomingMessage(
                 conversationType: conversationType,
@@ -89,14 +95,14 @@ public final class ReceiveMessageHandler: MessageHandler {
                 line: line,
                 messageUid: wireMessage.messageID,
                 timestamp: wireMessage.serverTimestamp,
-                incrementUnread: direction == .receive
+                incrementUnread: direction == .receive,
+                incrementMention: isMentioned
             )
+            if case .groupNotification = content {
+                onGroupNotificationMessage?(target)
+            }
         } catch {
             // Best-effort: one malformed/unexpected row shouldn't abort the rest of the batch.
-            // Note: no transaction wraps the two calls above, so if `insert`
-            // succeeds but `recordIncomingMessage` throws, we're left with a
-            // persisted message row with no conversation/unread update — an
-            // accepted inconsistency for Phase 1.
         }
     }
 

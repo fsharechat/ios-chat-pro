@@ -119,4 +119,96 @@ final class ReceiveMessageHandlerTests: XCTestCase {
 
         XCTAssertEqual(try storage.syncState.get().msgHead, initialMsgHead)
     }
+
+    func test_handle_groupMessageMentioningMe_incrementsUnreadMentionCount() throws {
+        var message = makeWireMessage(uid: 300, from: "them", target: "g1", text: "hi @me")
+        message.conversation.type = 1 // group
+        message.content.mentionedType = 1
+        message.content.mentionedTarget = ["me"]
+        let frame = try makePullResultFrame(messages: [message], head: 300)
+
+        handler.handle(frame: frame)
+
+        let conversation = try storage.conversations.conversation(conversationType: .group, target: "g1")
+        XCTAssertEqual(conversation?.unreadMentionCount, 1)
+        XCTAssertEqual(try storage.messages.message(uid: 300)?.mentionedTargets, ["me"])
+    }
+
+    func test_handle_groupMessageMentioningAll_incrementsUnreadMentionCount() throws {
+        var message = makeWireMessage(uid: 301, from: "them", target: "g1", text: "hi everyone")
+        message.conversation.type = 1 // group
+        message.content.mentionedType = 2
+        let frame = try makePullResultFrame(messages: [message], head: 301)
+
+        handler.handle(frame: frame)
+
+        let conversation = try storage.conversations.conversation(conversationType: .group, target: "g1")
+        XCTAssertEqual(conversation?.unreadMentionCount, 1)
+    }
+
+    func test_handle_groupMessageMentioningSomeoneElse_doesNotIncrementUnreadMentionCount() throws {
+        var message = makeWireMessage(uid: 302, from: "them", target: "g1", text: "hi @other")
+        message.conversation.type = 1
+        message.content.mentionedType = 1
+        message.content.mentionedTarget = ["someone-else"]
+        let frame = try makePullResultFrame(messages: [message], head: 302)
+
+        handler.handle(frame: frame)
+
+        let conversation = try storage.conversations.conversation(conversationType: .group, target: "g1")
+        XCTAssertEqual(conversation?.unreadMentionCount, 0)
+    }
+
+    func test_handle_groupNotificationMessage_firesOnGroupNotificationMessageWithGroupId() throws {
+        var capturedGroupId: String?
+        handler.onGroupNotificationMessage = { capturedGroupId = $0 }
+
+        var message = Im_Message()
+        message.messageID = 400
+        message.fromUser = "them"
+        message.conversation.type = 1 // group
+        message.conversation.target = "g1"
+        message.conversation.line = 0
+        var wireContent = Im_MessageContent()
+        wireContent.type = 105 // addGroupMember
+        wireContent.data = Data("""
+        {"g":"g1","o":"them","ms":["me"]}
+        """.utf8)
+        message.content = wireContent
+        message.serverTimestamp = 1_000
+        let frame = try makePullResultFrame(messages: [message], head: 400)
+
+        handler.handle(frame: frame)
+
+        XCTAssertEqual(capturedGroupId, "g1")
+    }
+
+    func test_handle_groupNotificationWithEmptyOperatorInPayload_fallsBackToFromUser() throws {
+        var message = Im_Message()
+        message.messageID = 401
+        message.fromUser = "them"
+        message.conversation.type = 1
+        message.conversation.target = "g1"
+        message.conversation.line = 0
+        var wireContent = Im_MessageContent()
+        wireContent.type = 107 // quitGroup — never carries a reliable operator in its payload
+        message.content = wireContent
+        message.serverTimestamp = 1_000
+        let frame = try makePullResultFrame(messages: [message], head: 401)
+
+        handler.handle(frame: frame)
+
+        XCTAssertEqual(try storage.messages.message(uid: 401)?.content, .groupNotification(type: .quitGroup, operatorUid: "them", memberUids: [], value: nil))
+    }
+
+    func test_handle_singleChatMessage_neverIncrementsUnreadMentionCountEvenIfMentionedTypeSet() throws {
+        var message = makeWireMessage(uid: 303, from: "them", target: "them", text: "hi")
+        message.content.mentionedType = 2 // shouldn't happen in practice for single chat, but must not crash/miscount
+        let frame = try makePullResultFrame(messages: [message], head: 303)
+
+        handler.handle(frame: frame)
+
+        let conversation = try storage.conversations.conversation(conversationType: .single, target: "them")
+        XCTAssertEqual(conversation?.unreadMentionCount, 0)
+    }
 }
