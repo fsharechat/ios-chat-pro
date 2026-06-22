@@ -1,5 +1,6 @@
 // App/SceneDelegate.swift
 import UIKit
+import Combine
 import AppCore
 import IMStorage
 import IMKit
@@ -7,6 +8,7 @@ import IMKit
 final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     var window: UIWindow?
     private var environment: AppEnvironment!
+    private var cancellables = Set<AnyCancellable>()
 
     func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
         guard let windowScene = scene as? UIWindowScene else { return }
@@ -43,8 +45,14 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         let conversationListNav = makeConversationListNavigationController()
         conversationListNav.tabBarItem = UITabBarItem(title: "消息", image: UIImage(systemName: "message"), tag: 0)
 
-        let contactListNav = makeContactListNavigationController()
+        let contactListViewModel = ContactListViewModel(storage: environment.storage)
+        let contactListNav = makeContactListNavigationController(viewModel: contactListViewModel)
         contactListNav.tabBarItem = UITabBarItem(title: "联系人", image: UIImage(systemName: "person.2"), tag: 1)
+        contactListViewModel.$unreadFriendRequestCount
+            .sink { [weak contactListNav] count in
+                contactListNav?.tabBarItem.badgeValue = count > 0 ? "\(count)" : nil
+            }
+            .store(in: &cancellables)
 
         tabBarController.viewControllers = [conversationListNav, contactListNav]
         return tabBarController
@@ -78,8 +86,12 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     /// placeholder fields below (`previewText`/`timestamp`/etc.) are never
     /// read by `ConversationViewController`, which only uses `displayName`
     /// for its title.
-    private func makeContactListNavigationController() -> UIViewController {
-        let viewModel = ContactListViewModel(storage: environment.storage)
+    ///
+    /// Takes `viewModel` as a parameter (rather than constructing it
+    /// internally) so `makeMainTabBarController()` can subscribe to
+    /// `viewModel.$unreadFriendRequestCount` for the tab bar badge after
+    /// this method returns and the real `tabBarItem` has been assigned.
+    private func makeContactListNavigationController(viewModel: ContactListViewModel) -> UINavigationController {
         let listViewController = ContactListViewController(viewModel: viewModel)
         listViewController.onContactSelected = { [weak self, weak listViewController] row in
             guard let self else { return }
@@ -108,6 +120,26 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
                 ConversationViewController(row: conversationRow, viewModel: conversationViewModel),
                 animated: true
             )
+        }
+        listViewController.onNewFriendsEntryTapped = { [weak self, weak listViewController] in
+            guard let self else { return }
+            let newFriendsViewModel = NewFriendsViewModel(
+                friendRequestSyncing: self.environment.contactSyncService,
+                friendRequestSending: self.environment.contactSyncService,
+                storage: self.environment.storage
+            )
+            let newFriendsViewController = NewFriendsViewController(viewModel: newFriendsViewModel)
+            newFriendsViewController.onAddFriendTapped = { [weak self, weak newFriendsViewController] in
+                guard let self else { return }
+                let searchUserViewModel = SearchUserViewModel(
+                    userSearching: self.environment.contactSyncService,
+                    friendRequestSending: self.environment.contactSyncService,
+                    storage: self.environment.storage
+                )
+                let searchUserViewController = SearchUserViewController(viewModel: searchUserViewModel)
+                newFriendsViewController?.navigationController?.pushViewController(searchUserViewController, animated: true)
+            }
+            listViewController?.navigationController?.pushViewController(newFriendsViewController, animated: true)
         }
         return UINavigationController(rootViewController: listViewController)
     }
