@@ -4,6 +4,7 @@ import IMStorage
 import IMMessaging
 import IMContacts
 import IMMedia
+import IMGroups
 
 /// The app's dependency container: owns the long-lived `IMStorage`, and
 /// constructs `IMClient`/`MessagingService`/`ConnectAckHandler` once
@@ -22,6 +23,7 @@ public final class AppEnvironment {
     public private(set) var imClient: IMClient?
     public private(set) var messagingService: MessagingService?
     public private(set) var contactSyncService: ContactSyncService?
+    public private(set) var groupSyncService: GroupSyncService?
     public private(set) var mediaUploadService: MediaUploadService?
 
     public init(
@@ -71,6 +73,8 @@ public final class AppEnvironment {
         let service = MessagingService(imClient: client, storage: storage)
         let connectAckHandler = ConnectAckHandler()
         let contactSync = ContactSyncService(imClient: client, storage: storage)
+        let groupSync = GroupSyncService(imClient: client, storage: storage)
+        service.onGroupNotificationMessage = { [weak groupSync] groupId in groupSync?.refreshGroup(targetId: groupId) }
         connectAckHandler.onSyncState = { [weak service, weak contactSync] syncState in
             service?.pullMessagesSinceLastSync(syncState: syncState)
             contactSync?.syncFriendList()
@@ -81,6 +85,7 @@ public final class AppEnvironment {
         imClient = client
         messagingService = service
         contactSyncService = contactSync
+        groupSyncService = groupSync
         mediaUploadService = MediaUploadService(imClient: client)
         client.connect()
         return true
@@ -91,6 +96,7 @@ public final class AppEnvironment {
         imClient = nil
         messagingService = nil
         contactSyncService = nil
+        groupSyncService = nil
         mediaUploadService = nil
         credentialsStore.clear()
     }
