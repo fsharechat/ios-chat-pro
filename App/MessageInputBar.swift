@@ -7,8 +7,15 @@ final class MessageInputBar: UIView {
     private let sendButton = UIButton(type: .system)
     private var textViewHeightConstraint: NSLayoutConstraint!
 
-    var onSendText: ((String) -> Void)?
+    private var mentionedType: Int32 = 0
+    private var mentionedTargets: [String] = []
+
+    var onSendText: ((_ text: String, _ mentionedType: Int32, _ mentionedTargets: [String]) -> Void)?
     var onPickImage: (() -> Void)?
+    /// Fired the moment the user types a trailing "@" — the app presents a
+    /// member picker and calls `insertMention(uid:displayName:)` with the
+    /// result.
+    var onMentionTriggered: (() -> Void)?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -69,13 +76,32 @@ final class MessageInputBar: UIView {
         ])
     }
 
+    /// Called by the host view controller once the user picks a member (or
+    /// "所有人") from the mention picker presented in response to
+    /// `onMentionTriggered`. `uid == nil` means "mention all".
+    func insertMention(uid: String?, displayName: String) {
+        textView.text += "@\(displayName) "
+        if let uid {
+            if mentionedType != 2 {
+                mentionedType = 1
+                mentionedTargets.append(uid)
+            }
+        } else {
+            mentionedType = 2
+            mentionedTargets = []
+        }
+        textViewDidChange(textView)
+    }
+
     @objc private func imageTapped() { onPickImage?() }
 
     @objc private func sendTapped() {
         let text = textView.text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
-        onSendText?(text)
+        onSendText?(text, mentionedType, mentionedTargets)
         textView.text = ""
+        mentionedType = 0
+        mentionedTargets = []
         placeholderLabel.isHidden = false
         updateHeight()
     }
@@ -92,5 +118,8 @@ extension MessageInputBar: UITextViewDelegate {
     func textViewDidChange(_ textView: UITextView) {
         placeholderLabel.isHidden = !textView.text.isEmpty
         updateHeight()
+        if textView.text.hasSuffix("@") {
+            onMentionTriggered?()
+        }
     }
 }

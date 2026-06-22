@@ -141,7 +141,9 @@ final class ConversationViewController: UIViewController {
     }
 
     private func bindInputBar() {
-        inputBar.onSendText = { [weak self] text in self?.viewModel.sendText(text) }
+        inputBar.onSendText = { [weak self] text, mentionedType, mentionedTargets in
+            self?.viewModel.sendText(text, mentionedType: Int(mentionedType), mentionedTargets: mentionedTargets)
+        }
         inputBar.onPickImage = { [weak self] in self?.presentImagePicker() }
     }
 
