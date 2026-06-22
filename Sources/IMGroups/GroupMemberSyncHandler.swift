@@ -31,6 +31,12 @@ public final class GroupMemberSyncHandler: MessageHandler {
             try? storage.groups.upsertMember(StoredGroupMember(
                 groupId: groupId,
                 memberId: member.memberID,
+                // Falls back to `.normal` for an unrecognized wire value (today's 5
+                // member types are exhaustively verified against
+                // cn.wildfirechat.model.GroupMember.GroupMemberType, so this is currently
+                // unreachable). Low risk today since nothing reads `memberType` to
+                // authorize an action yet — but revisit once a later task starts making
+                // permission decisions off `memberType == .owner`.
                 memberType: GroupMemberType(rawValue: Int(member.type)) ?? .normal,
                 updateDt: member.updateDt
             ))
