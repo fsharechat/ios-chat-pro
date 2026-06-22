@@ -74,6 +74,7 @@ public final class AppEnvironment {
         connectAckHandler.onSyncState = { [weak service, weak contactSync] syncState in
             service?.pullMessagesSinceLastSync(syncState: syncState)
             contactSync?.syncFriendList()
+            contactSync?.syncFriendRequests()
         }
         client.register(connectAckHandler)
 

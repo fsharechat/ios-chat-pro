@@ -90,6 +90,25 @@ final class AppEnvironmentTests: XCTestCase {
         XCTAssertTrue(sentSignals.contains(.fp))
     }
 
+    func test_connectIfPossible_withCredentials_alsoTriggersAFriendRequestSync() throws {
+        credentialsStore.save(Credentials(userId: "u1", token: "dG9rZW4="))
+
+        XCTAssertTrue(environment.connectIfPossible())
+
+        var payload = Im_ConnectAckPayload()
+        payload.msgHead = 0
+        payload.friendHead = 0
+        payload.friendRqHead = 0
+        payload.settingHead = 0
+        payload.serverTime = 0
+        let body = try payload.serializedData()
+        let frameBytes = FrameEncoder.encode(signal: .connectAck, subSignal: .none, messageId: 1, body: body)
+        fakeTransport.simulateReceivedData(frameBytes)
+
+        let sentSignals = fakeTransport.sentFrames.compactMap { try? FrameDecoder().feed($0).first?.header.subSignal }
+        XCTAssertTrue(sentSignals.contains(.frp))
+    }
+
     func test_defaultDatabasePath_endsWithExpectedFileNameAndParentDirectoryExists() {
         let path = AppEnvironment.defaultDatabasePath()
 
