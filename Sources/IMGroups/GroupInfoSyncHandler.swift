@@ -33,6 +33,12 @@ public final class GroupInfoSyncHandler: MessageHandler {
                 name: info.name,
                 portrait: info.hasPortrait ? info.portrait : nil,
                 owner: info.hasOwner ? info.owner : nil,
+                // Falls back to `.normal` for an unrecognized wire value (today's only 3
+                // values — Normal/Free/Restricted — are exhaustively verified against
+                // ProtoConstants, so this is currently unreachable). If a new group type
+                // is ever added server-side, reconsider this default: `.normal` is the
+                // most *permissive* fallback for the permission matrix in
+                // GroupInfoViewModel, not the safest fail-closed choice.
                 groupType: GroupType(rawValue: Int(info.type)) ?? .normal,
                 memberCount: Int(info.memberCount),
                 updateDt: info.updateDt,
