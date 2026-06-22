@@ -139,11 +139,12 @@ public final class ContactSyncService {
         }
         let wireMessageId = imClient.sendFrame(signal: .publish, subSignal: .fhr, body: body)
         friendRequestActionTracker.track(wireMessageId: wireMessageId) { [weak self] result in
+            guard let self else { return }
             switch result {
             case .success:
-                try? self?.storage.friendRequests.markAccepted(fromUid: uid)
+                try? self.storage.friendRequests.markAccepted(fromUid: uid)
+                self.syncFriendRequests()
                 completion(.success(()))
-                self?.syncFriendRequests()
             case .failure(let error):
                 completion(.failure(error))
             }
