@@ -32,6 +32,7 @@
 		F8875E643BF006517AB52361 /* FriendRequestCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4F8B269AD818644389D362C /* FriendRequestCell.swift */; };
 		FF900D32443A8166CEA8072A /* IMKit in Frameworks */ = {isa = PBXBuildFile; productRef = A21BC9F32CE4DC35DC8E2152 /* IMKit */; };
 		334BE4377A1A4D67B6264ACC /* SystemTipMessageCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B9D0E69E34543509A14D408 /* SystemTipMessageCell.swift */; };
+		B0EDC84355CB3108AFCFB536 /* CreateGroupViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 443E4BB99661B822E82BBC08 /* CreateGroupViewController.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -58,6 +59,7 @@
 		E696B814AB99A34483A11EA8 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		F8EB6D5DBC0051B5D576A085 /* ContactListCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactListCell.swift; sourceTree = "<group>"; };
 		5B9D0E69E34543509A14D408 /* SystemTipMessageCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemTipMessageCell.swift; sourceTree = "<group>"; };
+		443E4BB99661B822E82BBC08 /* CreateGroupViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateGroupViewController.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -125,6 +127,7 @@
 				648E9F022D0DE7CACE6E5C39 /* TextMessageCell.swift */,
 				E696B814AB99A34483A11EA8 /* Theme.swift */,
 				5B9D0E69E34543509A14D408 /* SystemTipMessageCell.swift */,
+				443E4BB99661B822E82BBC08 /* CreateGroupViewController.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -213,6 +216,7 @@
 				925E32D89E4D590BFE89B808 /* TextMessageCell.swift in Sources */,
 				1A8F5F1C4845AC9F553E5CAE /* Theme.swift in Sources */,
 				334BE4377A1A4D67B6264ACC /* SystemTipMessageCell.swift in Sources */,
+				B0EDC84355CB3108AFCFB536 /* CreateGroupViewController.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
