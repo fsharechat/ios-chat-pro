@@ -56,6 +56,7 @@ final class ContactListViewController: UIViewController {
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
+        guard newFriendsEntryView.frame.width != tableView.bounds.width else { return }
         newFriendsEntryView.frame = CGRect(x: 0, y: 0, width: tableView.bounds.width, height: 56)
         tableView.tableHeaderView = newFriendsEntryView
     }

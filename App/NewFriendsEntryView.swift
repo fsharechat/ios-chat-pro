@@ -87,7 +87,7 @@ final class NewFriendsEntryView: UIView {
 
     func setUnreadCount(_ count: Int) {
         badgeLabel.isHidden = count <= 0
-        badgeLabel.text = count > 99 ? "99+" : "\(count)"
+        badgeLabel.text = count > 99 ? " 99+ " : " \(count) "
     }
 
     @objc private func handleTap() {
