@@ -168,4 +168,14 @@ final class MessageContentCodecTests: XCTestCase {
 
         XCTAssertEqual(content, .groupNotification(type: .addGroupMember, operatorUid: "", memberUids: [], value: nil))
     }
+
+    func test_decode_groupNotification_malformedJSONData_fallsBackToEmptyOperator() throws {
+        var wire = Im_MessageContent()
+        wire.type = 105
+        wire.data = Data("not json".utf8)
+
+        let content = try MessageContentCodec.decode(wire)
+
+        XCTAssertEqual(content, .groupNotification(type: .addGroupMember, operatorUid: "", memberUids: [], value: nil))
+    }
 }
