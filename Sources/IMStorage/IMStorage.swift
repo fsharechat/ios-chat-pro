@@ -1,15 +1,15 @@
 import GRDB
 
-/// Single entry point: construct one `IMStorage`, get all four stores
+/// Single entry point: construct one `IMStorage`, get all six stores
 /// sharing the same underlying SQLite connection.
 ///
 /// Otherwise intentionally does not expose the underlying
 /// `IMDatabase`/`DatabaseQueue` beyond the test-only escape hatch below —
 /// nothing in production scope needs raw connection access. If a future
-/// need arises (backup/export, maintenance tasks, a 5th store for Phase 2
-/// groups), add a narrow accessor here deliberately rather than reaching
-/// around the facade; doing so is a non-breaking, additive change since
-/// every store already takes a plain `DatabaseQueue`, not an `IMStorage`.
+/// need arises (backup/export, maintenance tasks, another store), add a
+/// narrow accessor here deliberately rather than reaching around the
+/// facade; doing so is a non-breaking, additive change since every store
+/// already takes a plain `DatabaseQueue`, not an `IMStorage`.
 public final class IMStorage {
     public let messages: MessageStore
     public let conversations: ConversationStore
