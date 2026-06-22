@@ -80,7 +80,7 @@ public final class ConversationViewModel {
     /// silently dropped — accepted Phase-1 gap, no logging facility yet,
     /// same as `ContactSyncService`/`FriendSyncHandler` elsewhere.
     public func sendText(_ text: String) {
-        try? messageSending?.sendText(to: target, conversationType: conversationType, line: line, text: text)
+        try? messageSending?.sendText(to: target, conversationType: conversationType, line: line, text: text, mentionedType: 0, mentionedTargets: [])
     }
 
     public func sendImage(fullImageData: Data, thumbnail: Data) {

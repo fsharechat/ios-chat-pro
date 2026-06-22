@@ -9,7 +9,7 @@ private final class FakeMessageSending: MessageSending {
     private(set) var sentImages: [(target: String, thumbnail: Data?, remoteURL: String)] = []
     private(set) var resentLocalMessageIds: [Int64] = []
 
-    func sendText(to target: String, conversationType: ConversationType, line: Int, text: String) throws {
+    func sendText(to target: String, conversationType: ConversationType, line: Int, text: String, mentionedType: Int32, mentionedTargets: [String]) throws {
         sentTexts.append((target, text))
     }
 

@@ -182,4 +182,51 @@ final class MessagingServiceTests: XCTestCase {
         XCTAssertEqual(fakeTransport.sentFrames.count, countBefore)
         XCTAssertEqual(try storage.messages.messages(conversationType: .single, target: "them").first?.status, .sending)
     }
+
+    func test_sendText_withMention_encodesMentionedTypeAndTargetsOnTheWireMessage() throws {
+        try service.sendText(to: "g1", conversationType: .group, text: "hi @u2", mentionedType: 1, mentionedTargets: ["u2"])
+
+        let frame = try decodeOnlySentFrame()
+        let wireMessage = try Im_Message(serializedBytes: frame.body)
+        XCTAssertEqual(wireMessage.content.mentionedType, 1)
+        XCTAssertEqual(wireMessage.content.mentionedTarget, ["u2"])
+    }
+
+    func test_sendText_withMention_alsoPersistsMentionFieldsLocally() throws {
+        try service.sendText(to: "g1", conversationType: .group, text: "hi @u2", mentionedType: 1, mentionedTargets: ["u2"])
+
+        let stored = try storage.messages.messages(conversationType: .group, target: "g1").first
+        XCTAssertEqual(stored?.mentionedType, 1)
+        XCTAssertEqual(stored?.mentionedTargets, ["u2"])
+    }
+
+    func test_onGroupNotificationMessage_forwardsToTheInternalReceiveMessageHandler() throws {
+        var capturedGroupId: String?
+        service.onGroupNotificationMessage = { capturedGroupId = $0 }
+
+        var wireMessage = Im_Message()
+        wireMessage.messageID = 500
+        wireMessage.fromUser = "them"
+        wireMessage.conversation.type = 1
+        wireMessage.conversation.target = "g1"
+        wireMessage.conversation.line = 0
+        var wireContent = Im_MessageContent()
+        wireContent.type = 108 // dismissGroup
+        wireContent.data = Data("""
+        {"g":"g1","o":"them"}
+        """.utf8)
+        wireMessage.content = wireContent
+        wireMessage.serverTimestamp = 1_000
+
+        var result = Im_PullMessageResult()
+        result.message = [wireMessage]
+        result.current = 500 // `required` on the wire
+        result.head = 500
+        let body = Data([0x00]) + (try result.serializedData())
+        let frameBytes = FrameEncoder.encode(signal: .pubAck, subSignal: .mp, messageId: 1, body: body)
+
+        fakeTransport.simulateReceivedData(frameBytes)
+
+        XCTAssertEqual(capturedGroupId, "g1")
+    }
 }

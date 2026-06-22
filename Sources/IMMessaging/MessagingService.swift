@@ -18,6 +18,16 @@ public final class MessagingService {
     private let tracker: OutgoingMessageTracker
     private let idGenerator: LocalMessageIdGenerator
     private let nowMillis: () -> Int64
+    private let receiveMessageHandler: ReceiveMessageHandler
+
+    /// Forwards to the internal `ReceiveMessageHandler`'s own closure of the
+    /// same name — see that type's doc comment. Exposed here because
+    /// `AppEnvironment` only has a handle on `MessagingService`, not on the
+    /// handler instances it registers internally.
+    public var onGroupNotificationMessage: ((String) -> Void)? {
+        get { receiveMessageHandler.onGroupNotificationMessage }
+        set { receiveMessageHandler.onGroupNotificationMessage = newValue }
+    }
 
     public init(
         imClient: IMClient,
@@ -33,7 +43,9 @@ public final class MessagingService {
         self.nowMillis = nowMillis
 
         imClient.register(MessageSendAckHandler(tracker: tracker))
-        imClient.register(ReceiveMessageHandler(storage: storage, myUserId: { [weak imClient] in imClient?.userId ?? "" }))
+        let receiveHandler = ReceiveMessageHandler(storage: storage, myUserId: { [weak imClient] in imClient?.userId ?? "" })
+        receiveMessageHandler = receiveHandler
+        imClient.register(receiveHandler)
         let notifyHandler = NotifyMessageHandler()
         notifyHandler.onNotify = { [weak self] head, type in self?.pullMessages(from: head, type: type) }
         imClient.register(notifyHandler)
@@ -47,15 +59,15 @@ public final class MessagingService {
         pullMessages(from: syncState.messageHead, type: 0)
     }
 
-    public func sendText(to target: String, conversationType: ConversationType = .single, line: Int = 0, text: String) throws {
-        try send(to: target, conversationType: conversationType, line: line, content: .text(text))
+    public func sendText(to target: String, conversationType: ConversationType = .single, line: Int = 0, text: String, mentionedType: Int32 = 0, mentionedTargets: [String] = []) throws {
+        try send(to: target, conversationType: conversationType, line: line, content: .text(text), mentionedType: mentionedType, mentionedTargets: mentionedTargets)
     }
 
     public func sendImage(to target: String, conversationType: ConversationType = .single, line: Int = 0, thumbnail: Data?, remoteURL: String) throws {
-        try send(to: target, conversationType: conversationType, line: line, content: .image(thumbnail: thumbnail, remoteURL: remoteURL, localPath: nil))
+        try send(to: target, conversationType: conversationType, line: line, content: .image(thumbnail: thumbnail, remoteURL: remoteURL, localPath: nil), mentionedType: 0, mentionedTargets: [])
     }
 
-    private func send(to target: String, conversationType: ConversationType, line: Int, content: MessageContent) throws {
+    private func send(to target: String, conversationType: ConversationType, line: Int, content: MessageContent, mentionedType: Int32, mentionedTargets: [String]) throws {
         let localMessageId = idGenerator.next()
         let timestamp = nowMillis()
 
@@ -68,7 +80,9 @@ public final class MessagingService {
             content: content,
             timestamp: timestamp,
             status: .sending,
-            direction: .send
+            direction: .send,
+            mentionedType: Int(mentionedType),
+            mentionedTargets: mentionedTargets
         ))
         try storage.conversations.recordIncomingMessage(
             conversationType: conversationType, target: target, line: line,
@@ -80,7 +94,7 @@ public final class MessagingService {
         // `.sending` with no conversation update — the same accepted-for-
         // Phase-1 gap documented in `ReceiveMessageHandler.persist`.
 
-        try sendWireMessage(localMessageId: echo.localMessageId, conversationType: conversationType, target: target, line: line, content: content)
+        try sendWireMessage(localMessageId: echo.localMessageId, conversationType: conversationType, target: target, line: line, content: content, mentionedType: mentionedType, mentionedTargets: mentionedTargets)
     }
 
     /// Re-sends an already-stored message that previously failed (`status
@@ -98,16 +112,16 @@ public final class MessagingService {
     public func resend(localMessageId: Int64) throws {
         guard let message = try storage.messages.message(localMessageId: localMessageId), message.status == .sendFailure else { return }
         try storage.messages.updateStatus(localMessageId: localMessageId, status: .sending)
-        try sendWireMessage(localMessageId: localMessageId, conversationType: message.conversationType, target: message.target, line: message.line, content: message.content)
+        try sendWireMessage(localMessageId: localMessageId, conversationType: message.conversationType, target: message.target, line: message.line, content: message.content, mentionedType: Int32(message.mentionedType), mentionedTargets: message.mentionedTargets)
     }
 
-    private func sendWireMessage(localMessageId: Int64, conversationType: ConversationType, target: String, line: Int, content: MessageContent) throws {
+    private func sendWireMessage(localMessageId: Int64, conversationType: ConversationType, target: String, line: Int, content: MessageContent, mentionedType: Int32, mentionedTargets: [String]) throws {
         var wireMessage = Im_Message()
         wireMessage.conversation.type = Int32(conversationType.rawValue)
         wireMessage.conversation.target = target
         wireMessage.conversation.line = Int32(line)
         wireMessage.fromUser = imClient.userId
-        wireMessage.content = MessageContentCodec.encode(content)
+        wireMessage.content = MessageContentCodec.encode(content, mentionedType: mentionedType, mentionedTargets: mentionedTargets)
         wireMessage.localMessageID = localMessageId
 
         let body = try wireMessage.serializedData()
