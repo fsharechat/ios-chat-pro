@@ -101,11 +101,31 @@ final class GroupInfoViewController: UIViewController {
     }
 
     @objc private func quitTapped() {
-        viewModel.quitGroup { [weak self] _ in self?.navigationController?.popViewController(animated: true) }
+        viewModel.quitGroup { [weak self] result in
+            switch result {
+            case .success:
+                self?.navigationController?.popViewController(animated: true)
+            case .failure:
+                self?.presentResultAlert(title: "退出失败", message: "请稍后重试")
+            }
+        }
     }
 
     @objc private func dismissTapped() {
-        viewModel.dismissGroup { [weak self] _ in self?.navigationController?.popViewController(animated: true) }
+        viewModel.dismissGroup { [weak self] result in
+            switch result {
+            case .success:
+                self?.navigationController?.popViewController(animated: true)
+            case .failure:
+                self?.presentResultAlert(title: "解散失败", message: "请稍后重试")
+            }
+        }
+    }
+
+    private func presentResultAlert(title: String, message: String) {
+        let alert = UIAlertController(title: title, message: message, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "好", style: .default))
+        present(alert, animated: true)
     }
 }
 
