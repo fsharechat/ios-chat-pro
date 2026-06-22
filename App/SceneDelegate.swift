@@ -69,14 +69,65 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
                 imageUploading: self.environment.mediaUploadService,
                 target: row.target,
                 conversationType: row.conversationType,
-                line: row.line
+                line: row.line,
+                currentUserId: self.environment.imClient?.userId ?? ""
             )
-            listViewController?.navigationController?.pushViewController(
-                ConversationViewController(row: row, viewModel: conversationViewModel),
-                animated: true
+            let conversationViewController = ConversationViewController(row: row, viewModel: conversationViewModel)
+            self.wireGroupInfoNavigation(on: conversationViewController, groupId: row.target)
+            listViewController?.navigationController?.pushViewController(conversationViewController, animated: true)
+        }
+        listViewController.onCreateGroupTapped = { [weak self, weak listViewController] in
+            guard let self else { return }
+            let createGroupViewModel = CreateGroupViewModel(
+                storage: self.environment.storage,
+                groupActing: self.environment.groupSyncService,
+                groupSyncing: self.environment.groupSyncService
             )
+            let createGroupViewController = CreateGroupViewController(viewModel: createGroupViewModel)
+            createGroupViewController.onGroupCreated = { [weak self, weak listViewController] groupId, name in
+                guard let self else { return }
+                let conversationViewModel = ConversationViewModel(
+                    storage: self.environment.storage,
+                    messageSending: self.environment.messagingService,
+                    imageUploading: self.environment.mediaUploadService,
+                    target: groupId,
+                    conversationType: .group,
+                    currentUserId: self.environment.imClient?.userId ?? ""
+                )
+                let conversationRow = ConversationRow(
+                    conversationType: .group, target: groupId, line: 0,
+                    displayName: name, avatarURL: nil, previewText: "",
+                    timestamp: 0, unreadCount: 0, hasUnreadMention: false,
+                    isTop: false, isMuted: false, lastMessageStatus: nil
+                )
+                let conversationViewController = ConversationViewController(row: conversationRow, viewModel: conversationViewModel)
+                self.wireGroupInfoNavigation(on: conversationViewController, groupId: groupId)
+                listViewController?.navigationController?.popToRootViewController(animated: false)
+                listViewController?.navigationController?.pushViewController(conversationViewController, animated: true)
+            }
+            listViewController?.navigationController?.pushViewController(createGroupViewController, animated: true)
         }
         return UINavigationController(rootViewController: listViewController)
+    }
+
+    /// Wires the chat screen's tappable group title (see
+    /// `ConversationViewController.onGroupInfoTapped`) to push
+    /// `GroupInfoViewController` — shared by both the "open an existing
+    /// group" and "just created a group" navigation paths above. A no-op
+    /// for single chat (`ConversationViewController` only shows a tappable
+    /// title view for `conversationType == .group` in the first place).
+    private func wireGroupInfoNavigation(on conversationViewController: ConversationViewController, groupId: String) {
+        conversationViewController.onGroupInfoTapped = { [weak self, weak conversationViewController] in
+            guard let self else { return }
+            let groupInfoViewModel = GroupInfoViewModel(
+                groupId: groupId,
+                groupActing: self.environment.groupSyncService,
+                groupSyncing: self.environment.groupSyncService,
+                storage: self.environment.storage,
+                currentUserId: self.environment.imClient?.userId ?? ""
+            )
+            conversationViewController?.navigationController?.pushViewController(GroupInfoViewController(viewModel: groupInfoViewModel), animated: true)
+        }
     }
 
     /// `ConversationViewController` requires a `ConversationRow` purely for
@@ -101,7 +152,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
                 imageUploading: self.environment.mediaUploadService,
                 target: row.uid,
                 conversationType: .single,
-                line: 0
+                currentUserId: self.environment.imClient?.userId ?? ""
             )
             let conversationRow = ConversationRow(
                 conversationType: .single,
@@ -112,6 +163,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
                 previewText: "",
                 timestamp: 0,
                 unreadCount: 0,
+                hasUnreadMention: false,
                 isTop: false,
                 isMuted: false,
                 lastMessageStatus: nil

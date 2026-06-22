@@ -14,6 +14,9 @@ final class ConversationListViewController: UIViewController {
     /// A placeholder until a later plan builds the real one.
     var onConversationSelected: ((ConversationRow) -> Void)?
 
+    /// Set by `SceneDelegate` — pushes the create-group flow.
+    var onCreateGroupTapped: (() -> Void)?
+
     init(viewModel: ConversationListViewModel) {
         self.viewModel = viewModel
         super.init(nibName: nil, bundle: nil)
@@ -26,10 +29,13 @@ final class ConversationListViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = Theme.backgroundPrimary
+        navigationItem.rightBarButtonItem = UIBarButtonItem(barButtonSystemItem: .add, target: self, action: #selector(createGroupTapped))
         layoutTableView()
         configureDataSource()
         bindViewModel()
     }
+
+    @objc private func createGroupTapped() { onCreateGroupTapped?() }
 
     private func layoutTableView() {
         tableView.register(ConversationListCell.self, forCellReuseIdentifier: ConversationListCell.reuseIdentifier)
