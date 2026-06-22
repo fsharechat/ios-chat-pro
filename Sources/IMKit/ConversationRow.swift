@@ -9,6 +9,7 @@ public struct ConversationRow: Equatable, Hashable {
     public let previewText: String
     public let timestamp: Int64
     public let unreadCount: Int
+    public let hasUnreadMention: Bool
     public let isTop: Bool
     public let isMuted: Bool
     public let lastMessageStatus: MessageStatus?
@@ -22,6 +23,7 @@ public struct ConversationRow: Equatable, Hashable {
         previewText: String,
         timestamp: Int64,
         unreadCount: Int,
+        hasUnreadMention: Bool,
         isTop: Bool,
         isMuted: Bool,
         lastMessageStatus: MessageStatus?
@@ -34,6 +36,7 @@ public struct ConversationRow: Equatable, Hashable {
         self.previewText = previewText
         self.timestamp = timestamp
         self.unreadCount = unreadCount
+        self.hasUnreadMention = hasUnreadMention
         self.isTop = isTop
         self.isMuted = isMuted
         self.lastMessageStatus = lastMessageStatus
