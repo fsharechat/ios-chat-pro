@@ -77,6 +77,7 @@ final class FriendRequestCell: UITableViewCell {
     }
 
     @objc private func handleAcceptTapped() {
+        acceptButton.isEnabled = false
         onAcceptTapped?()
     }
 }
