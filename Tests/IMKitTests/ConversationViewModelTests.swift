@@ -201,6 +201,44 @@ final class ConversationViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.rows.compactMap { row -> String? in if case .message(let m) = row { return m.text } else { return nil } }, ["msg0", "msg1", "msg2", "msg3", "msg4", "msg5"])
     }
 
+    func test_systemTipRowEvictedFromLiveWindow_migratesIntoOlderRowsDuringPaging() throws {
+        let groupViewModel = ConversationViewModel(storage: storage, messageSending: nil, imageUploading: nil, target: "g1", conversationType: .group, pageSize: 3, currentUserId: "me")
+        try storage.users.upsertProfile(uid: "u1", name: nil, displayName: "Alice", portrait: nil, mobile: nil, gender: 0, updateDt: 0)
+
+        try storage.messages.insert(StoredMessage(localMessageId: 0, messageUid: 0, conversationType: .group, target: "g1", from: "them", content: .text("msg0"), timestamp: 1_000, status: .unread, direction: .receive))
+        try storage.messages.insert(StoredMessage(
+            localMessageId: 1, messageUid: 1, conversationType: .group, target: "g1", from: "u1",
+            content: .groupNotification(type: .createGroup, operatorUid: "u1", memberUids: [], value: nil),
+            timestamp: 1_001, status: .unread, direction: .receive
+        ))
+        for i in 2..<5 {
+            try storage.messages.insert(StoredMessage(localMessageId: Int64(i), messageUid: Int64(i), conversationType: .group, target: "g1", from: "them", content: .text("msg\(i)"), timestamp: Int64(1_000 + i), status: .unread, direction: .receive))
+        }
+        let expectationFirst = expectation(description: "row appears")
+        expectationFirst.assertForOverFulfill = false
+        groupViewModel.$rows.dropFirst().sink { rows in if !rows.isEmpty { expectationFirst.fulfill() } }.store(in: &cancellables)
+        wait(for: [expectationFirst], timeout: 2)
+
+        groupViewModel.loadMore() // olderRows now holds msg0,(systemTip); liveRows holds msg2,msg3,msg4
+
+        let expectation = expectation(description: "new message arrives")
+        expectation.assertForOverFulfill = false
+        groupViewModel.$rows.dropFirst().sink { rows in if rows.count == 6 { expectation.fulfill() } }.store(in: &cancellables)
+        try storage.messages.insert(StoredMessage(localMessageId: 5, messageUid: 5, conversationType: .group, target: "g1", from: "them", content: .text("msg5"), timestamp: 1_005, status: .unread, direction: .receive))
+        wait(for: [expectation], timeout: 2)
+
+        XCTAssertEqual(groupViewModel.rows.count, 6)
+        guard case .systemTip(let tip) = groupViewModel.rows[1] else { return XCTFail("expected the createGroup notification to have migrated into olderRows as a .systemTip row, in timestamp order between msg0 and msg2") }
+        XCTAssertEqual(tip.text, "Alice创建了群组")
+        XCTAssertEqual(groupViewModel.rows.compactMap { row -> String? in
+            switch row {
+            case .message(let m): return m.text
+            case .systemTip: return "<systemTip>"
+            case .pendingImage: return nil
+            }
+        }, ["msg0", "<systemTip>", "msg2", "msg3", "msg4", "msg5"])
+    }
+
     func test_groupTextMessage_received_populatesSenderDisplayNameAndAvatar() throws {
         try storage.users.upsertProfile(uid: "sender1", name: nil, displayName: "Alice", portrait: "http://x/a.png", mobile: nil, gender: 0, updateDt: 0)
         try storage.messages.insert(StoredMessage(localMessageId: 1, messageUid: 1, conversationType: .group, target: "g1", from: "sender1", content: .text("hi"), timestamp: 1_000, status: .unread, direction: .receive))
