@@ -109,4 +109,33 @@ final class IMDatabaseTests: XCTestCase {
         }
         XCTAssertEqual(count, 2)
     }
+
+    func test_migration_createsGroupInfoAndGroupMemberTables() throws {
+        let database = try IMDatabase.openInMemory()
+        let tables = try database.dbQueue.read { db in
+            try Set(String.fetchAll(db, sql: "SELECT name FROM sqlite_master WHERE type='table'"))
+        }
+        XCTAssertTrue(tables.contains("groupInfo"))
+        XCTAssertTrue(tables.contains("groupMember"))
+    }
+
+    func test_migration_addsMentionAndGroupNotificationColumnsToMessage() throws {
+        let database = try IMDatabase.openInMemory()
+        let columns = try database.dbQueue.read { db in
+            try Set(Row.fetchAll(db, sql: "PRAGMA table_info(message)").map { $0["name"] as! String })
+        }
+        XCTAssertTrue(columns.contains("mentionedType"))
+        XCTAssertTrue(columns.contains("mentionedTargetsRaw"))
+        XCTAssertTrue(columns.contains("groupNotificationOperator"))
+        XCTAssertTrue(columns.contains("groupNotificationMembersRaw"))
+        XCTAssertTrue(columns.contains("groupNotificationValue"))
+    }
+
+    func test_migration_addsUnreadMentionCountToConversation() throws {
+        let database = try IMDatabase.openInMemory()
+        let columns = try database.dbQueue.read { db in
+            try Set(Row.fetchAll(db, sql: "PRAGMA table_info(conversation)").map { $0["name"] as! String })
+        }
+        XCTAssertTrue(columns.contains("unreadMentionCount"))
+    }
 }

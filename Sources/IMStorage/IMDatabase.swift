@@ -113,6 +113,35 @@ public final class IMDatabase {
                 t.primaryKey(["fromUid", "toUid"])
             }
         }
+        migrator.registerMigration("v4_addGroupSupport") { db in
+            try db.create(table: "groupInfo") { t in
+                t.column("groupId", .text).notNull().primaryKey()
+                t.column("name", .text).notNull()
+                t.column("portrait", .text)
+                t.column("owner", .text)
+                t.column("groupType", .integer).notNull().defaults(to: 0)
+                t.column("memberCount", .integer).notNull().defaults(to: 0)
+                t.column("updateDt", .integer).notNull().defaults(to: 0)
+                t.column("memberUpdateDt", .integer).notNull().defaults(to: 0)
+            }
+            try db.create(table: "groupMember") { t in
+                t.column("groupId", .text).notNull()
+                t.column("memberId", .text).notNull()
+                t.column("memberType", .integer).notNull().defaults(to: 0)
+                t.column("updateDt", .integer).notNull().defaults(to: 0)
+                t.primaryKey(["groupId", "memberId"])
+            }
+            try db.alter(table: "message") { t in
+                t.add(column: "mentionedType", .integer).notNull().defaults(to: 0)
+                t.add(column: "mentionedTargetsRaw", .text)
+                t.add(column: "groupNotificationOperator", .text)
+                t.add(column: "groupNotificationMembersRaw", .text)
+                t.add(column: "groupNotificationValue", .text)
+            }
+            try db.alter(table: "conversation") { t in
+                t.add(column: "unreadMentionCount", .integer).notNull().defaults(to: 0)
+            }
+        }
         return migrator
     }
 }
