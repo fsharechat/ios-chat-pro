@@ -42,6 +42,9 @@ public struct StoredMessage: Codable, Equatable, FetchableRecord, MutablePersist
             return .text(textContent ?? "")
         case .image:
             return .image(thumbnail: mediaThumbnail, remoteURL: mediaRemoteURL, localPath: mediaLocalPath)
+        case .createGroup, .addGroupMember, .kickoffGroupMember, .quitGroup, .dismissGroup, .changeGroupName, .changeGroupPortrait:
+            // Group notification types are handled separately by Phase 2 message handlers
+            return .text("")
         }
     }
 
