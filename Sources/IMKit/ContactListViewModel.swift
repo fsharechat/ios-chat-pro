@@ -6,15 +6,20 @@ import IMStorage
 /// internal locking and must be called from a single consistent queue.
 public final class ContactListViewModel {
     @Published public private(set) var sections: [(letter: String, rows: [ContactRow])] = []
+    @Published public private(set) var unreadFriendRequestCount: Int = 0
 
     private let storage: IMStorage
     private var cancellable: AnyCancellable?
+    private var friendRequestCountCancellable: AnyCancellable?
 
     public init(storage: IMStorage) {
         self.storage = storage
         cancellable = storage.users.friendsPublisher()
             .replaceError(with: [])
             .sink { [weak self] users in self?.handleFriendsUpdate(users) }
+        friendRequestCountCancellable = storage.friendRequests.unreadIncomingCountPublisher()
+            .replaceError(with: 0)
+            .sink { [weak self] count in self?.unreadFriendRequestCount = count }
     }
 
     private func handleFriendsUpdate(_ users: [StoredUser]) {

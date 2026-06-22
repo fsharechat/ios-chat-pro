@@ -81,4 +81,13 @@ final class ContactListViewModelTests: XCTestCase {
 
         XCTAssertEqual(viewModel.sections.map { $0.letter }, ["#"])
     }
+
+    func test_unreadFriendRequestCount_reflectsUnreadIncomingRequests() throws {
+        try storage.friendRequests.upsert(StoredFriendRequest(fromUid: "u1", toUid: "me", reason: "", status: StoredFriendRequest.Status.pending, updateDt: 100, fromReadStatus: false, toReadStatus: false))
+
+        let expectation = expectation(description: "count settles at 1")
+        expectation.assertForOverFulfill = false
+        viewModel.$unreadFriendRequestCount.sink { count in if count == 1 { expectation.fulfill() } }.store(in: &cancellables)
+        wait(for: [expectation], timeout: 2)
+    }
 }
