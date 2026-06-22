@@ -86,6 +86,8 @@ final class GroupInfoViewModelTests: XCTestCase {
 
         XCTAssertTrue(viewModel.canAddMembers)
         XCTAssertTrue(viewModel.canModifyInfo)
+        XCTAssertFalse(viewModel.canKickMembers)
+        XCTAssertFalse(viewModel.canDismiss)
     }
 
     func test_noGroupLoadedYet_allPermissionsFalse() {
