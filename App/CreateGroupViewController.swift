@@ -95,8 +95,15 @@ final class CreateGroupViewController: UIViewController {
                 self.onGroupCreated?(groupId, name)
             case .failure:
                 self.navigationItem.rightBarButtonItem?.isEnabled = true
+                self.presentResultAlert(title: "创建失败", message: "请稍后重试")
             }
         }
+    }
+
+    private func presentResultAlert(title: String, message: String) {
+        let alert = UIAlertController(title: title, message: message, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "好", style: .default))
+        present(alert, animated: true)
     }
 }
 
