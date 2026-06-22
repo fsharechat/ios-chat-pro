@@ -31,6 +31,12 @@ public enum MessageContentCodec {
             if let remoteURL {
                 wire.remoteMediaURL = remoteURL
             }
+        case .groupNotification:
+            // The client never constructs `notify_content` itself — group
+            // notifications only ever arrive on the wire (decoded below),
+            // they are never composed locally and sent. See this file's
+            // and `StoredMessage.swift`'s doc comments.
+            preconditionFailure("MessageContentCodec.encode does not support .groupNotification; group notifications are server-originated and never encoded by the client")
         }
         return wire
     }

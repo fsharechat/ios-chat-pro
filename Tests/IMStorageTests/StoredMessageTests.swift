@@ -62,3 +62,42 @@ final class StoredMessageTests: XCTestCase {
         XCTAssertEqual(message.content, .image(thumbnail: thumbnail, remoteURL: "https://example.com/a.jpg", localPath: "/tmp/a.jpg"))
     }
 }
+
+final class StoredMessageContentTests: XCTestCase {
+    func test_groupNotificationContent_roundTripsThroughInit() {
+        let message = StoredMessage(
+            localMessageId: 1, conversationType: .group, target: "g1", from: "u1",
+            content: .groupNotification(type: .addGroupMember, operatorUid: "u1", memberUids: ["u2", "u3"], value: nil),
+            timestamp: 1000, status: .unread, direction: .receive
+        )
+        XCTAssertEqual(message.contentType, .addGroupMember)
+        XCTAssertEqual(message.content, .groupNotification(type: .addGroupMember, operatorUid: "u1", memberUids: ["u2", "u3"], value: nil))
+        XCTAssertEqual(message.searchableContent, "[群通知]")
+    }
+
+    func test_changeGroupNameContent_storesValue() {
+        let message = StoredMessage(
+            localMessageId: 1, conversationType: .group, target: "g1", from: "u1",
+            content: .groupNotification(type: .changeGroupName, operatorUid: "u1", memberUids: [], value: "新群名"),
+            timestamp: 1000, status: .unread, direction: .receive
+        )
+        XCTAssertEqual(message.content, .groupNotification(type: .changeGroupName, operatorUid: "u1", memberUids: [], value: "新群名"))
+    }
+
+    func test_mentionFields_defaultToEmptyAndRoundTrip() {
+        let withoutMention = StoredMessage(
+            localMessageId: 1, conversationType: .group, target: "g1", from: "u1",
+            content: .text("hi"), timestamp: 1000, status: .unread, direction: .receive
+        )
+        XCTAssertEqual(withoutMention.mentionedType, 0)
+        XCTAssertEqual(withoutMention.mentionedTargets, [])
+
+        let withMention = StoredMessage(
+            localMessageId: 2, conversationType: .group, target: "g1", from: "u1",
+            content: .text("hi @you"), timestamp: 1000, status: .unread, direction: .receive,
+            mentionedType: 1, mentionedTargets: ["u2", "u3"]
+        )
+        XCTAssertEqual(withMention.mentionedType, 1)
+        XCTAssertEqual(withMention.mentionedTargets, ["u2", "u3"])
+    }
+}

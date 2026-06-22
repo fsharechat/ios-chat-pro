@@ -183,6 +183,13 @@ public final class ConversationViewModel {
         case .image(let thumbnail, let remoteURL, _):
             imageThumbnail = thumbnail
             imageRemoteURL = remoteURL
+        case .groupNotification:
+            // No dedicated row field for group notifications yet (left to a
+            // later task in this plan to design proper rendering) — fall
+            // back to the same "[群通知]" digest already computed onto
+            // `searchableContent` by `StoredMessage.init`, just so this
+            // switch stays exhaustive and the row shows something sane.
+            text = message.searchableContent
         }
         return StoredMessageRow(
             storageId: message.id ?? -1,
