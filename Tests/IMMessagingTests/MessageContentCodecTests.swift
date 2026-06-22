@@ -59,4 +59,113 @@ final class MessageContentCodecTests: XCTestCase {
         let imageContent = MessageContent.image(thumbnail: Data([0xAA]), remoteURL: "https://example.com/b.jpg", localPath: nil)
         XCTAssertEqual(try MessageContentCodec.decode(MessageContentCodec.encode(imageContent)), imageContent)
     }
+
+    func test_encode_text_withMention_setsMentionedTypeAndTargets() {
+        let wire = MessageContentCodec.encode(.text("hi"), mentionedType: 1, mentionedTargets: ["u2", "u3"])
+
+        XCTAssertEqual(wire.mentionedType, 1)
+        XCTAssertEqual(wire.mentionedTarget, ["u2", "u3"])
+    }
+
+    func test_encode_text_withoutMention_leavesMentionedFieldsUnset() {
+        let wire = MessageContentCodec.encode(.text("hi"))
+
+        XCTAssertFalse(wire.hasMentionedType)
+        XCTAssertEqual(wire.mentionedTarget, [])
+    }
+
+    func test_decode_createGroup_parsesOperatorNameAndMembers() throws {
+        var wire = Im_MessageContent()
+        wire.type = 104
+        wire.data = Data("""
+        {"g":"g1","o":"u1","n":"My Group","ms":["u2","u3"]}
+        """.utf8)
+
+        let content = try MessageContentCodec.decode(wire)
+
+        XCTAssertEqual(content, .groupNotification(type: .createGroup, operatorUid: "u1", memberUids: ["u2", "u3"], value: "My Group"))
+    }
+
+    func test_decode_addGroupMember_parsesOperatorAndMembers() throws {
+        var wire = Im_MessageContent()
+        wire.type = 105
+        wire.data = Data("""
+        {"g":"g1","o":"u1","ms":["u2"]}
+        """.utf8)
+
+        let content = try MessageContentCodec.decode(wire)
+
+        XCTAssertEqual(content, .groupNotification(type: .addGroupMember, operatorUid: "u1", memberUids: ["u2"], value: nil))
+    }
+
+    func test_decode_kickoffGroupMember_parsesOperatorAndMembers() throws {
+        var wire = Im_MessageContent()
+        wire.type = 106
+        wire.data = Data("""
+        {"g":"g1","o":"u1","ms":["u2"]}
+        """.utf8)
+
+        let content = try MessageContentCodec.decode(wire)
+
+        XCTAssertEqual(content, .groupNotification(type: .kickoffGroupMember, operatorUid: "u1", memberUids: ["u2"], value: nil))
+    }
+
+    func test_decode_quitGroup_neverParsesContentField_leavesOperatorEmpty() throws {
+        // The "m" field on the server's fallback encoder is unreliable (Java
+        // overload-resolution quirk — see the design doc's flagged risk), so
+        // quitGroup is decoded without reading `content` at all; the caller
+        // (ReceiveMessageHandler) fills in the operator from `fromUser`.
+        var wire = Im_MessageContent()
+        wire.type = 107
+        wire.content = "anything"
+
+        let content = try MessageContentCodec.decode(wire)
+
+        XCTAssertEqual(content, .groupNotification(type: .quitGroup, operatorUid: "", memberUids: [], value: nil))
+    }
+
+    func test_decode_dismissGroup_parsesOperator() throws {
+        var wire = Im_MessageContent()
+        wire.type = 108
+        wire.data = Data("""
+        {"g":"g1","o":"u1"}
+        """.utf8)
+
+        let content = try MessageContentCodec.decode(wire)
+
+        XCTAssertEqual(content, .groupNotification(type: .dismissGroup, operatorUid: "u1", memberUids: [], value: nil))
+    }
+
+    func test_decode_changeGroupName_parsesOperatorAndNewName() throws {
+        var wire = Im_MessageContent()
+        wire.type = 110
+        wire.data = Data("""
+        {"g":"g1","o":"u1","n":"New Name"}
+        """.utf8)
+
+        let content = try MessageContentCodec.decode(wire)
+
+        XCTAssertEqual(content, .groupNotification(type: .changeGroupName, operatorUid: "u1", memberUids: [], value: "New Name"))
+    }
+
+    func test_decode_changeGroupPortrait_parsesOperator() throws {
+        var wire = Im_MessageContent()
+        wire.type = 112
+        wire.data = Data("""
+        {"g":"g1","o":"u1"}
+        """.utf8)
+
+        let content = try MessageContentCodec.decode(wire)
+
+        XCTAssertEqual(content, .groupNotification(type: .changeGroupPortrait, operatorUid: "u1", memberUids: [], value: nil))
+    }
+
+    func test_decode_groupNotification_malformedOrMissingData_fallsBackToEmptyOperator() throws {
+        var wire = Im_MessageContent()
+        wire.type = 105 // no `data` set at all
+
+        let content = try MessageContentCodec.decode(wire)
+
+        XCTAssertEqual(content, .groupNotification(type: .addGroupMember, operatorUid: "", memberUids: [], value: nil))
+    }
 }

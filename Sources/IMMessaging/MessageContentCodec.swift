@@ -6,17 +6,36 @@ import Foundation
 /// `IMStorage.MessageContent`. Field mapping verified against
 /// `chat-proto`'s `MessageContent` message and the Android
 /// `TextMessageContent`/`ImageMessageContent`/`MediaMessageContent`
-/// `encode()`/`decode()` methods (see this plan's "Reference facts"):
+/// `encode()`/`decode()` methods:
 /// - text: body goes in `searchableContent`, not `content`.
 /// - image: `searchableContent` holds a `"[图片]"` digest, `data` holds the
-///   thumbnail bytes, `remoteMediaURL` holds the uploaded image URL.
+///   thumbnail bytes, `remoteMediaUrl` holds the uploaded image URL.
 ///   `localPath` is never a wire field — always `nil` on decode.
+/// - group notifications: **decode-only.** The client never constructs
+///   `notify_content` when sending a group action request (every group
+///   action `Handler` in `chat-server-pro` auto-generates it server-side
+///   via `GroupNotificationBinaryContent` when the client omits it — see
+///   the design doc §2), so `encode(_:)` is never called with a
+///   `.groupNotification` case in practice; `decode(_:)` is the only
+///   direction that matters for these 7 types.
 public enum MessageContentCodec {
     public enum DecodeError: Error, Equatable {
         case unsupportedContentType(Int32)
     }
 
-    public static func encode(_ content: MessageContent) -> Im_MessageContent {
+    /// Server-generated JSON shape for group-notification `data` payloads
+    /// (`GroupNotificationBinaryContent`'s Gson fields): `g`=groupId,
+    /// `o`=operator uid, `n`=name (createGroup's group name /
+    /// changeGroupName's new name), `ms`=affected member uid list. All
+    /// optional and independently absent depending on notification kind.
+    private struct GroupNotificationWireContent: Decodable {
+        let g: String?
+        let o: String?
+        let n: String?
+        let ms: [String]?
+    }
+
+    public static func encode(_ content: MessageContent, mentionedType: Int32 = 0, mentionedTargets: [String] = []) -> Im_MessageContent {
         var wire = Im_MessageContent()
         switch content {
         case .text(let text):
@@ -31,12 +50,18 @@ public enum MessageContentCodec {
             if let remoteURL {
                 wire.remoteMediaURL = remoteURL
             }
-        case .groupNotification:
-            // The client never constructs `notify_content` itself — group
-            // notifications only ever arrive on the wire (decoded below),
-            // they are never composed locally and sent. See this file's
-            // and `StoredMessage.swift`'s doc comments.
-            preconditionFailure("MessageContentCodec.encode does not support .groupNotification; group notifications are server-originated and never encoded by the client")
+        case .groupNotification(let type, _, _, _):
+            // Never sent in practice (see this type's doc comment) — set
+            // `type` for completeness rather than leave the wire message
+            // at its default (text=0-equivalent) value if this is ever
+            // called.
+            wire.type = Int32(type.rawValue)
+        }
+        if mentionedType != 0 {
+            wire.mentionedType = mentionedType
+        }
+        if !mentionedTargets.isEmpty {
+            wire.mentionedTarget = mentionedTargets
         }
         return wire
     }
@@ -51,8 +76,49 @@ public enum MessageContentCodec {
                 remoteURL: wire.hasRemoteMediaURL ? wire.remoteMediaURL : nil,
                 localPath: nil
             )
+        case 104:
+            return decodeGroupNotification(type: .createGroup, wire: wire)
+        case 105:
+            return decodeGroupNotification(type: .addGroupMember, wire: wire)
+        case 106:
+            return decodeGroupNotification(type: .kickoffGroupMember, wire: wire)
+        case 107:
+            return decodeGroupNotification(type: .quitGroup, wire: wire)
+        case 108:
+            return decodeGroupNotification(type: .dismissGroup, wire: wire)
+        case 110:
+            return decodeGroupNotification(type: .changeGroupName, wire: wire)
+        case 112:
+            return decodeGroupNotification(type: .changeGroupPortrait, wire: wire)
         default:
             throw DecodeError.unsupportedContentType(wire.type)
+        }
+    }
+
+    private static func decodeGroupNotification(type: MessageContentType, wire: Im_MessageContent) -> MessageContent {
+        // quitGroup's `m`/content field is unreliable server-side (a Java
+        // overload-resolution quirk in `GroupNotificationBinaryContent`
+        // picks a different constructor than intended) — never parsed.
+        // `ReceiveMessageHandler` fills in `operatorUid` from the wire
+        // message's `fromUser` instead.
+        guard type != .quitGroup,
+              wire.hasData,
+              let parsed = try? JSONDecoder().decode(GroupNotificationWireContent.self, from: wire.data)
+        else {
+            return .groupNotification(type: type, operatorUid: "", memberUids: [], value: nil)
+        }
+
+        switch type {
+        case .createGroup:
+            return .groupNotification(type: type, operatorUid: parsed.o ?? "", memberUids: parsed.ms ?? [], value: parsed.n)
+        case .addGroupMember, .kickoffGroupMember:
+            return .groupNotification(type: type, operatorUid: parsed.o ?? "", memberUids: parsed.ms ?? [], value: nil)
+        case .changeGroupName:
+            return .groupNotification(type: type, operatorUid: parsed.o ?? "", memberUids: [], value: parsed.n)
+        case .dismissGroup, .changeGroupPortrait:
+            return .groupNotification(type: type, operatorUid: parsed.o ?? "", memberUids: [], value: nil)
+        case .text, .image, .quitGroup:
+            return .groupNotification(type: type, operatorUid: parsed.o ?? "", memberUids: [], value: nil) // unreachable
         }
     }
 }
