@@ -109,7 +109,9 @@ final class IMDatabaseTests: XCTestCase {
         }
         XCTAssertEqual(count, 2)
     }
+}
 
+final class IMDatabaseMigrationTests: XCTestCase {
     func test_migration_createsGroupInfoAndGroupMemberTables() throws {
         let database = try IMDatabase.openInMemory()
         let tables = try database.dbQueue.read { db in
