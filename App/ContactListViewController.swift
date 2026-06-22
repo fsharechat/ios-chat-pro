@@ -28,9 +28,13 @@ final class ContactListViewController: UIViewController {
     private var dataSource: ContactListDataSource!
 
     private let tableView = UITableView()
+    private let newFriendsEntryView = NewFriendsEntryView()
 
     /// Set by `SceneDelegate` — pushes the chat screen for the tapped contact.
     var onContactSelected: ((ContactRow) -> Void)?
+
+    /// Set by `SceneDelegate` — pushes `NewFriendsViewController`.
+    var onNewFriendsEntryTapped: (() -> Void)?
 
     init(viewModel: ContactListViewModel) {
         self.viewModel = viewModel
@@ -47,6 +51,13 @@ final class ContactListViewController: UIViewController {
         layoutTableView()
         configureDataSource()
         bindViewModel()
+        newFriendsEntryView.onTapped = { [weak self] in self?.onNewFriendsEntryTapped?() }
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        newFriendsEntryView.frame = CGRect(x: 0, y: 0, width: tableView.bounds.width, height: 56)
+        tableView.tableHeaderView = newFriendsEntryView
     }
 
     private func layoutTableView() {
@@ -76,6 +87,9 @@ final class ContactListViewController: UIViewController {
     private func bindViewModel() {
         viewModel.$sections
             .sink { [weak self] sections in self?.applySnapshot(sections: sections) }
+            .store(in: &cancellables)
+        viewModel.$unreadFriendRequestCount
+            .sink { [weak self] count in self?.newFriendsEntryView.setUnreadCount(count) }
             .store(in: &cancellables)
     }
 
