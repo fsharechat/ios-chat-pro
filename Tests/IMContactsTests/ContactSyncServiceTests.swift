@@ -9,6 +9,7 @@ final class ContactSyncServiceTests: XCTestCase {
     private var fakeTransport: FakeTransportConnection!
     private var imClient: IMClient!
     private var storage: IMStorage!
+    private var scheduler: ManualScheduler!
     private var service: ContactSyncService!
 
     override func setUpWithError() throws {
@@ -20,7 +21,8 @@ final class ContactSyncServiceTests: XCTestCase {
         let token = try WireCrypto.encrypt(plaintext, key: WireCrypto.defaultKey).base64EncodedString()
         let configuration = IMClientConfiguration(hosts: "host", port: 6789, userId: "me", token: token, clientIdentifier: "device-1")
         imClient = try IMClient(configuration: configuration, transportFactory: { [unowned self] _, _ in self.fakeTransport })
-        service = ContactSyncService(imClient: imClient, storage: storage)
+        scheduler = ManualScheduler()
+        service = ContactSyncService(imClient: imClient, storage: storage, scheduler: scheduler)
 
         imClient.connect()
         fakeTransport.simulate(.connected) // CONNECT message send completes synchronously via the fake's completion callback
@@ -115,5 +117,89 @@ final class ContactSyncServiceTests: XCTestCase {
         fakeTransport.simulateReceivedData(frameBytes)
 
         XCTAssertEqual(try storage.users.user(uid: "u1")?.displayName, "Alice")
+    }
+
+    func test_searchUser_sendsKeywordFuzzyOneAndPageZero() throws {
+        service.searchUser(keyword: "alice") { _ in }
+
+        let frame = try decodeOnlySentFrame()
+        XCTAssertEqual(frame.header.signal, .publish)
+        XCTAssertEqual(frame.header.subSignal, .us)
+        let request = try Im_SearchUserRequest(serializedBytes: frame.body)
+        XCTAssertEqual(request.keyword, "alice")
+        XCTAssertEqual(request.fuzzy, 1)
+        XCTAssertEqual(request.page, 0)
+    }
+
+    func test_sendFriendRequest_sendsTargetUidAndReason() throws {
+        service.sendFriendRequest(to: "u1", reason: "hi") { _ in }
+
+        let frame = try decodeOnlySentFrame()
+        XCTAssertEqual(frame.header.subSignal, .far)
+        let request = try Im_AddFriendRequest(serializedBytes: frame.body)
+        XCTAssertEqual(request.targetUid, "u1")
+        XCTAssertEqual(request.reason, "hi")
+    }
+
+    func test_acceptFriendRequest_sendsTargetUidAndStatusOne() throws {
+        service.acceptFriendRequest(from: "u1") { _ in }
+
+        let frame = try decodeOnlySentFrame()
+        XCTAssertEqual(frame.header.subSignal, .fhr)
+        let request = try Im_HandleFriendRequest(serializedBytes: frame.body)
+        XCTAssertEqual(request.targetUid, "u1")
+        XCTAssertEqual(request.status, 1)
+    }
+
+    func test_acceptFriendRequest_onSuccess_marksAcceptedLocallyAndRePullsFriendRequests() throws {
+        try storage.friendRequests.upsert(StoredFriendRequest(fromUid: "u1", toUid: "me", reason: "hi", status: StoredFriendRequest.Status.pending, updateDt: 100, fromReadStatus: false, toReadStatus: false))
+
+        var capturedResult: Result<Void, Error>?
+        service.acceptFriendRequest(from: "u1") { result in capturedResult = result }
+
+        let acceptFrame = try decodeOnlySentFrame()
+        let acceptFrameBytes = FrameEncoder.encode(signal: .pubAck, subSignal: .fhr, messageId: acceptFrame.header.messageId, body: Data([0x00]))
+        fakeTransport.simulateReceivedData(acceptFrameBytes)
+
+        switch capturedResult {
+        case .success: break
+        default: XCTFail("expected .success, got \(String(describing: capturedResult))")
+        }
+        let rows = try storage.dbQueueForTesting.read { db in try StoredFriendRequest.fetchAll(db) }
+        XCTAssertEqual(rows.first?.status, StoredFriendRequest.Status.accepted)
+
+        let followUpFrame = try XCTUnwrap(FrameDecoder().feed(fakeTransport.sentFrames.last!).first)
+        XCTAssertEqual(followUpFrame.header.subSignal, .frp)
+    }
+
+    func test_syncFriendRequests_sendsCurrentFriendRequestHeadAsVersion() throws {
+        var state = try storage.syncState.get()
+        state.friendRequestHead = 777
+        try storage.syncState.set(state)
+
+        service.syncFriendRequests()
+
+        let frame = try decodeOnlySentFrame()
+        XCTAssertEqual(frame.header.subSignal, .frp)
+        let request = try Im_Version(serializedBytes: frame.body)
+        XCTAssertEqual(request.version, 777)
+    }
+
+    func test_markFriendRequestsAsRead_sendsFRUSWithNonZeroVersion() throws {
+        service.markFriendRequestsAsRead()
+
+        let frame = try decodeOnlySentFrame()
+        XCTAssertEqual(frame.header.subSignal, .frus)
+        let request = try Im_Version(serializedBytes: frame.body)
+        XCTAssertGreaterThan(request.version, 0)
+    }
+
+    func test_receivingFRNNotify_triggersAFollowUpFRPPull() throws {
+        let frameBytes = FrameEncoder.encode(signal: .publish, subSignal: .frn, messageId: 0, body: Data([0, 0, 0, 0, 0, 0, 0, 1]))
+
+        fakeTransport.simulateReceivedData(frameBytes)
+
+        let frame = try XCTUnwrap(FrameDecoder().feed(fakeTransport.sentFrames.last!).first)
+        XCTAssertEqual(frame.header.subSignal, .frp)
     }
 }
