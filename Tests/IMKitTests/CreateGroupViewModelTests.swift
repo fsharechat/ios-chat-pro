@@ -1,4 +1,5 @@
 import XCTest
+import Combine
 import IMStorage
 @testable import IMKit
 
@@ -7,6 +8,7 @@ final class CreateGroupViewModelTests: XCTestCase {
     private var fakeActing: FakeGroupActing!
     private var fakeSyncing: FakeGroupSyncing!
     private var viewModel: CreateGroupViewModel!
+    private var cancellables: Set<AnyCancellable> = []
 
     override func setUpWithError() throws {
         try super.setUpWithError()
@@ -61,6 +63,44 @@ final class CreateGroupViewModelTests: XCTestCase {
         viewModel.createGroup(name: "My Group") { _ in }
 
         XCTAssertNil(fakeSyncing.lastRefreshedGroupId)
+    }
+
+    func test_unrelatedFriendListMutation_preservesInProgressSelection() throws {
+        viewModel.toggleSelection(uid: "u2")
+        XCTAssertEqual(viewModel.selectedCount, 1)
+
+        let expectation = expectation(description: "rows re-emitted")
+        viewModel.$rows.dropFirst().sink { rows in
+            if rows.first(where: { $0.contact.uid == "u3" })?.contact.displayName == "Carol Updated" {
+                expectation.fulfill()
+            }
+        }.store(in: &cancellables)
+
+        try storage.users.upsertProfile(uid: "u3", name: nil, displayName: "Carol Updated", portrait: nil, mobile: nil, gender: 0, updateDt: 1)
+
+        wait(for: [expectation], timeout: 2)
+
+        XCTAssertTrue(viewModel.rows.first { $0.contact.uid == "u2" }!.isSelected)
+        XCTAssertEqual(viewModel.selectedCount, 1)
+    }
+
+    func test_unfriendingMidFlow_dropsSelectionAndRemovesRow() throws {
+        viewModel.toggleSelection(uid: "u2")
+        XCTAssertEqual(viewModel.selectedCount, 1)
+
+        let expectation = expectation(description: "rows re-emitted without u2")
+        viewModel.$rows.dropFirst().sink { rows in
+            if !rows.contains(where: { $0.contact.uid == "u2" }) {
+                expectation.fulfill()
+            }
+        }.store(in: &cancellables)
+
+        try storage.users.replaceFriendList(uids: ["u3"])
+
+        wait(for: [expectation], timeout: 2)
+
+        XCTAssertFalse(viewModel.rows.contains { $0.contact.uid == "u2" })
+        XCTAssertEqual(viewModel.selectedCount, 0)
     }
 }
 
