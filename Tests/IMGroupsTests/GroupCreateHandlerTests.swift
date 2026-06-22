@@ -48,6 +48,16 @@ final class GroupCreateHandlerTests: XCTestCase {
         XCTAssertEqual(result, .failure(.malformedResponse))
     }
 
+    func test_handle_zeroErrorCodeButNonUTF8TrailingBytes_resolvesMalformedResponse() {
+        var result: Result<String, GroupCreateTracker.TrackerError>?
+        tracker.track(wireMessageId: 1) { result = $0 }
+        let body = Data([0x00, 0xFF, 0xFE]) // 0x00 = success error code, 0xFF/0xFE = invalid UTF-8 trailing bytes
+
+        handler.handle(frame: Frame(header: Header(signal: .pubAck, subSignal: .gc, bodyLength: UInt32(body.count), messageId: 1), body: body))
+
+        XCTAssertEqual(result, .failure(.malformedResponse))
+    }
+
     func test_handle_emptyBody_doesNothingNoCrash() {
         handler.handle(frame: Frame(header: Header(signal: .pubAck, subSignal: .gc, bodyLength: 0, messageId: 1), body: Data()))
     }
