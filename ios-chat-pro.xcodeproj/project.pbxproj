@@ -33,6 +33,7 @@
 		FF900D32443A8166CEA8072A /* IMKit in Frameworks */ = {isa = PBXBuildFile; productRef = A21BC9F32CE4DC35DC8E2152 /* IMKit */; };
 		334BE4377A1A4D67B6264ACC /* SystemTipMessageCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B9D0E69E34543509A14D408 /* SystemTipMessageCell.swift */; };
 		B0EDC84355CB3108AFCFB536 /* CreateGroupViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 443E4BB99661B822E82BBC08 /* CreateGroupViewController.swift */; };
+		0E2271D2ABB2059EA91726F1 /* GroupInfoViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 84F36C58AAFB10A087781F59 /* GroupInfoViewController.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -60,6 +61,7 @@
 		F8EB6D5DBC0051B5D576A085 /* ContactListCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactListCell.swift; sourceTree = "<group>"; };
 		5B9D0E69E34543509A14D408 /* SystemTipMessageCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemTipMessageCell.swift; sourceTree = "<group>"; };
 		443E4BB99661B822E82BBC08 /* CreateGroupViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateGroupViewController.swift; sourceTree = "<group>"; };
+		84F36C58AAFB10A087781F59 /* GroupInfoViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupInfoViewController.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -128,6 +130,7 @@
 				E696B814AB99A34483A11EA8 /* Theme.swift */,
 				5B9D0E69E34543509A14D408 /* SystemTipMessageCell.swift */,
 				443E4BB99661B822E82BBC08 /* CreateGroupViewController.swift */,
+				84F36C58AAFB10A087781F59 /* GroupInfoViewController.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -217,6 +220,7 @@
 				1A8F5F1C4845AC9F553E5CAE /* Theme.swift in Sources */,
 				334BE4377A1A4D67B6264ACC /* SystemTipMessageCell.swift in Sources */,
 				B0EDC84355CB3108AFCFB536 /* CreateGroupViewController.swift in Sources */,
+				0E2271D2ABB2059EA91726F1 /* GroupInfoViewController.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
