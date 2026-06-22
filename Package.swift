@@ -12,6 +12,7 @@ let package = Package(
         .library(name: "IMMessaging", targets: ["IMMessaging"]),
         .library(name: "AppCore", targets: ["AppCore"]),
         .library(name: "IMContacts", targets: ["IMContacts"]),
+        .library(name: "IMGroups", targets: ["IMGroups"]),
         .library(name: "IMKit", targets: ["IMKit"]),
         .library(name: "IMMedia", targets: ["IMMedia"]),
     ],
@@ -37,11 +38,13 @@ let package = Package(
         .testTarget(name: "IMMessagingTests", dependencies: ["IMMessaging"]),
         .target(name: "IMContacts", dependencies: ["IMClient", "IMStorage", "IMProto", "IMTransport"]),
         .testTarget(name: "IMContactsTests", dependencies: ["IMContacts"]),
-        .target(name: "IMKit", dependencies: ["IMStorage", "IMContacts", "IMMessaging", "IMMedia"]),
+        .target(name: "IMGroups", dependencies: ["IMClient", "IMStorage", "IMProto", "IMTransport"]),
+        .testTarget(name: "IMGroupsTests", dependencies: ["IMGroups"]),
+        .target(name: "IMKit", dependencies: ["IMStorage", "IMContacts", "IMMessaging", "IMMedia", "IMGroups"]),
         .testTarget(name: "IMKitTests", dependencies: ["IMKit"]),
         .target(name: "IMMedia", dependencies: ["IMClient", "IMProto", "IMTransport"]),
         .testTarget(name: "IMMediaTests", dependencies: ["IMMedia"]),
-        .target(name: "AppCore", dependencies: ["IMClient", "IMStorage", "IMMessaging", "IMContacts", "IMMedia"]),
+        .target(name: "AppCore", dependencies: ["IMClient", "IMStorage", "IMMessaging", "IMContacts", "IMMedia", "IMGroups"]),
         .testTarget(name: "AppCoreTests", dependencies: ["AppCore", "IMClient", "IMProto", "IMTransport"]),
     ]
 )
