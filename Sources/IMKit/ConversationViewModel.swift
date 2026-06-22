@@ -15,41 +15,16 @@ public final class ConversationViewModel {
     private let conversationType: ConversationType
     private let line: Int
     private let pageSize: Int
+    private let currentUserId: String
 
-    /// Older history loaded via `loadMore`, strictly before `liveRows` —
-    /// `olderMessages` is one-shot (not reactive), so these are frozen at
-    /// fetch time and only ever grow at the front via further `loadMore`
-    /// calls. Once non-empty (i.e. paging has started), it also grows when
-    /// `handleMessagesUpdate` evicts a row from `liveRows` (see that
-    /// property's doc comment): once a message has ever been shown after
-    /// paging began, it's migrated here rather than dropped, so it stays
-    /// visible even after it falls out of the live window.
-    ///
-    /// Accepted Phase-1 gap: this uses `olderRows.isEmpty` as a proxy for
-    /// "has the user ever paged via `loadMore`". A conversation that starts
-    /// with fewer than `pageSize` messages and grows one at a time without
-    /// the user ever scrolling up (nothing to page in yet) can still lose
-    /// its earliest message the first time the live window naturally
-    /// exceeds `pageSize` — `olderRows` is still empty at that point, so
-    /// the eviction is (incorrectly) treated as transient cold-start churn
-    /// rather than migrated. Narrow edge case (requires a fresh
-    /// under-`pageSize` conversation that organically grows past it with
-    /// no pagination in between); not fixed for Phase 1.
-    private var olderRows: [StoredMessageRow] = []
-    /// The current page from `messagesPublisher` — a sliding "latest
-    /// `pageSize`" window, so each emission **replaces** this array wholesale
-    /// (rather than merging into it). Before `loadMore` has ever paged in
-    /// history (`olderRows` empty), a message that scrolls out of this
-    /// window is simply dropped from here with no special handling — early
-    /// on, a burst of writes (e.g. initial backlog sync) can slide the live
-    /// window through several transient intermediate states before the user
-    /// has done anything, and none of those transient rows were ever
-    /// durably "shown". Once paging has started, though, a message that
-    /// scrolls out is never simply dropped: `handleMessagesUpdate` detects
-    /// rows present in the old `liveRows` but absent from the new emission
-    /// and migrates them into `olderRows` first, so a message that has ever
-    /// been visible since paging began can't silently disappear from `rows`.
-    private var liveRows: [StoredMessageRow] = []
+    /// Older history loaded via `loadMore`, strictly before `liveRows`.
+    /// One-shot (not reactive) — see `liveRows`'s doc comment for the full
+    /// eviction/migration contract, unchanged from Phase 1 except that both
+    /// arrays now hold `ChatMessageRow` (so a `.systemTip` row can appear in
+    /// the same paging window as ordinary messages) instead of
+    /// `StoredMessageRow`.
+    private var olderRows: [ChatMessageRow] = []
+    private var liveRows: [ChatMessageRow] = []
     private var pendingImages: [PendingImageUpload] = []
     private var cancellable: AnyCancellable?
 
@@ -60,7 +35,8 @@ public final class ConversationViewModel {
         target: String,
         conversationType: ConversationType = .single,
         line: Int = 0,
-        pageSize: Int = 30
+        pageSize: Int = 30,
+        currentUserId: String
     ) {
         self.storage = storage
         self.messageSending = messageSending
@@ -69,6 +45,7 @@ public final class ConversationViewModel {
         self.conversationType = conversationType
         self.line = line
         self.pageSize = pageSize
+        self.currentUserId = currentUserId
 
         cancellable = storage.messages
             .messagesPublisher(conversationType: conversationType, target: target, line: line, limit: pageSize)
@@ -79,8 +56,8 @@ public final class ConversationViewModel {
     /// Failure (e.g. serialization, or no `messageSending` configured) is
     /// silently dropped — accepted Phase-1 gap, no logging facility yet,
     /// same as `ContactSyncService`/`FriendSyncHandler` elsewhere.
-    public func sendText(_ text: String) {
-        try? messageSending?.sendText(to: target, conversationType: conversationType, line: line, text: text, mentionedType: 0, mentionedTargets: [])
+    public func sendText(_ text: String, mentionedType: Int = 0, mentionedTargets: [String] = []) {
+        try? messageSending?.sendText(to: target, conversationType: conversationType, line: line, text: text, mentionedType: Int32(mentionedType), mentionedTargets: mentionedTargets)
     }
 
     public func sendImage(fullImageData: Data, thumbnail: Data) {
@@ -90,10 +67,24 @@ public final class ConversationViewModel {
         startUpload(pending)
     }
 
+    /// Candidate members for the composer's "@" picker — empty for a
+    /// non-group conversation. Excludes `.removed` members (same filter
+    /// `GroupStore.members(groupId:)` already applies).
+    public func groupMemberCandidatesForMention() -> [(uid: String, displayName: String)] {
+        guard conversationType == .group else { return [] }
+        let members = (try? storage.groups.members(groupId: target)) ?? []
+        return members.map { member in
+            let user = try? storage.users.user(uid: member.memberId)
+            return (uid: member.memberId, displayName: user?.displayName ?? user?.name ?? member.memberId)
+        }
+    }
+
     /// Retries a failed send: a `.pendingImage` row re-runs the upload from
     /// scratch; a `.message` row with `status == .sendFailure` re-sends the
     /// already-stored row via `MessageSending.resend(localMessageId:)`. A
-    /// no-op for any other row/status combination.
+    /// no-op for any other row/status combination, including `.systemTip` —
+    /// a group notification was never "sent" by this client and has nothing
+    /// to retry.
     public func retry(row: ChatMessageRow) {
         switch row {
         case .pendingImage(let pending):
@@ -104,6 +95,8 @@ public final class ConversationViewModel {
         case .message(let message):
             guard message.status == .sendFailure else { return }
             try? messageSending?.resend(localMessageId: message.localMessageId)
+        case .systemTip:
+            break // never retryable — there's nothing to resend
         }
     }
 
@@ -111,14 +104,15 @@ public final class ConversationViewModel {
     /// message. A no-op if nothing is loaded yet or a previous call already
     /// determined there's no more history (`canLoadMore == false`).
     public func loadMore() {
-        guard canLoadMore, let oldest = (olderRows.first ?? liveRows.first) else { return }
+        guard canLoadMore, let oldest = (olderRows.first ?? liveRows.first),
+              let oldestTimestamp = oldest.timestamp, let oldestId = oldest.storageId else { return }
         let older = (try? storage.messages.olderMessages(
             conversationType: conversationType, target: target, line: line,
-            beforeTimestamp: oldest.timestamp, beforeId: oldest.storageId, limit: pageSize
+            beforeTimestamp: oldestTimestamp, beforeId: oldestId, limit: pageSize
         )) ?? []
         if older.count < pageSize { canLoadMore = false }
         guard !older.isEmpty else { return }
-        olderRows.insert(contentsOf: older.map(Self.makeRow), at: 0)
+        olderRows.insert(contentsOf: older.map(makeRow), at: 0)
         publishRows()
     }
 
@@ -153,13 +147,20 @@ public final class ConversationViewModel {
         // very first page has ever been explicitly requested, and treating
         // every one of those transient slides as a permanent boundary
         // crossing would defeat the "latest pageSize" windowing entirely.
-        let newLiveRows = messages.map(Self.makeRow)
-        let newStorageIds = Set(newLiveRows.map { $0.storageId })
+        let newLiveRows = messages.map(makeRow)
+        let newStorageIds = Set(newLiveRows.compactMap(\.storageId))
         if !olderRows.isEmpty {
-            let evicted = liveRows.filter { !newStorageIds.contains($0.storageId) }
+            let evicted = liveRows.filter { row in
+                guard let id = row.storageId else { return false }
+                return !newStorageIds.contains(id)
+            }
             if !evicted.isEmpty {
                 olderRows.append(contentsOf: evicted)
-                olderRows.sort { $0.timestamp == $1.timestamp ? $0.storageId < $1.storageId : $0.timestamp < $1.timestamp }
+                olderRows.sort { lhs, rhs in
+                    let lhsTime = lhs.timestamp ?? 0
+                    let rhsTime = rhs.timestamp ?? 0
+                    return lhsTime == rhsTime ? (lhs.storageId ?? 0) < (rhs.storageId ?? 0) : lhsTime < rhsTime
+                }
             }
         }
         liveRows = newLiveRows
@@ -167,29 +168,34 @@ public final class ConversationViewModel {
     }
 
     private func publishRows() {
-        rows = olderRows.map { .message($0) } + liveRows.map { .message($0) } + pendingImages.map { .pendingImage($0) }
+        rows = olderRows + liveRows + pendingImages.map { .pendingImage($0) }
     }
 
     /// `message.id` is always non-nil for a row fetched back from the
     /// database (`FetchableRecord` only ever omits it before insertion) —
     /// the `-1` fallback is unreachable in practice, not a real sentinel.
-    private static func makeRow(_ message: StoredMessage) -> StoredMessageRow {
-        var text: String?
-        var imageThumbnail: Data?
-        var imageRemoteURL: String?
+    private func makeRow(_ message: StoredMessage) -> ChatMessageRow {
         switch message.content {
-        case .text(let value):
-            text = value
+        case .text(let text):
+            return .message(buildStoredMessageRow(message, text: text, imageThumbnail: nil, imageRemoteURL: nil))
         case .image(let thumbnail, let remoteURL, _):
-            imageThumbnail = thumbnail
-            imageRemoteURL = remoteURL
-        case .groupNotification:
-            // No dedicated row field for group notifications yet (left to a
-            // later task in this plan to design proper rendering) — fall
-            // back to the same "[群通知]" digest already computed onto
-            // `searchableContent` by `StoredMessage.init`, just so this
-            // switch stays exhaustive and the row shows something sane.
-            text = message.searchableContent
+            return .message(buildStoredMessageRow(message, text: nil, imageThumbnail: thumbnail, imageRemoteURL: remoteURL))
+        case .groupNotification(let type, let operatorUid, let memberUids, let value):
+            return .systemTip(SystemTipRow(
+                storageId: message.id ?? -1,
+                text: renderSystemTipText(type: type, operatorUid: operatorUid, memberUids: memberUids, value: value),
+                timestamp: message.timestamp
+            ))
+        }
+    }
+
+    private func buildStoredMessageRow(_ message: StoredMessage, text: String?, imageThumbnail: Data?, imageRemoteURL: String?) -> StoredMessageRow {
+        var senderDisplayName: String?
+        var senderAvatarURL: String?
+        if conversationType == .group, message.direction == .receive {
+            let user = try? storage.users.user(uid: message.from)
+            senderDisplayName = user?.displayName ?? user?.name ?? message.from
+            senderAvatarURL = user?.portrait
         }
         return StoredMessageRow(
             storageId: message.id ?? -1,
@@ -199,7 +205,45 @@ public final class ConversationViewModel {
             timestamp: message.timestamp,
             text: text,
             imageThumbnail: imageThumbnail,
-            imageRemoteURL: imageRemoteURL
+            imageRemoteURL: imageRemoteURL,
+            senderDisplayName: senderDisplayName,
+            senderAvatarURL: senderAvatarURL
         )
+    }
+
+    /// `uid == currentUserId` renders as "您" — matches every Android
+    /// group-notification template, which substitutes the first-person
+    /// pronoun for the acting user's own actions.
+    private func resolveDisplayName(_ uid: String) -> String {
+        guard uid != currentUserId else { return "您" }
+        guard let user = try? storage.users.user(uid: uid) else { return uid }
+        return user.displayName ?? user.name ?? uid
+    }
+
+    /// Wording transcribed verbatim from the design doc's wire-format
+    /// table (itself transcribed from Android's `*NotificationContent
+    /// .formatNotification()` methods).
+    private func renderSystemTipText(type: MessageContentType, operatorUid: String, memberUids: [String], value: String?) -> String {
+        let operatorName = resolveDisplayName(operatorUid)
+        switch type {
+        case .createGroup:
+            return "\(operatorName)创建了群组"
+        case .addGroupMember:
+            let names = memberUids.map(resolveDisplayName).joined(separator: "、")
+            return "\(operatorName)邀请\(names)加入了群组"
+        case .kickoffGroupMember:
+            let names = memberUids.map(resolveDisplayName).joined(separator: "、")
+            return "\(operatorName)将\(names)移出了群组"
+        case .quitGroup:
+            return "\(operatorName)退出了群组"
+        case .dismissGroup:
+            return "\(operatorName)解散了群组"
+        case .changeGroupName:
+            return "\(operatorName)修改群名为「\(value ?? "")」"
+        case .changeGroupPortrait:
+            return "\(operatorName)修改了群头像"
+        case .text, .image:
+            return "" // unreachable: makeRow only calls this for .groupNotification content
+        }
     }
 }

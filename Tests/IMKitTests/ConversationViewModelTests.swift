@@ -8,9 +8,13 @@ private final class FakeMessageSending: MessageSending {
     private(set) var sentTexts: [(target: String, text: String)] = []
     private(set) var sentImages: [(target: String, thumbnail: Data?, remoteURL: String)] = []
     private(set) var resentLocalMessageIds: [Int64] = []
+    private(set) var lastMentionedType: Int32?
+    private(set) var lastMentionedTargets: [String]?
 
     func sendText(to target: String, conversationType: ConversationType, line: Int, text: String, mentionedType: Int32, mentionedTargets: [String]) throws {
         sentTexts.append((target, text))
+        lastMentionedType = mentionedType
+        lastMentionedTargets = mentionedTargets
     }
 
     func sendImage(to target: String, conversationType: ConversationType, line: Int, thumbnail: Data?, remoteURL: String) throws {
@@ -55,7 +59,7 @@ final class ConversationViewModelTests: XCTestCase {
         storage = try IMStorage.openInMemory()
         sending = FakeMessageSending()
         uploading = FakeImageUploading()
-        viewModel = ConversationViewModel(storage: storage, messageSending: sending, imageUploading: uploading, target: "them", pageSize: 3)
+        viewModel = ConversationViewModel(storage: storage, messageSending: sending, imageUploading: uploading, target: "them", pageSize: 3, currentUserId: "me")
     }
 
     private func waitForFirstNonEmptyRows() {
@@ -195,5 +199,129 @@ final class ConversationViewModelTests: XCTestCase {
         wait(for: [expectation], timeout: 2)
 
         XCTAssertEqual(viewModel.rows.compactMap { row -> String? in if case .message(let m) = row { return m.text } else { return nil } }, ["msg0", "msg1", "msg2", "msg3", "msg4", "msg5"])
+    }
+
+    func test_groupTextMessage_received_populatesSenderDisplayNameAndAvatar() throws {
+        try storage.users.upsertProfile(uid: "sender1", name: nil, displayName: "Alice", portrait: "http://x/a.png", mobile: nil, gender: 0, updateDt: 0)
+        try storage.messages.insert(StoredMessage(localMessageId: 1, messageUid: 1, conversationType: .group, target: "g1", from: "sender1", content: .text("hi"), timestamp: 1_000, status: .unread, direction: .receive))
+        let viewModel = makeGroupViewModel(target: "g1")
+
+        let row = try waitForFirstRow(viewModel)
+
+        guard case .message(let message) = row else { return XCTFail("expected .message") }
+        XCTAssertEqual(message.senderDisplayName, "Alice")
+        XCTAssertEqual(message.senderAvatarURL, "http://x/a.png")
+    }
+
+    func test_groupTextMessage_sentByMe_hasNilSenderFields() throws {
+        try storage.messages.insert(StoredMessage(localMessageId: 1, messageUid: 1, conversationType: .group, target: "g1", from: "me", content: .text("hi"), timestamp: 1_000, status: .sent, direction: .send))
+        let viewModel = makeGroupViewModel(target: "g1")
+
+        let row = try waitForFirstRow(viewModel)
+
+        guard case .message(let message) = row else { return XCTFail("expected .message") }
+        XCTAssertNil(message.senderDisplayName)
+    }
+
+    func test_singleChatTextMessage_neverHasSenderFields() throws {
+        try storage.messages.insert(StoredMessage(localMessageId: 1, messageUid: 1, conversationType: .single, target: "u2", from: "u2", content: .text("hi"), timestamp: 1_000, status: .unread, direction: .receive))
+        let viewModel = ConversationViewModel(storage: storage, messageSending: nil, imageUploading: nil, target: "u2", conversationType: .single, currentUserId: "me")
+
+        let row = try waitForFirstRow(viewModel)
+
+        guard case .message(let message) = row else { return XCTFail("expected .message") }
+        XCTAssertNil(message.senderDisplayName)
+    }
+
+    func test_groupNotificationMessage_rendersAsSystemTipWithChineseText() throws {
+        try storage.users.upsertProfile(uid: "u1", name: nil, displayName: "Alice", portrait: nil, mobile: nil, gender: 0, updateDt: 0)
+        try storage.messages.insert(StoredMessage(
+            localMessageId: 1, messageUid: 1, conversationType: .group, target: "g1", from: "u1",
+            content: .groupNotification(type: .createGroup, operatorUid: "u1", memberUids: [], value: nil),
+            timestamp: 1_000, status: .unread, direction: .receive
+        ))
+        let viewModel = makeGroupViewModel(target: "g1")
+
+        let row = try waitForFirstRow(viewModel)
+
+        guard case .systemTip(let tip) = row else { return XCTFail("expected .systemTip") }
+        XCTAssertEqual(tip.text, "Alice创建了群组")
+    }
+
+    func test_groupNotificationMessage_operatorIsMe_substitutesNin() throws {
+        try storage.messages.insert(StoredMessage(
+            localMessageId: 1, messageUid: 1, conversationType: .group, target: "g1", from: "me",
+            content: .groupNotification(type: .quitGroup, operatorUid: "me", memberUids: [], value: nil),
+            timestamp: 1_000, status: .sent, direction: .send
+        ))
+        let viewModel = makeGroupViewModel(target: "g1")
+
+        let row = try waitForFirstRow(viewModel)
+
+        guard case .systemTip(let tip) = row else { return XCTFail("expected .systemTip") }
+        XCTAssertEqual(tip.text, "您退出了群组")
+    }
+
+    func test_groupNotificationMessage_changeGroupName_includesNewNameInQuotes() throws {
+        try storage.users.upsertProfile(uid: "u1", name: nil, displayName: "Alice", portrait: nil, mobile: nil, gender: 0, updateDt: 0)
+        try storage.messages.insert(StoredMessage(
+            localMessageId: 1, messageUid: 1, conversationType: .group, target: "g1", from: "u1",
+            content: .groupNotification(type: .changeGroupName, operatorUid: "u1", memberUids: [], value: "新群名"),
+            timestamp: 1_000, status: .unread, direction: .receive
+        ))
+        let viewModel = makeGroupViewModel(target: "g1")
+
+        let row = try waitForFirstRow(viewModel)
+
+        guard case .systemTip(let tip) = row else { return XCTFail("expected .systemTip") }
+        XCTAssertEqual(tip.text, "Alice修改群名为「新群名」")
+    }
+
+    func test_retry_onSystemTipRow_isNoOp() throws {
+        try storage.messages.insert(StoredMessage(
+            localMessageId: 1, messageUid: 1, conversationType: .group, target: "g1", from: "u1",
+            content: .groupNotification(type: .dismissGroup, operatorUid: "u1", memberUids: [], value: nil),
+            timestamp: 1_000, status: .unread, direction: .receive
+        ))
+        let viewModel = makeGroupViewModel(target: "g1")
+        let row = try waitForFirstRow(viewModel)
+
+        viewModel.retry(row: row) // must not crash
+    }
+
+    func test_sendText_withMentionParams_forwardsThemToMessageSending() throws {
+        // Uses the file's existing `sending` fixture (the updated
+        // `FakeMessageSending` from this task's Step 3) rather than
+        // constructing a separate one.
+        viewModel.sendText("hi @u2", mentionedType: 1, mentionedTargets: ["u2"])
+
+        XCTAssertEqual(sending.lastMentionedType, 1)
+        XCTAssertEqual(sending.lastMentionedTargets, ["u2"])
+    }
+
+    func test_groupMemberCandidatesForMention_returnsActiveMembersWithDisplayNames() throws {
+        try storage.groups.upsertMember(StoredGroupMember(groupId: "g1", memberId: "u2", memberType: .normal, updateDt: 0))
+        try storage.groups.upsertMember(StoredGroupMember(groupId: "g1", memberId: "u3", memberType: .removed, updateDt: 0))
+        try storage.users.upsertProfile(uid: "u2", name: nil, displayName: "Bob", portrait: nil, mobile: nil, gender: 0, updateDt: 0)
+        let viewModel = makeGroupViewModel(target: "g1")
+
+        let candidates = viewModel.groupMemberCandidatesForMention()
+
+        XCTAssertEqual(candidates.map(\.uid), ["u2"])
+        XCTAssertEqual(candidates.map(\.displayName), ["Bob"])
+    }
+
+    func test_groupMemberCandidatesForMention_onSingleChat_returnsEmpty() throws {
+        let viewModel = ConversationViewModel(storage: storage, messageSending: nil, imageUploading: nil, target: "u2", conversationType: .single, currentUserId: "me")
+
+        XCTAssertEqual(viewModel.groupMemberCandidatesForMention().count, 0)
+    }
+
+    private func makeGroupViewModel(target: String) -> ConversationViewModel {
+        ConversationViewModel(storage: storage, messageSending: nil, imageUploading: nil, target: target, conversationType: .group, currentUserId: "me")
+    }
+
+    private func waitForFirstRow(_ viewModel: ConversationViewModel) throws -> ChatMessageRow {
+        try XCTUnwrap(viewModel.rows.first)
     }
 }

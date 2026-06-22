@@ -27,10 +27,10 @@ public struct PendingImageUpload: Equatable, Hashable {
     }
 }
 
-/// Flattened, `Hashable` presentation of a `StoredMessage` — same
-/// flattening rationale as `ConversationRow`: diffable data sources need
-/// stable `Hashable` item identifiers, and `StoredMessage`/`MessageContent`
-/// aren't `Hashable` themselves.
+/// Flattened, `Hashable` presentation of a `StoredMessage`. `senderDisplayName`/
+/// `senderAvatarURL` are non-nil only for a group-chat message I received
+/// (never for single chat, never for my own outgoing messages — there's no
+/// sender row to show for either case).
 public struct StoredMessageRow: Equatable, Hashable {
     public let storageId: Int64
     public let localMessageId: Int64
@@ -40,8 +40,21 @@ public struct StoredMessageRow: Equatable, Hashable {
     public let text: String?
     public let imageThumbnail: Data?
     public let imageRemoteURL: String?
+    public let senderDisplayName: String?
+    public let senderAvatarURL: String?
 
-    public init(storageId: Int64, localMessageId: Int64, isOutgoing: Bool, status: MessageStatus, timestamp: Int64, text: String?, imageThumbnail: Data?, imageRemoteURL: String?) {
+    public init(
+        storageId: Int64,
+        localMessageId: Int64,
+        isOutgoing: Bool,
+        status: MessageStatus,
+        timestamp: Int64,
+        text: String?,
+        imageThumbnail: Data?,
+        imageRemoteURL: String?,
+        senderDisplayName: String? = nil,
+        senderAvatarURL: String? = nil
+    ) {
         self.storageId = storageId
         self.localMessageId = localMessageId
         self.isOutgoing = isOutgoing
@@ -50,13 +63,52 @@ public struct StoredMessageRow: Equatable, Hashable {
         self.text = text
         self.imageThumbnail = imageThumbnail
         self.imageRemoteURL = imageRemoteURL
+        self.senderDisplayName = senderDisplayName
+        self.senderAvatarURL = senderAvatarURL
     }
 }
 
-/// A single row in the chat message list — either a real, persisted
-/// message or an in-flight image upload placeholder (see
-/// `PendingImageUpload`).
+/// A non-bubble row rendered centered, no sender — a group system
+/// notification (create/add/kick/quit/dismiss/rename/re-portrait), with its
+/// Chinese wording already resolved by `ConversationViewModel`.
+public struct SystemTipRow: Equatable, Hashable {
+    public let storageId: Int64
+    public let text: String
+    public let timestamp: Int64
+
+    public init(storageId: Int64, text: String, timestamp: Int64) {
+        self.storageId = storageId
+        self.text = text
+        self.timestamp = timestamp
+    }
+}
+
+/// A single row in the chat message list: a real, persisted message; an
+/// in-flight image upload placeholder; or a group system-notification tip.
 public enum ChatMessageRow: Equatable, Hashable {
     case message(StoredMessageRow)
     case pendingImage(PendingImageUpload)
+    case systemTip(SystemTipRow)
+}
+
+extension ChatMessageRow {
+    /// `nil` for `.pendingImage` — it was never persisted, so it has no
+    /// storage identity to compare against. Used by `ConversationViewModel`
+    /// to detect which previously-live rows fell out of the sliding
+    /// "latest pageSize" window and need migrating into `olderRows`.
+    var storageId: Int64? {
+        switch self {
+        case .message(let row): return row.storageId
+        case .systemTip(let row): return row.storageId
+        case .pendingImage: return nil
+        }
+    }
+
+    var timestamp: Int64? {
+        switch self {
+        case .message(let row): return row.timestamp
+        case .systemTip(let row): return row.timestamp
+        case .pendingImage: return nil
+        }
+    }
 }
