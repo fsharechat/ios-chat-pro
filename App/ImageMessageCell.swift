@@ -31,6 +31,8 @@ final class ImageMessageCell: UITableViewCell {
     private let spacer = UIView()
     private let senderAvatarImageView = AvatarImageView(loader: AvatarLoader())
     private let senderNameLabel = UILabel()
+    private var senderRowTopConstraint: NSLayoutConstraint!
+    private var senderAvatarHeightConstraint: NSLayoutConstraint!
 
     var onTapped: (() -> Void)?
     var onRetryTapped: (() -> Void)?
@@ -87,11 +89,14 @@ final class ImageMessageCell: UITableViewCell {
         contentView.addSubview(senderAvatarImageView)
         contentView.addSubview(senderNameLabel)
 
+        senderAvatarHeightConstraint = senderAvatarImageView.heightAnchor.constraint(equalToConstant: 28)
+        senderRowTopConstraint = senderAvatarImageView.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 4)
+
         NSLayoutConstraint.activate([
+            senderAvatarHeightConstraint,
             senderAvatarImageView.widthAnchor.constraint(equalToConstant: 28),
-            senderAvatarImageView.heightAnchor.constraint(equalToConstant: 28),
             senderAvatarImageView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
-            senderAvatarImageView.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 4),
+            senderRowTopConstraint,
 
             senderNameLabel.leadingAnchor.constraint(equalTo: senderAvatarImageView.trailingAnchor, constant: 6),
             senderNameLabel.centerYAnchor.constraint(equalTo: senderAvatarImageView.centerYAnchor),
@@ -113,6 +118,8 @@ final class ImageMessageCell: UITableViewCell {
         let showsSender = data.senderDisplayName != nil
         senderAvatarImageView.isHidden = !showsSender
         senderNameLabel.isHidden = !showsSender
+        senderRowTopConstraint.constant = showsSender ? 4 : 0
+        senderAvatarHeightConstraint.constant = showsSender ? 28 : 0
         if showsSender {
             senderNameLabel.text = data.senderDisplayName
             senderAvatarImageView.setAvatar(urlString: data.senderAvatarURL, displayName: data.senderDisplayName ?? "")
