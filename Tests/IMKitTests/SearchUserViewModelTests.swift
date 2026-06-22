@@ -13,6 +13,14 @@ private final class FakeUserSearching: UserSearching {
     }
 }
 
+private final class QueuingUserSearching: UserSearching {
+    var pendingCompletions: [(keyword: String, completion: (Result<[String], Error>) -> Void)] = []
+
+    func searchUser(keyword: String, completion: @escaping (Result<[String], Error>) -> Void) {
+        pendingCompletions.append((keyword, completion))
+    }
+}
+
 private final class FakeFriendRequestSending: FriendRequestSending {
     var lastSendArgs: (uid: String, reason: String)?
     var stubbedSendResult: Result<Void, Error> = .success(())
@@ -80,6 +88,25 @@ final class SearchUserViewModelTests: XCTestCase {
         viewModel.search(keyword: "alice")
 
         XCTAssertTrue(viewModel.results.isEmpty)
+    }
+
+    func test_search_staleCompletionArrivingAfterNewerSearch_isDiscarded() throws {
+        try storage.users.upsertProfile(uid: "u_old", name: nil, displayName: "Old", portrait: nil, mobile: nil, gender: 0, updateDt: 0)
+        try storage.users.upsertProfile(uid: "u_new", name: nil, displayName: "New", portrait: nil, mobile: nil, gender: 0, updateDt: 0)
+        let queuing = QueuingUserSearching()
+        let vm = SearchUserViewModel(userSearching: queuing, friendRequestSending: friendRequestSending, storage: storage)
+
+        vm.search(keyword: "old")
+        vm.search(keyword: "new")
+        XCTAssertEqual(queuing.pendingCompletions.count, 2)
+
+        // Newer search's network call resolves first.
+        queuing.pendingCompletions[1].completion(.success(["u_new"]))
+        XCTAssertEqual(vm.results.map(\.uid), ["u_new"])
+
+        // Older (stale) search's network call resolves after — must be discarded, not overwrite.
+        queuing.pendingCompletions[0].completion(.success(["u_old"]))
+        XCTAssertEqual(vm.results.map(\.uid), ["u_new"], "stale completion must not overwrite newer results")
     }
 
     func test_sendFriendRequest_delegatesToFriendRequestSending() {

@@ -17,6 +17,7 @@ public final class SearchUserViewModel {
     private let userSearching: UserSearching?
     private let friendRequestSending: FriendRequestSending?
     private let storage: IMStorage
+    private var searchGeneration = 0
 
     public init(userSearching: UserSearching?, friendRequestSending: FriendRequestSending?, storage: IMStorage) {
         self.userSearching = userSearching
@@ -29,12 +30,14 @@ public final class SearchUserViewModel {
     /// call this on every text change, including when the user has
     /// cleared the search bar entirely.
     public func search(keyword: String) {
+        searchGeneration += 1
+        let generation = searchGeneration
         guard !keyword.isEmpty else {
             results = []
             return
         }
         userSearching?.searchUser(keyword: keyword) { [weak self] result in
-            guard let self else { return }
+            guard let self, self.searchGeneration == generation else { return }
             switch result {
             case .success(let uids):
                 self.results = uids.map { uid in
