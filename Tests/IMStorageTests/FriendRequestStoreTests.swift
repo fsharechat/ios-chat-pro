@@ -59,4 +59,17 @@ final class FriendRequestStoreTests: XCTestCase {
             .store(in: &cancellables)
         wait(for: [expectation], timeout: 2)
     }
+
+    func test_unreadIncomingCountPublisher_excludesAcceptedRowsEvenIfUnread() throws {
+        try store.upsert(StoredFriendRequest(fromUid: "u1", toUid: "me", reason: "", status: StoredFriendRequest.Status.pending, updateDt: 100, fromReadStatus: false, toReadStatus: false))
+        try store.upsert(StoredFriendRequest(fromUid: "u2", toUid: "me", reason: "", status: StoredFriendRequest.Status.accepted, updateDt: 100, fromReadStatus: false, toReadStatus: false))
+
+        let expectation = expectation(description: "count settles at 1, excluding the accepted row")
+        expectation.assertForOverFulfill = false
+        store.unreadIncomingCountPublisher()
+            .replaceError(with: -1)
+            .sink { count in if count == 1 { expectation.fulfill() } }
+            .store(in: &cancellables)
+        wait(for: [expectation], timeout: 2)
+    }
 }

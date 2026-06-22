@@ -39,7 +39,12 @@ public final class FriendRequestStore {
 
     public func unreadIncomingCountPublisher() -> AnyPublisher<Int, Error> {
         ValueObservation
-            .tracking { db in try StoredFriendRequest.filter(Column("toReadStatus") == false).fetchCount(db) }
+            .tracking { db in
+                try StoredFriendRequest
+                    .filter(Column("status") == StoredFriendRequest.Status.pending)
+                    .filter(Column("toReadStatus") == false)
+                    .fetchCount(db)
+            }
             .publisher(in: dbQueue, scheduling: .immediate)
             .eraseToAnyPublisher()
     }
