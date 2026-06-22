@@ -14,6 +14,8 @@ final class ConversationViewController: UIViewController {
     private let inputBar = MessageInputBar()
     private var inputBarBottomConstraint: NSLayoutConstraint!
 
+    var onGroupInfoTapped: (() -> Void)?
+
     init(row: ConversationRow, viewModel: ConversationViewModel) {
         self.row = row
         self.viewModel = viewModel
@@ -32,11 +34,23 @@ final class ConversationViewController: UIViewController {
         bindViewModel()
         bindInputBar()
         observeKeyboard()
+
+        if row.conversationType == .group {
+            let titleButton = UIButton(type: .system)
+            titleButton.setTitle(row.displayName, for: .normal)
+            titleButton.setTitleColor(Theme.textPrimary, for: .normal)
+            titleButton.titleLabel?.font = .systemFont(ofSize: 17, weight: .semibold)
+            titleButton.addTarget(self, action: #selector(groupTitleTapped), for: .touchUpInside)
+            navigationItem.titleView = titleButton
+        }
     }
+
+    @objc private func groupTitleTapped() { onGroupInfoTapped?() }
 
     private func layoutViews() {
         tableView.register(TextMessageCell.self, forCellReuseIdentifier: TextMessageCell.reuseIdentifier)
         tableView.register(ImageMessageCell.self, forCellReuseIdentifier: ImageMessageCell.reuseIdentifier)
+        tableView.register(SystemTipMessageCell.self, forCellReuseIdentifier: SystemTipMessageCell.reuseIdentifier)
         tableView.delegate = self
         tableView.backgroundColor = Theme.backgroundPrimary
         tableView.separatorStyle = .none
@@ -71,7 +85,7 @@ final class ConversationViewController: UIViewController {
                 return cell
             case .message(let message):
                 let cell = tableView.dequeueReusableCell(withIdentifier: ImageMessageCell.reuseIdentifier, for: indexPath) as! ImageMessageCell
-                cell.configure(with: ImageBubbleData(thumbnail: message.imageThumbnail, isOutgoing: message.isOutgoing, isUploading: message.status == .sending, isFailed: message.status == .sendFailure))
+                cell.configure(with: ImageBubbleData(thumbnail: message.imageThumbnail, isOutgoing: message.isOutgoing, isUploading: message.status == .sending, isFailed: message.status == .sendFailure, senderDisplayName: message.senderDisplayName, senderAvatarURL: message.senderAvatarURL))
                 cell.onRetryTapped = { [weak self] in self?.viewModel.retry(row: row) }
                 cell.onTapped = { [weak self] in self?.presentImagePreview(thumbnail: message.imageThumbnail, remoteURL: message.imageRemoteURL) }
                 return cell
@@ -80,6 +94,10 @@ final class ConversationViewController: UIViewController {
                 cell.configure(with: ImageBubbleData(thumbnail: pending.thumbnail, isOutgoing: true, isUploading: pending.state == .uploading, isFailed: pending.state == .failed))
                 cell.onRetryTapped = { [weak self] in self?.viewModel.retry(row: row) }
                 cell.onTapped = { [weak self] in self?.presentImagePreview(thumbnail: pending.thumbnail, remoteURL: nil) }
+                return cell
+            case .systemTip(let tip):
+                let cell = tableView.dequeueReusableCell(withIdentifier: SystemTipMessageCell.reuseIdentifier, for: indexPath) as! SystemTipMessageCell
+                cell.configure(with: tip)
                 return cell
             }
         }
@@ -130,6 +148,7 @@ final class ConversationViewController: UIViewController {
         switch row {
         case .message(let message): return "message-\(message.storageId)"
         case .pendingImage(let pending): return "pending-\(pending.id)"
+        case .systemTip(let tip): return "systemTip-\(tip.storageId)"
         case nil: return nil
         }
     }
@@ -145,6 +164,18 @@ final class ConversationViewController: UIViewController {
             self?.viewModel.sendText(text, mentionedType: Int(mentionedType), mentionedTargets: mentionedTargets)
         }
         inputBar.onPickImage = { [weak self] in self?.presentImagePicker() }
+        inputBar.onMentionTriggered = { [weak self] in self?.presentMentionPicker() }
+    }
+
+    private func presentMentionPicker() {
+        guard row.conversationType == .group else { return }
+        let picker = MentionPickerViewController(members: viewModel.groupMemberCandidatesForMention())
+        picker.onPicked = { [weak self] uid, displayName in
+            self?.inputBar.insertMention(uid: uid, displayName: displayName)
+            self?.dismiss(animated: true)
+        }
+        picker.onCancelled = { [weak self] in self?.inputBar.removeTrailingMentionTrigger() }
+        present(UINavigationController(rootViewController: picker), animated: true)
     }
 
     private func presentImagePicker() {

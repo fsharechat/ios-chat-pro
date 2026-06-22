@@ -31,6 +31,7 @@
 		0E73466FA54FC32ADE271F2F /* MentionPickerViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F7585FA5E6C165B5E4D2EE1 /* MentionPickerViewController.swift */; };
 		F8875E643BF006517AB52361 /* FriendRequestCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4F8B269AD818644389D362C /* FriendRequestCell.swift */; };
 		FF900D32443A8166CEA8072A /* IMKit in Frameworks */ = {isa = PBXBuildFile; productRef = A21BC9F32CE4DC35DC8E2152 /* IMKit */; };
+		334BE4377A1A4D67B6264ACC /* SystemTipMessageCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B9D0E69E34543509A14D408 /* SystemTipMessageCell.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -56,6 +57,7 @@
 		E4F8B269AD818644389D362C /* FriendRequestCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FriendRequestCell.swift; sourceTree = "<group>"; };
 		E696B814AB99A34483A11EA8 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		F8EB6D5DBC0051B5D576A085 /* ContactListCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactListCell.swift; sourceTree = "<group>"; };
+		5B9D0E69E34543509A14D408 /* SystemTipMessageCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemTipMessageCell.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -122,6 +124,7 @@
 				690D108BAFD2ED791E23C0A9 /* SearchUserViewController.swift */,
 				648E9F022D0DE7CACE6E5C39 /* TextMessageCell.swift */,
 				E696B814AB99A34483A11EA8 /* Theme.swift */,
+				5B9D0E69E34543509A14D408 /* SystemTipMessageCell.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -209,6 +212,7 @@
 				08504DA6B3F3A100FA1C2484 /* SearchUserViewController.swift in Sources */,
 				925E32D89E4D590BFE89B808 /* TextMessageCell.swift in Sources */,
 				1A8F5F1C4845AC9F553E5CAE /* Theme.swift in Sources */,
+				334BE4377A1A4D67B6264ACC /* SystemTipMessageCell.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

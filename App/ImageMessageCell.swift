@@ -1,11 +1,23 @@
 // App/ImageMessageCell.swift
 import UIKit
+import IMKit
 
 struct ImageBubbleData: Equatable {
     let thumbnail: Data?
     let isOutgoing: Bool
     let isUploading: Bool
     let isFailed: Bool
+    let senderDisplayName: String?
+    let senderAvatarURL: String?
+
+    init(thumbnail: Data?, isOutgoing: Bool, isUploading: Bool, isFailed: Bool, senderDisplayName: String? = nil, senderAvatarURL: String? = nil) {
+        self.thumbnail = thumbnail
+        self.isOutgoing = isOutgoing
+        self.isUploading = isUploading
+        self.isFailed = isFailed
+        self.senderDisplayName = senderDisplayName
+        self.senderAvatarURL = senderAvatarURL
+    }
 }
 
 final class ImageMessageCell: UITableViewCell {
@@ -17,6 +29,8 @@ final class ImageMessageCell: UITableViewCell {
     private let bubbleColumn = UIStackView()
     private let rowStack = UIStackView()
     private let spacer = UIView()
+    private let senderAvatarImageView = AvatarImageView(loader: AvatarLoader())
+    private let senderNameLabel = UILabel()
 
     var onTapped: (() -> Void)?
     var onRetryTapped: (() -> Void)?
@@ -65,8 +79,24 @@ final class ImageMessageCell: UITableViewCell {
         rowStack.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(rowStack)
 
+        senderAvatarImageView.translatesAutoresizingMaskIntoConstraints = false
+        senderNameLabel.font = .systemFont(ofSize: 12)
+        senderNameLabel.textColor = Theme.textPrimary.withAlphaComponent(0.6)
+        senderNameLabel.translatesAutoresizingMaskIntoConstraints = false
+
+        contentView.addSubview(senderAvatarImageView)
+        contentView.addSubview(senderNameLabel)
+
         NSLayoutConstraint.activate([
-            rowStack.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 4),
+            senderAvatarImageView.widthAnchor.constraint(equalToConstant: 28),
+            senderAvatarImageView.heightAnchor.constraint(equalToConstant: 28),
+            senderAvatarImageView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
+            senderAvatarImageView.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 4),
+
+            senderNameLabel.leadingAnchor.constraint(equalTo: senderAvatarImageView.trailingAnchor, constant: 6),
+            senderNameLabel.centerYAnchor.constraint(equalTo: senderAvatarImageView.centerYAnchor),
+
+            rowStack.topAnchor.constraint(equalTo: senderAvatarImageView.bottomAnchor, constant: 2),
             rowStack.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -4),
             rowStack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
             rowStack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
@@ -80,6 +110,14 @@ final class ImageMessageCell: UITableViewCell {
     }
 
     func configure(with data: ImageBubbleData) {
+        let showsSender = data.senderDisplayName != nil
+        senderAvatarImageView.isHidden = !showsSender
+        senderNameLabel.isHidden = !showsSender
+        if showsSender {
+            senderNameLabel.text = data.senderDisplayName
+            senderAvatarImageView.setAvatar(urlString: data.senderAvatarURL, displayName: data.senderDisplayName ?? "")
+        }
+
         bubbleImageView.image = data.thumbnail.flatMap { UIImage(data: $0) }
         activityIndicator.isHidden = !data.isUploading
         if data.isUploading { activityIndicator.startAnimating() } else { activityIndicator.stopAnimating() }

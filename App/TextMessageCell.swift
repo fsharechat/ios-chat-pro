@@ -12,6 +12,8 @@ final class TextMessageCell: UITableViewCell {
     private let bubbleColumn = UIStackView()
     private let rowStack = UIStackView()
     private let spacer = UIView()
+    private let senderAvatarImageView = AvatarImageView(loader: AvatarLoader())
+    private let senderNameLabel = UILabel()
 
     var onRetryTapped: (() -> Void)?
 
@@ -61,8 +63,24 @@ final class TextMessageCell: UITableViewCell {
         rowStack.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(rowStack)
 
+        senderAvatarImageView.translatesAutoresizingMaskIntoConstraints = false
+        senderNameLabel.font = .systemFont(ofSize: 12)
+        senderNameLabel.textColor = Theme.textPrimary.withAlphaComponent(0.6)
+        senderNameLabel.translatesAutoresizingMaskIntoConstraints = false
+
+        contentView.addSubview(senderAvatarImageView)
+        contentView.addSubview(senderNameLabel)
+
         NSLayoutConstraint.activate([
-            rowStack.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 4),
+            senderAvatarImageView.widthAnchor.constraint(equalToConstant: 28),
+            senderAvatarImageView.heightAnchor.constraint(equalToConstant: 28),
+            senderAvatarImageView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
+            senderAvatarImageView.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 4),
+
+            senderNameLabel.leadingAnchor.constraint(equalTo: senderAvatarImageView.trailingAnchor, constant: 6),
+            senderNameLabel.centerYAnchor.constraint(equalTo: senderAvatarImageView.centerYAnchor),
+
+            rowStack.topAnchor.constraint(equalTo: senderAvatarImageView.bottomAnchor, constant: 2),
             rowStack.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -4),
             rowStack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
             rowStack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
@@ -72,6 +90,14 @@ final class TextMessageCell: UITableViewCell {
 
     func configure(with row: StoredMessageRow) {
         messageTextLabel.text = row.text
+
+        let showsSender = row.senderDisplayName != nil
+        senderAvatarImageView.isHidden = !showsSender
+        senderNameLabel.isHidden = !showsSender
+        if showsSender {
+            senderNameLabel.text = row.senderDisplayName
+            senderAvatarImageView.setAvatar(urlString: row.senderAvatarURL, displayName: row.senderDisplayName ?? "")
+        }
 
         let isOutgoing = row.isOutgoing
         bubbleView.backgroundColor = isOutgoing ? Theme.accent : Theme.incomingBubble

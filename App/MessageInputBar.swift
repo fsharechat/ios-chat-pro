@@ -93,6 +93,17 @@ final class MessageInputBar: UIView {
         textViewDidChange(textView)
     }
 
+    /// Called by the host view controller when the mention picker is
+    /// dismissed via cancel (not a selection) — strips the trailing "@"
+    /// that triggered the picker so it doesn't dangle unresolved in the
+    /// composer, and so `textViewDidChange` doesn't re-trigger the picker
+    /// on a later edit that happens to end in "@" again.
+    func removeTrailingMentionTrigger() {
+        guard textView.text.hasSuffix("@") else { return }
+        textView.text.removeLast()
+        textViewDidChange(textView)
+    }
+
     @objc private func imageTapped() { onPickImage?() }
 
     @objc private func sendTapped() {

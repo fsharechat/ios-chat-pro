@@ -7,6 +7,10 @@ final class MentionPickerViewController: UIViewController {
     private let tableView = UITableView()
 
     var onPicked: ((_ uid: String?, _ displayName: String) -> Void)?
+    /// Fired when the picker is dismissed via its own cancel button (as
+    /// opposed to a selection) — lets the presenter clean up the dangling
+    /// trailing "@" left in the composer.
+    var onCancelled: (() -> Void)?
 
     init(members: [(uid: String, displayName: String)]) {
         self.members = members
@@ -35,7 +39,10 @@ final class MentionPickerViewController: UIViewController {
         ])
     }
 
-    @objc private func cancelTapped() { dismiss(animated: true) }
+    @objc private func cancelTapped() {
+        onCancelled?()
+        dismiss(animated: true)
+    }
 }
 
 extension MentionPickerViewController: UITableViewDataSource, UITableViewDelegate {
