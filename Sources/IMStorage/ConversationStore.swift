@@ -44,7 +44,8 @@ public final class ConversationStore {
         line: Int = 0,
         messageUid: Int64,
         timestamp: Int64,
-        incrementUnread: Bool
+        incrementUnread: Bool,
+        incrementMention: Bool = false
     ) throws {
         try dbQueue.write { db in
             let existing = try StoredConversation
@@ -59,6 +60,9 @@ public final class ConversationStore {
             if incrementUnread {
                 conversation.unreadCount += 1
             }
+            if incrementMention {
+                conversation.unreadMentionCount += 1
+            }
             try conversation.save(db)
         }
     }
@@ -66,7 +70,7 @@ public final class ConversationStore {
     public func clearUnread(conversationType: ConversationType, target: String, line: Int = 0) throws {
         try dbQueue.write { db in
             try db.execute(
-                sql: "UPDATE conversation SET unreadCount = 0 WHERE conversationType = ? AND target = ? AND line = ?",
+                sql: "UPDATE conversation SET unreadCount = 0, unreadMentionCount = 0 WHERE conversationType = ? AND target = ? AND line = ?",
                 arguments: [conversationType.rawValue, target, line]
             )
         }

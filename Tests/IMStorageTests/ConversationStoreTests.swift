@@ -92,4 +92,25 @@ final class ConversationStoreTests: XCTestCase {
 
         XCTAssertEqual(conversations.map { $0.target }, ["olderButPinned", "newer"])
     }
+
+    func test_recordIncomingMessage_withIncrementMentionTrue_incrementsUnreadMentionCount() throws {
+        try store.recordIncomingMessage(conversationType: .group, target: "g1", line: 0, messageUid: 10, timestamp: 1_000, incrementUnread: true, incrementMention: true)
+
+        let conversation = try store.conversation(conversationType: .group, target: "g1")
+        XCTAssertEqual(conversation?.unreadMentionCount, 1)
+    }
+
+    func test_recordIncomingMessage_withIncrementMentionFalse_doesNotChangeUnreadMentionCount() throws {
+        try store.recordIncomingMessage(conversationType: .group, target: "g1", line: 0, messageUid: 10, timestamp: 1_000, incrementUnread: true, incrementMention: false)
+
+        XCTAssertEqual(try store.conversation(conversationType: .group, target: "g1")?.unreadMentionCount, 0)
+    }
+
+    func test_clearUnread_alsoResetsUnreadMentionCount() throws {
+        try store.recordIncomingMessage(conversationType: .group, target: "g1", line: 0, messageUid: 10, timestamp: 1_000, incrementUnread: true, incrementMention: true)
+
+        try store.clearUnread(conversationType: .group, target: "g1", line: 0)
+
+        XCTAssertEqual(try store.conversation(conversationType: .group, target: "g1")?.unreadMentionCount, 0)
+    }
 }
