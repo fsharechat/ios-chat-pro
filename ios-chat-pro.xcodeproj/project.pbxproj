@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		08504DA6B3F3A100FA1C2484 /* SearchUserViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 690D108BAFD2ED791E23C0A9 /* SearchUserViewController.swift */; };
 		1A8F5F1C4845AC9F553E5CAE /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = E696B814AB99A34483A11EA8 /* Theme.swift */; };
 		25D0AC4139A0950DB0CD2B4B /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0E388EB556B39D1EFCF7DEA /* SceneDelegate.swift */; };
 		2B03B7D44659C520AEFC917E /* AvatarImageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5ACDCE0BC8F9E8EF7A77D603 /* AvatarImageView.swift */; };
@@ -43,6 +44,7 @@
 		5ACDCE0BC8F9E8EF7A77D603 /* AvatarImageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AvatarImageView.swift; sourceTree = "<group>"; };
 		60C53CDF7ECE24AB7925139E /* ConversationListCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationListCell.swift; sourceTree = "<group>"; };
 		648E9F022D0DE7CACE6E5C39 /* TextMessageCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextMessageCell.swift; sourceTree = "<group>"; };
+		690D108BAFD2ED791E23C0A9 /* SearchUserViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchUserViewController.swift; sourceTree = "<group>"; };
 		82A66CD515543FC918230A83 /* ConversationViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationViewController.swift; sourceTree = "<group>"; };
 		8DFDF68D07E4AD79AFB0B169 /* ContactListViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactListViewController.swift; sourceTree = "<group>"; };
 		93FA326C9B762DCAB590F502 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
@@ -114,6 +116,7 @@
 				1499CDEAF049F73974F200A4 /* NewFriendsEntryView.swift */,
 				0832B3942D777D6A0D67E100 /* NewFriendsViewController.swift */,
 				A0E388EB556B39D1EFCF7DEA /* SceneDelegate.swift */,
+				690D108BAFD2ED791E23C0A9 /* SearchUserViewController.swift */,
 				648E9F022D0DE7CACE6E5C39 /* TextMessageCell.swift */,
 				E696B814AB99A34483A11EA8 /* Theme.swift */,
 			);
@@ -199,6 +202,7 @@
 				5419EAD85D7C9132AB94FBA6 /* NewFriendsEntryView.swift in Sources */,
 				D91AD4CA3FBFB2F6A396A9DE /* NewFriendsViewController.swift in Sources */,
 				25D0AC4139A0950DB0CD2B4B /* SceneDelegate.swift in Sources */,
+				08504DA6B3F3A100FA1C2484 /* SearchUserViewController.swift in Sources */,
 				925E32D89E4D590BFE89B808 /* TextMessageCell.swift in Sources */,
 				1A8F5F1C4845AC9F553E5CAE /* Theme.swift in Sources */,
 			);
