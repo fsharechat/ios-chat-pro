@@ -149,4 +149,22 @@ public final class MessageStore {
             )
         }
     }
+
+    /// Updates a previously-inserted row's content in place, keyed by its
+    /// GRDB autoincrement `id` — deliberately **not** `localMessageId`,
+    /// which (per `message(localMessageId:)`'s doc comment above) is only
+    /// guaranteed unique among my own sent messages; a received row's
+    /// `localMessageId` can coincide with one of mine. `id` is the only
+    /// column that unambiguously identifies "this exact row" regardless of
+    /// `direction`, which matters here because a call-record bubble exists
+    /// on both the caller's and callee's side and `IMCall.CallManager`
+    /// updates whichever one is local to this device. A no-op (no error)
+    /// if no row with this `id` exists.
+    public func updateContent(id: Int64, content: MessageContent) throws {
+        try dbQueue.write { db in
+            guard var existing = try StoredMessage.fetchOne(db, key: id) else { return }
+            existing.setContent(content)
+            try existing.update(db)
+        }
+    }
 }

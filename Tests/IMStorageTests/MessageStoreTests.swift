@@ -153,6 +153,42 @@ final class MessageStoreTests: XCTestCase {
         XCTAssertNil(try store.message(uid: 0))
     }
 
+    func test_updateContent_rewritesCallRecordFieldsByRowId() throws {
+        let inserted = try store.insert(StoredMessage(
+            localMessageId: 9, conversationType: .single, target: "u2", from: "u1",
+            content: .callRecord(callId: "call-9", targetId: "u2", audioOnly: false, status: 0, connectTime: 0, endTime: 0),
+            timestamp: 1_000, status: .sending, direction: .send
+        ))
+
+        try store.updateContent(id: inserted.id!, content: .callRecord(callId: "call-9", targetId: "u2", audioOnly: false, status: 2, connectTime: 5_000, endTime: 65_000))
+
+        let updated = try store.message(localMessageId: 9)
+        XCTAssertEqual(updated?.content, .callRecord(callId: "call-9", targetId: "u2", audioOnly: false, status: 2, connectTime: 5_000, endTime: 65_000))
+    }
+
+    func test_updateContent_worksOnReceivedRowsToo() throws {
+        // The whole point of keying by `id` rather than `localMessageId`:
+        // a received call-record row's `localMessageId` may collide with
+        // one of my own sent rows (see `message(localMessageId:)`'s doc
+        // comment), but `id` is always unambiguous.
+        let inserted = try store.insert(StoredMessage(
+            localMessageId: 555, conversationType: .single, target: "u1", from: "u2",
+            content: .callRecord(callId: "call-10", targetId: "u1", audioOnly: true, status: 0, connectTime: 0, endTime: 0),
+            timestamp: 1_000, status: .unread, direction: .receive
+        ))
+
+        try store.updateContent(id: inserted.id!, content: .callRecord(callId: "call-10", targetId: "u1", audioOnly: true, status: 1, connectTime: 2_000, endTime: 0))
+
+        let messages = try store.messages(conversationType: .single, target: "u1")
+        XCTAssertEqual(messages.first?.content, .callRecord(callId: "call-10", targetId: "u1", audioOnly: true, status: 1, connectTime: 2_000, endTime: 0))
+    }
+
+    func test_updateContent_unknownId_isANoOp() throws {
+        // Must not throw — `IMCall.CallManager` calls this from timer/network
+        // callbacks where there's no reasonable recovery if the row vanished.
+        try store.updateContent(id: 999_999, content: .callRecord(callId: "x", targetId: "y", audioOnly: false, status: 2, connectTime: 0, endTime: 0))
+    }
+
     func test_messagesPublisher_emitsLatestMessagesInAscendingOrder() throws {
         try store.insert(makeMessage(localMessageId: 1, timestamp: 1_000, text: "first"))
         try store.insert(makeMessage(localMessageId: 2, timestamp: 2_000, text: "second"))
