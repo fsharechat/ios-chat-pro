@@ -161,6 +161,12 @@ public final class WebRTCClient: NSObject, MediaEngine {
         videoCapturer = nil
         localVideoTrack = nil
         localAudioTrack = nil
+        // Must reset alongside the rest of this call's state — this
+        // instance is reused for the next call (see this type's header
+        // comment), and leaving this `true` would make the delegate's
+        // `guard !hasReportedConnected` permanently suppress `onConnected`
+        // for every subsequent call after the first one in a session.
+        hasReportedConnected = false
     }
 }
 
