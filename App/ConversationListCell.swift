@@ -83,13 +83,14 @@ final class ConversationListCell: UITableViewCell {
         nameLabel.text = row.displayName
         timestampLabel.text = Self.formattedTimestamp(row.timestamp)
 
+        let mentionPrefix = row.hasUnreadMention ? "[有人@我] " : ""
         switch row.lastMessageStatus {
         case .sending:
-            previewLabel.text = "发送中... " + row.previewText
+            previewLabel.text = mentionPrefix + "发送中... " + row.previewText
         case .sendFailure:
-            previewLabel.text = "发送失败 " + row.previewText
+            previewLabel.text = mentionPrefix + "发送失败 " + row.previewText
         default:
-            previewLabel.text = row.previewText
+            previewLabel.text = mentionPrefix + row.previewText
         }
 
         muteIcon.isHidden = !row.isMuted
