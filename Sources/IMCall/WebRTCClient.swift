@@ -1,5 +1,23 @@
 import WebRTC
-import AppCore
+
+/// Plain ICE/TURN server config — defined here rather than reusing
+/// `AppCore.AppConfig.IceServer` so `IMCall` doesn't depend on `AppCore`.
+/// `AppCore` is the layer that will depend on `IMCall` (to construct
+/// `CallManager`/`WebRTCClient` from `AppEnvironment`, see the design doc
+/// §3) — a reverse dependency here would make that a cycle. The App target
+/// maps `AppConfig.IceServer` values into this type at the one call site
+/// that constructs a `WebRTCClient`.
+public struct IceServer {
+    public var urlString: String
+    public var username: String
+    public var credential: String
+
+    public init(urlString: String, username: String, credential: String) {
+        self.urlString = urlString
+        self.username = username
+        self.credential = credential
+    }
+}
 
 /// The production `MediaEngine` — wraps a single `RTCPeerConnection` at a
 /// time (Phase 3 is one-to-one only, see the design doc §1; group calling's
@@ -19,7 +37,7 @@ public final class WebRTCClient: NSObject, MediaEngine {
         return RTCPeerConnectionFactory(encoderFactory: RTCDefaultVideoEncoderFactory(), decoderFactory: RTCDefaultVideoDecoderFactory())
     }()
 
-    private let iceServers: [AppConfig.IceServer]
+    private let iceServers: [IceServer]
     private var peerConnection: RTCPeerConnection?
     private var videoCapturer: RTCCameraVideoCapturer?
     private var localVideoTrack: RTCVideoTrack?
@@ -30,7 +48,7 @@ public final class WebRTCClient: NSObject, MediaEngine {
     /// reports (it reports several, including transient ones).
     private var hasReportedConnected = false
 
-    public init(iceServers: [AppConfig.IceServer]) {
+    public init(iceServers: [IceServer]) {
         self.iceServers = iceServers
         super.init()
     }
