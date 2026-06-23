@@ -410,4 +410,21 @@ final class ConversationViewModelTests: XCTestCase {
         guard case .message(let row)? = viewModel.rows.first else { return XCTFail("expected a message row") }
         XCTAssertEqual(row.text, "📹 未接听")
     }
+
+    func test_callRecordRow_inProgress_showsPlainKindTextNoDuration() throws {
+        // status 0/1 rows are only ever momentarily on screen mid-call in
+        // production (this device's own CallManager updates them to status
+        // 2 the instant the call ends) — but the rendering function itself
+        // is a pure mapping that can still receive these values, so this
+        // closes the one branch the other 3 tests don't reach.
+        try storage.messages.insert(StoredMessage(
+            localMessageId: 1, conversationType: .single, target: "them", from: "me",
+            content: .callRecord(callId: "call-1", targetId: "them", audioOnly: true, status: 1, connectTime: 5_000, endTime: 0),
+            timestamp: 1_000, status: .sent, direction: .send
+        ))
+        waitForFirstNonEmptyRows()
+
+        guard case .message(let row)? = viewModel.rows.first else { return XCTFail("expected a message row") }
+        XCTAssertEqual(row.text, "📞 语音通话")
+    }
 }
