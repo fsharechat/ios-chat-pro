@@ -11,6 +11,16 @@ final class GroupInfoViewController: UIViewController {
     private let tableView = UITableView()
     private let quitButton = UIButton(type: .system)
     private let dismissButton = UIButton(type: .system)
+    private lazy var addMembersButton = UIBarButtonItem(barButtonSystemItem: .add, target: self, action: #selector(addMembersTapped))
+
+    /// Fired when the user taps the add-members bar button. The actual
+    /// `AddGroupMemberViewModel`/`AddGroupMemberViewController` construction
+    /// happens in `SceneDelegate` (this view controller only holds a
+    /// `GroupInfoViewModel`, which doesn't expose the storage/acting/syncing
+    /// dependencies needed to build them) — matching the established
+    /// "closure wired from SceneDelegate" cross-screen navigation pattern
+    /// used elsewhere in this codebase.
+    var onAddMembersTapped: (() -> Void)?
 
     init(viewModel: GroupInfoViewModel) {
         self.viewModel = viewModel
@@ -95,9 +105,20 @@ final class GroupInfoViewController: UIViewController {
             .sink { [weak self] canDismiss in self?.dismissButton.isHidden = !canDismiss }
             .store(in: &cancellables)
 
+        viewModel.$canAddMembers
+            .sink { [weak self] canAddMembers in
+                guard let self else { return }
+                self.navigationItem.rightBarButtonItem = canAddMembers ? self.addMembersButton : nil
+            }
+            .store(in: &cancellables)
+
         // Quit is always allowed per the design doc's permission matrix
         // (every `GroupType` permits self-removal) — `quitButton` has no
         // corresponding `@Published` gate to hide it.
+    }
+
+    @objc private func addMembersTapped() {
+        onAddMembersTapped?()
     }
 
     @objc private func quitTapped() {
