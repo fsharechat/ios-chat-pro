@@ -218,7 +218,14 @@ final class GroupInfoViewController: UIViewController {
         }
     }
 
-    private static let placeholderGroupAvatarURL = "https://api.dicebear.com/7.x/shapes/png?seed=group"
+    // A static placeholder, not a real upload pipeline — per this project's
+    // design doc, group avatars intentionally use a uniform placeholder
+    // rather than letting each client generate/upload its own. Uses
+    // example.com (RFC 2606 reserved, intentionally non-resolving) rather
+    // than a live third-party service, consistent with every other
+    // placeholder URL in this codebase — this button exists to exercise
+    // the wire/permission path, not to test real avatar rendering.
+    private static let placeholderGroupAvatarURL = "https://example.com/group-avatar-placeholder.png"
 
     private func presentResultAlert(title: String, message: String) {
         let alert = UIAlertController(title: title, message: message, preferredStyle: .alert)
