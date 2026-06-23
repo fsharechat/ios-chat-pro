@@ -20,6 +20,7 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/apple/swift-protobuf.git", from: "1.25.0"),
         .package(url: "https://github.com/groue/GRDB.swift.git", from: "6.0.0"),
+        .package(url: "https://github.com/stasel/WebRTC.git", from: "149.0.0"),
     ],
     targets: [
         .target(
@@ -45,7 +46,7 @@ let package = Package(
         .testTarget(name: "IMKitTests", dependencies: ["IMKit"]),
         .target(name: "IMMedia", dependencies: ["IMClient", "IMProto", "IMTransport"]),
         .testTarget(name: "IMMediaTests", dependencies: ["IMMedia"]),
-        .target(name: "IMCall", dependencies: ["IMMessaging", "IMStorage", "IMProto", "IMClient"]),
+        .target(name: "IMCall", dependencies: ["IMMessaging", "IMStorage", "IMProto", "IMClient", .product(name: "WebRTC", package: "WebRTC")]),
         .testTarget(name: "IMCallTests", dependencies: ["IMCall", "IMMessaging", "IMStorage", "IMClient", "IMTransport", "IMProto"]),
         .target(name: "AppCore", dependencies: ["IMClient", "IMStorage", "IMMessaging", "IMContacts", "IMMedia", "IMGroups"]),
         .testTarget(name: "AppCoreTests", dependencies: ["AppCore", "IMClient", "IMProto", "IMTransport"]),

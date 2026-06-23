@@ -29,6 +29,8 @@ targets:
         # plan's self-review notes, not forgotten.
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
+        NSCameraUsageDescription: "视频通话需要使用摄像头"
+        NSMicrophoneUsageDescription: "语音/视频通话需要使用麦克风"
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.fshare.ios-chat-pro.App
@@ -44,6 +46,8 @@ targets:
         product: AppCore
       - package: IMCore
         product: IMKit
+      - package: IMCore
+        product: IMCall
 schemes:
   App:
     build:
