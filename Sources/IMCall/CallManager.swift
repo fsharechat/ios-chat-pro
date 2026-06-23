@@ -26,8 +26,9 @@ public final class CallManager {
     public private(set) var peerUid: String?
 
     /// Fired when an incoming CallStart arrives and is accepted into
-    /// `.incoming` state (i.e. not auto-rejected as busy, see the next
-    /// task) — the App-target `CXProvider` adapter wires this to
+    /// `.incoming` state (i.e. not auto-rejected as busy, and not lost to
+    /// the other side on a glare — see `handleIncomingCallStart`) — the
+    /// App-target `CXProvider` adapter wires this to
     /// `reportNewIncomingCall`.
     public var onIncomingCall: ((_ peerUid: String, _ audioOnly: Bool) -> Void)?
     /// Fired every time a call ends, for any reason — UI dismisses the
@@ -70,9 +71,7 @@ public final class CallManager {
             self?.handleLocalCandidate(sdpMLineIndex: index, sdpMid: mid, candidate: candidate)
         }
         messagingService.onCallSignal = { [weak self] wireMessage in self?.handleIncomingSignal(wireMessage) }
-        // `messagingService.onCallStartMessage = ...` is wired in the next
-        // task, alongside the `handleIncomingCallStart` method it drives —
-        // there is nothing in this task's scope for it to call yet.
+        messagingService.onCallStartMessage = { [weak self] message in self?.handleIncomingCallStart(message) }
     }
 
     // MARK: - Outgoing
@@ -167,6 +166,42 @@ public final class CallManager {
         case .answer(let callId, _), .bye(let callId), .sdpOffer(let callId, _), .sdpAnswer(let callId, _), .iceCandidate(let callId, _, _, _), .modify(let callId, _):
             return callId == session.callId
         }
+    }
+
+    // MARK: - Incoming CallStart
+
+    private func handleIncomingCallStart(_ message: StoredMessage) {
+        guard case .callRecord(let callId, _, let audioOnlyFlag, _, _, _) = message.content else { return }
+        let callerUid = message.from
+
+        if state == .outgoing, let session, session.peerUid == callerUid {
+            // Glare: both sides dialed each other at the same moment — see
+            // this task's doc comment for the resolution rule.
+            if myUserId() < callerUid {
+                try? sendSignal(.bye(callId: callId), to: callerUid)
+                return
+            } else {
+                answerTimeoutToken?.cancel()
+                acceptIncomingCall(callId: callId, callerUid: callerUid, audioOnly: audioOnlyFlag, localMessageRowId: message.id)
+                return
+            }
+        }
+
+        guard state == .idle else {
+            try? sendSignal(.bye(callId: callId), to: callerUid) // busy — auto-reject
+            return
+        }
+
+        acceptIncomingCall(callId: callId, callerUid: callerUid, audioOnly: audioOnlyFlag, localMessageRowId: message.id)
+    }
+
+    private func acceptIncomingCall(callId: String, callerUid: String, audioOnly: Bool, localMessageRowId: Int64?) {
+        session = CallSession(callId: callId, peerUid: callerUid, audioOnly: audioOnly, localMessageRowId: localMessageRowId)
+        self.audioOnly = audioOnly
+        peerUid = callerUid
+        state = .incoming
+        startAnswerTimeoutTimer()
+        onIncomingCall?(callerUid, audioOnly)
     }
 
     // MARK: - MediaEngine callbacks

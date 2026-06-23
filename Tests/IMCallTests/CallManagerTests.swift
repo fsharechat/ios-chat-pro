@@ -236,6 +236,91 @@ final class CallManagerTests: XCTestCase {
         XCTAssertEqual(endedReason, .mediaFailure)
     }
 
+    func test_receivingCallStartWhileIdle_transitionsToIncomingAndFiresCallback() throws {
+        var capturedPeer: String?
+        var capturedAudioOnly: Bool?
+        manager.onIncomingCall = { peer, audioOnly in capturedPeer = peer; capturedAudioOnly = audioOnly }
+
+        try deliverCallStart(callId: "call-incoming-1", audioOnly: true, from: "them")
+
+        XCTAssertEqual(manager.state, .incoming)
+        XCTAssertEqual(manager.peerUid, "them")
+        XCTAssertEqual(capturedPeer, "them")
+        XCTAssertEqual(capturedAudioOnly, true)
+    }
+
+    func test_receivingCallStartWhileIdle_startsAnswerTimeoutTimer() throws {
+        try deliverCallStart(callId: "call-incoming-1", audioOnly: false, from: "them")
+        XCTAssertTrue(scheduler.scheduledDelays.contains(60))
+    }
+
+    func test_answer_onIncomingCall_sendsAnswerSignalAndTransitionsToConnecting() throws {
+        try deliverCallStart(callId: "call-incoming-1", audioOnly: false, from: "them")
+
+        try manager.answer()
+
+        XCTAssertEqual(manager.state, .connecting)
+        let messages = try sentWireMessages()
+        XCTAssertTrue(messages.contains { $0.content.type == 401 })
+    }
+
+    func test_answer_withAlreadyBufferedOffer_createsAndSendsAnswerSDP() throws {
+        try deliverCallStart(callId: "call-incoming-1", audioOnly: false, from: "them")
+        try deliverSignal(.sdpOffer(callId: "call-incoming-1", sdp: "remote-offer-sdp"), from: "them")
+
+        try manager.answer()
+
+        XCTAssertEqual(mediaEngine.createAnswerCalls, ["remote-offer-sdp"])
+        let messages = try sentWireMessages()
+        XCTAssertTrue(messages.contains { CallSignalCodec.decode($0) == .sdpAnswer(callId: "call-incoming-1", sdp: mediaEngine.answerSDPToReturn) })
+    }
+
+    func test_offerArrivingAfterAnswer_createsAndSendsAnswerSDPImmediately() throws {
+        try deliverCallStart(callId: "call-incoming-1", audioOnly: false, from: "them")
+        try manager.answer() // no offer buffered yet
+
+        try deliverSignal(.sdpOffer(callId: "call-incoming-1", sdp: "late-offer-sdp"), from: "them")
+
+        XCTAssertEqual(mediaEngine.createAnswerCalls, ["late-offer-sdp"])
+    }
+
+    func test_secondCallStartWhileBusy_autoRejectsWithBye() throws {
+        try deliverCallStart(callId: "call-1", audioOnly: false, from: "them")
+        try manager.answer()
+
+        try deliverCallStart(callId: "call-2", audioOnly: false, from: "someone-else", target: "me")
+
+        XCTAssertEqual(manager.state, .connecting) // untouched — still the original call
+        let messages = try sentWireMessages()
+        XCTAssertTrue(messages.contains { CallSignalCodec.decode($0) == .bye(callId: "call-2") })
+    }
+
+    func test_glare_myUidSmaller_myOutgoingCallContinues_rejectsTheirs() throws {
+        // "me" < "them" lexicographically — I win.
+        try manager.startCall(to: "them", audioOnly: false)
+        let myCallId = callIdFromLastCallStart()
+
+        try deliverCallStart(callId: "their-call-id", audioOnly: false, from: "them")
+
+        XCTAssertEqual(manager.state, .outgoing) // my call is untouched
+        let messages = try sentWireMessages()
+        XCTAssertTrue(messages.contains { CallSignalCodec.decode($0) == .bye(callId: "their-call-id") })
+        _ = myCallId
+    }
+
+    func test_glare_myUidLarger_abandonsMyOutgoingAndAcceptsTheirs() throws {
+        // "me" > "a" lexicographically — I lose, and accept their call instead.
+        let losingManager = CallManager(messagingService: messagingService, storage: storage, mediaEngine: mediaEngine, scheduler: scheduler, myUserId: { "me" })
+        try losingManager.startCall(to: "a", audioOnly: false)
+        var capturedPeer: String?
+        losingManager.onIncomingCall = { peer, _ in capturedPeer = peer }
+
+        try deliverCallStart(callId: "their-call-id", audioOnly: true, from: "a", target: "me", manager: losingManager)
+
+        XCTAssertEqual(losingManager.state, .incoming)
+        XCTAssertEqual(capturedPeer, "a")
+    }
+
     // MARK: - Helpers
 
     private func callIdFromLastCallStart() -> String {
@@ -245,5 +330,44 @@ final class CallManagerTests: XCTestCase {
             return ""
         }
         return callId
+    }
+
+    private func deliverSignal(_ signal: OutgoingCallSignal, from: String, target: String = "me", manager: CallManager? = nil) throws {
+        let encoded = CallSignalCodec.encode(signal)
+        var wireMessage = Im_Message()
+        wireMessage.messageID = Int64.random(in: 1_000_000...9_999_999)
+        wireMessage.fromUser = from
+        wireMessage.conversation.type = 0
+        wireMessage.conversation.target = target
+        wireMessage.conversation.line = 0
+        var content = Im_MessageContent()
+        content.type = encoded.wireType
+        content.searchableContent = encoded.callId
+        if let data = encoded.data { content.data = data }
+        wireMessage.content = content
+        wireMessage.serverTimestamp = 1_000
+        var result = Im_PullMessageResult()
+        result.message = [wireMessage]
+        result.current = wireMessage.messageID
+        result.head = wireMessage.messageID
+        let body = Data([0x00]) + (try result.serializedData())
+        fakeTransport.simulateReceivedData(FrameEncoder.encode(signal: .pubAck, subSignal: .mp, messageId: 1, body: body))
+    }
+
+    private func deliverCallStart(callId: String, audioOnly: Bool, from: String, target: String = "me", manager: CallManager? = nil) throws {
+        var wireMessage = Im_Message()
+        wireMessage.messageID = Int64.random(in: 1_000_000...9_999_999)
+        wireMessage.fromUser = from
+        wireMessage.conversation.type = 0
+        wireMessage.conversation.target = target
+        wireMessage.conversation.line = 0
+        wireMessage.content = MessageContentCodec.encode(.callRecord(callId: callId, targetId: target, audioOnly: audioOnly, status: 0, connectTime: 0, endTime: 0))
+        wireMessage.serverTimestamp = 1_000
+        var result = Im_PullMessageResult()
+        result.message = [wireMessage]
+        result.current = wireMessage.messageID
+        result.head = wireMessage.messageID
+        let body = Data([0x00]) + (try result.serializedData())
+        fakeTransport.simulateReceivedData(FrameEncoder.encode(signal: .pubAck, subSignal: .mp, messageId: 1, body: body))
     }
 }
