@@ -35,6 +35,17 @@ public enum MessageContentCodec {
         let ms: [String]?
     }
 
+    /// Wire shape for type 400 (`CallStart`)'s `data` field — mirrors
+    /// Android `CallStartMessageContent.encode()`'s `JSONObject` exactly
+    /// (`t`=targetId, `a`=audioOnly as 0/1, `c`/`e`/`s` omitted when 0).
+    private struct CallStartWireContent: Codable {
+        let t: String
+        let a: Int
+        let c: Int64?
+        let e: Int64?
+        let s: Int?
+    }
+
     public static func encode(_ content: MessageContent, mentionedType: Int32 = 0, mentionedTargets: [String] = []) -> Im_MessageContent {
         var wire = Im_MessageContent()
         switch content {
@@ -56,13 +67,19 @@ public enum MessageContentCodec {
             // at its default (text=0-equivalent) value if this is ever
             // called.
             wire.type = Int32(type.rawValue)
-        case .callRecord:
-            // Placeholder arm only — forced by `MessageContent` gaining this
-            // case in Task 1 (storage representation). The real wire
-            // mapping (`searchableContent`=callId, `data`=JSON payload) is
-            // Task 3's job; this exists solely to keep this exhaustive
-            // switch compiling until then.
-            wire.type = Int32(MessageContentType.callStart.rawValue)
+        case .callRecord(let callId, let targetId, let audioOnly, let status, let connectTime, let endTime):
+            wire.type = 400
+            wire.searchableContent = callId
+            let payload = CallStartWireContent(
+                t: targetId,
+                a: audioOnly ? 1 : 0,
+                c: connectTime > 0 ? connectTime : nil,
+                e: endTime > 0 ? endTime : nil,
+                s: status > 0 ? status : nil
+            )
+            if let data = try? JSONEncoder().encode(payload) {
+                wire.data = data
+            }
         }
         if mentionedType != 0 {
             wire.mentionedType = mentionedType
@@ -97,6 +114,8 @@ public enum MessageContentCodec {
             return decodeGroupNotification(type: .changeGroupName, wire: wire)
         case 112:
             return decodeGroupNotification(type: .changeGroupPortrait, wire: wire)
+        case 400:
+            return decodeCallStart(wire: wire)
         default:
             throw DecodeError.unsupportedContentType(wire.type)
         }
@@ -127,5 +146,13 @@ public enum MessageContentCodec {
         case .text, .image, .quitGroup, .callStart:
             return .groupNotification(type: type, operatorUid: parsed.o ?? "", memberUids: [], value: nil) // unreachable
         }
+    }
+
+    private static func decodeCallStart(wire: Im_MessageContent) -> MessageContent {
+        let callId = wire.hasSearchableContent ? wire.searchableContent : ""
+        guard wire.hasData, let parsed = try? JSONDecoder().decode(CallStartWireContent.self, from: wire.data) else {
+            return .callRecord(callId: callId, targetId: "", audioOnly: false, status: 0, connectTime: 0, endTime: 0)
+        }
+        return .callRecord(callId: callId, targetId: parsed.t, audioOnly: parsed.a > 0, status: parsed.s ?? 0, connectTime: parsed.c ?? 0, endTime: parsed.e ?? 0)
     }
 }
