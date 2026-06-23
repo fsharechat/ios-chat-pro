@@ -29,6 +29,22 @@ public final class MessagingService {
         set { receiveMessageHandler.onGroupNotificationMessage = newValue }
     }
 
+    /// Forwards to the internal `ReceiveMessageHandler`'s closure of the
+    /// same name — see that type's doc comment. `IMCall.CallManager` wires
+    /// this to learn about incoming calls.
+    public var onCallStartMessage: ((StoredMessage) -> Void)? {
+        get { receiveMessageHandler.onCallStartMessage }
+        set { receiveMessageHandler.onCallStartMessage = newValue }
+    }
+
+    /// Forwards to the internal `ReceiveMessageHandler`'s closure of the
+    /// same name — see that type's doc comment. `IMCall.CallManager` wires
+    /// this to receive Answer/Bye/Signal/Modify.
+    public var onCallSignal: ((Im_Message) -> Void)? {
+        get { receiveMessageHandler.onCallSignal }
+        set { receiveMessageHandler.onCallSignal = newValue }
+    }
+
     public init(
         imClient: IMClient,
         storage: IMStorage,
@@ -65,6 +81,61 @@ public final class MessagingService {
 
     public func sendImage(to target: String, conversationType: ConversationType = .single, line: Int = 0, thumbnail: Data?, remoteURL: String) throws {
         try send(to: target, conversationType: conversationType, line: line, content: .image(thumbnail: thumbnail, remoteURL: remoteURL, localPath: nil), mentionedType: 0, mentionedTargets: [])
+    }
+
+    /// Sends a CallStart (wire type 400) and persists it as a local call-
+    /// record bubble, exactly like `sendText`/`sendImage` persist their
+    /// content — this is the one call-signaling type that's a real chat
+    /// message, not transient signaling. Returns the inserted row so
+    /// `IMCall.CallManager` can capture its `id` for later
+    /// `IMStorage.MessageStore.updateContent` calls as the call progresses.
+    @discardableResult
+    public func sendCallStart(targetId: String, callId: String, audioOnly: Bool) throws -> StoredMessage {
+        let content = MessageContent.callRecord(callId: callId, targetId: targetId, audioOnly: audioOnly, status: 0, connectTime: 0, endTime: 0)
+        let localMessageId = idGenerator.next()
+        let timestamp = nowMillis()
+
+        let echo = try storage.messages.insert(StoredMessage(
+            localMessageId: localMessageId,
+            conversationType: .single,
+            target: targetId,
+            from: imClient.userId,
+            content: content,
+            timestamp: timestamp,
+            status: .sending,
+            direction: .send
+        ))
+        try storage.conversations.recordIncomingMessage(
+            conversationType: .single, target: targetId, line: 0,
+            messageUid: 0, timestamp: timestamp, incrementUnread: false
+        )
+        try sendWireMessage(localMessageId: echo.localMessageId, conversationType: .single, target: targetId, line: 0, content: content, mentionedType: 0, mentionedTargets: [])
+        return echo
+    }
+
+    /// Sends one of 401/402/403/404 (Answer/Bye/Signal/Modify) directly on
+    /// the wire — deliberately bypassing `send(...)`'s local-echo insert
+    /// and `OutgoingMessageTracker` ack tracking, because these are
+    /// transient signaling with no corresponding stored row to update (see
+    /// the Phase 3 design doc §2's persist-flag table). `callId` goes in
+    /// `searchableContent` and `dataPayload` in `data`, mirroring every
+    /// other content type's wire-field mapping in this codebase.
+    public func sendCallControlMessage(to target: String, wireType: Int32, callId: String, dataPayload: Data?) throws {
+        var wireMessage = Im_Message()
+        wireMessage.conversation.type = Int32(ConversationType.single.rawValue)
+        wireMessage.conversation.target = target
+        wireMessage.conversation.line = 0
+        wireMessage.fromUser = imClient.userId
+        var content = Im_MessageContent()
+        content.type = wireType
+        content.searchableContent = callId
+        if let dataPayload {
+            content.data = dataPayload
+        }
+        wireMessage.content = content
+
+        let body = try wireMessage.serializedData()
+        imClient.sendFrame(signal: .publish, subSignal: .ms, body: body)
     }
 
     private func send(to target: String, conversationType: ConversationType, line: Int, content: MessageContent, mentionedType: Int32, mentionedTargets: [String]) throws {

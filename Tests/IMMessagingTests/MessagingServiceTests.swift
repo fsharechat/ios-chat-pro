@@ -229,4 +229,89 @@ final class MessagingServiceTests: XCTestCase {
 
         XCTAssertEqual(capturedGroupId, "g1")
     }
+
+    func test_sendCallStart_insertsLocalEchoAndSendsWireFrame() throws {
+        let echo = try service.sendCallStart(targetId: "them", callId: "call-1", audioOnly: false)
+
+        XCTAssertEqual(echo.content, .callRecord(callId: "call-1", targetId: "them", audioOnly: false, status: 0, connectTime: 0, endTime: 0))
+        XCTAssertNotNil(echo.id)
+
+        let frame = try decodeOnlySentFrame()
+        let wireMessage = try Im_Message(serializedBytes: frame.body)
+        XCTAssertEqual(wireMessage.content.type, 400)
+        XCTAssertEqual(try MessageContentCodec.decode(wireMessage.content), .callRecord(callId: "call-1", targetId: "them", audioOnly: false, status: 0, connectTime: 0, endTime: 0))
+    }
+
+    func test_sendCallControlMessage_doesNotInsertAnyLocalRow() throws {
+        let countBefore = try storage.messages.messages(conversationType: .single, target: "them").count
+
+        try service.sendCallControlMessage(to: "them", wireType: 402, callId: "call-1", dataPayload: nil)
+
+        XCTAssertEqual(try storage.messages.messages(conversationType: .single, target: "them").count, countBefore)
+    }
+
+    func test_sendCallControlMessage_sendsCorrectWireFrame() throws {
+        try service.sendCallControlMessage(to: "them", wireType: 403, callId: "call-1", dataPayload: Data("""
+        {"type":"offer","sdp":"v=0..."}
+        """.utf8))
+
+        let frame = try decodeOnlySentFrame()
+        let wireMessage = try Im_Message(serializedBytes: frame.body)
+        XCTAssertEqual(wireMessage.fromUser, "me")
+        XCTAssertEqual(wireMessage.conversation.target, "them")
+        XCTAssertEqual(wireMessage.content.type, 403)
+        XCTAssertEqual(wireMessage.content.searchableContent, "call-1")
+        XCTAssertTrue(wireMessage.content.data.starts(with: Data("{\"type\":\"offer\"".utf8)))
+    }
+
+    func test_onCallStartMessage_forwardsToTheInternalReceiveMessageHandler() throws {
+        var captured: StoredMessage?
+        service.onCallStartMessage = { captured = $0 }
+
+        var wireMessage = Im_Message()
+        wireMessage.messageID = 700
+        wireMessage.fromUser = "them"
+        wireMessage.conversation.type = 0
+        wireMessage.conversation.target = "them"
+        wireMessage.conversation.line = 0
+        wireMessage.content = MessageContentCodec.encode(.callRecord(callId: "call-3", targetId: "me", audioOnly: false, status: 0, connectTime: 0, endTime: 0))
+        wireMessage.serverTimestamp = 1_000
+        var result = Im_PullMessageResult()
+        result.message = [wireMessage]
+        result.current = 700
+        result.head = 700
+        let body = Data([0x00]) + (try result.serializedData())
+        let frameBytes = FrameEncoder.encode(signal: .pubAck, subSignal: .mp, messageId: 1, body: body)
+
+        fakeTransport.simulateReceivedData(frameBytes)
+
+        XCTAssertEqual(captured?.from, "them")
+    }
+
+    func test_onCallSignal_forwardsToTheInternalReceiveMessageHandler() throws {
+        var captured: Im_Message?
+        service.onCallSignal = { captured = $0 }
+
+        var wireMessage = Im_Message()
+        wireMessage.messageID = 701
+        wireMessage.fromUser = "them"
+        wireMessage.conversation.type = 0
+        wireMessage.conversation.target = "them"
+        wireMessage.conversation.line = 0
+        var wireContent = Im_MessageContent()
+        wireContent.type = 402
+        wireContent.searchableContent = "call-3"
+        wireMessage.content = wireContent
+        wireMessage.serverTimestamp = 1_000
+        var result = Im_PullMessageResult()
+        result.message = [wireMessage]
+        result.current = 701
+        result.head = 701
+        let body = Data([0x00]) + (try result.serializedData())
+        let frameBytes = FrameEncoder.encode(signal: .pubAck, subSignal: .mp, messageId: 1, body: body)
+
+        fakeTransport.simulateReceivedData(frameBytes)
+
+        XCTAssertEqual(captured?.content.type, 402)
+    }
 }
