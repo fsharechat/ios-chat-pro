@@ -126,7 +126,22 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
                 storage: self.environment.storage,
                 currentUserId: self.environment.imClient?.userId ?? ""
             )
-            conversationViewController?.navigationController?.pushViewController(GroupInfoViewController(viewModel: groupInfoViewModel), animated: true)
+            let groupInfoViewController = GroupInfoViewController(viewModel: groupInfoViewModel)
+            groupInfoViewController.onAddMembersTapped = { [weak self, weak groupInfoViewController] in
+                guard let self else { return }
+                let addGroupMemberViewModel = AddGroupMemberViewModel(
+                    groupId: groupId,
+                    storage: self.environment.storage,
+                    groupActing: self.environment.groupSyncService,
+                    groupSyncing: self.environment.groupSyncService
+                )
+                let addGroupMemberViewController = AddGroupMemberViewController(viewModel: addGroupMemberViewModel)
+                addGroupMemberViewController.onMembersAdded = { [weak addGroupMemberViewController] in
+                    addGroupMemberViewController?.dismiss(animated: true)
+                }
+                groupInfoViewController?.present(UINavigationController(rootViewController: addGroupMemberViewController), animated: true)
+            }
+            conversationViewController?.navigationController?.pushViewController(groupInfoViewController, animated: true)
         }
     }
 
