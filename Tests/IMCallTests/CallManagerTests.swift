@@ -319,6 +319,14 @@ final class CallManagerTests: XCTestCase {
 
         XCTAssertEqual(losingManager.state, .incoming)
         XCTAssertEqual(capturedPeer, "a")
+
+        let abandonedBubble = try storage.messages.messages(conversationType: .single, target: "a").last
+        if case .callRecord(_, _, _, let status, let connectTime, _) = abandonedBubble?.content {
+            XCTAssertEqual(status, 2) // retired, not stuck at "calling..."
+            XCTAssertEqual(connectTime, 0) // never connected
+        } else {
+            XCTFail("expected the abandoned outgoing call's bubble to still be a callRecord")
+        }
     }
 
     // MARK: - Helpers

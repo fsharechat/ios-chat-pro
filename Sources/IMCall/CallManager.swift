@@ -182,6 +182,7 @@ public final class CallManager {
                 return
             } else {
                 answerTimeoutToken?.cancel()
+                updateCallBubble(status: 2, endTime: nowMillis())
                 acceptIncomingCall(callId: callId, callerUid: callerUid, audioOnly: audioOnlyFlag, localMessageRowId: message.id)
                 return
             }
