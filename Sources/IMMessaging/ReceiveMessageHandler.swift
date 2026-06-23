@@ -24,6 +24,22 @@ public final class ReceiveMessageHandler: MessageHandler {
     /// it arrives. Not fired for ordinary text/image messages.
     public var onGroupNotificationMessage: ((String) -> Void)?
 
+    /// Fired after persisting a *received* (never my own echoed-back) 400
+    /// CallStart message — `IMCall.CallManager` wires this to learn about
+    /// an incoming call. Carries the full `StoredMessage` (not just the
+    /// caller's uid) so the caller has the row's `id` on hand for later
+    /// `MessageStore.updateContent` calls without a second lookup.
+    public var onCallStartMessage: ((StoredMessage) -> Void)?
+
+    /// Fired for every 401/402/403/404 (Answer/Bye/Signal/Modify) message —
+    /// these are intentionally **never persisted** (see this type's
+    /// `persist(_:)` doc comment below), so this is the only way `IMCall`
+    /// ever sees them. Carries the raw wire `Im_Message` rather than a
+    /// decoded type, because decoding these 4 signal shapes is `IMCall`'s
+    /// job (`CallSignalCodec`) — `IMMessaging` only needs to know "this is
+    /// call signaling, don't persist it."
+    public var onCallSignal: ((Im_Message) -> Void)?
+
     public init(storage: IMStorage, myUserId: @escaping () -> String) {
         self.storage = storage
         self.myUserId = myUserId
@@ -42,10 +58,25 @@ public final class ReceiveMessageHandler: MessageHandler {
         advanceSyncHead(to: result.head)
     }
 
+    /// Wire types 401/402/403/404 (Answer/Bye/Signal/Modify) are
+    /// intentionally never persisted to `storage.messages` — on Android
+    /// these are `PersistFlag.No_Persist`/`.Transparent`, and at the volume
+    /// ICE candidates/SDP exchanges happen during call setup, writing each
+    /// one as a chat message row would spam the conversation's last-message
+    /// preview. They're forwarded via `onCallSignal` instead and returned
+    /// from early, before this method's normal persist-and-update-
+    /// conversation flow runs. Type 400 (CallStart) is the one call-related
+    /// type that *does* persist — it's the call-record bubble — so it falls
+    /// through to the same path as every other message type below.
     private func persist(_ wireMessage: Im_Message) {
         guard wireMessage.messageID != 0 else { return }
         if (try? storage.messages.message(uid: wireMessage.messageID)) != nil {
             return // already have it via server uid — pull windows can overlap
+        }
+
+        if [401, 402, 403, 404].contains(wireMessage.content.type) {
+            onCallSignal?(wireMessage)
+            return
         }
 
         let direction: MessageDirection = wireMessage.fromUser == myUserId() ? .send : .receive
@@ -75,7 +106,7 @@ public final class ReceiveMessageHandler: MessageHandler {
             && (mentionedType == 2 || (mentionedType == 1 && mentionedTargets.contains(myUserId())))
 
         do {
-            try storage.messages.insert(StoredMessage(
+            let inserted = try storage.messages.insert(StoredMessage(
                 localMessageId: wireMessage.localMessageID,
                 messageUid: wireMessage.messageID,
                 conversationType: conversationType,
@@ -100,6 +131,9 @@ public final class ReceiveMessageHandler: MessageHandler {
             )
             if case .groupNotification = content {
                 onGroupNotificationMessage?(target)
+            }
+            if case .callRecord = content, direction == .receive {
+                onCallStartMessage?(inserted)
             }
         } catch {
             // Best-effort: one malformed/unexpected row shouldn't abort the rest of the batch.

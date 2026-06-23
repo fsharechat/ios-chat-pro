@@ -211,4 +211,112 @@ final class ReceiveMessageHandlerTests: XCTestCase {
         let conversation = try storage.conversations.conversation(conversationType: .single, target: "them")
         XCTAssertEqual(conversation?.unreadMentionCount, 0)
     }
+
+    func test_handle_receivedCallStart_persistsAndFiresOnCallStartMessage() throws {
+        var capturedMessage: StoredMessage?
+        handler.onCallStartMessage = { capturedMessage = $0 }
+
+        var message = Im_Message()
+        message.messageID = 500
+        message.fromUser = "them"
+        message.conversation.type = 0
+        message.conversation.target = "them"
+        message.conversation.line = 0
+        message.content = MessageContentCodec.encode(.callRecord(callId: "call-1", targetId: "me", audioOnly: false, status: 0, connectTime: 0, endTime: 0))
+        message.serverTimestamp = 1_000
+        let frame = try makePullResultFrame(messages: [message], head: 500)
+
+        handler.handle(frame: frame)
+
+        XCTAssertEqual(try storage.messages.message(uid: 500)?.content, .callRecord(callId: "call-1", targetId: "me", audioOnly: false, status: 0, connectTime: 0, endTime: 0))
+        XCTAssertEqual(capturedMessage?.from, "them")
+        XCTAssertEqual(capturedMessage?.content, .callRecord(callId: "call-1", targetId: "me", audioOnly: false, status: 0, connectTime: 0, endTime: 0))
+    }
+
+    func test_handle_ownSentCallStartEchoedBack_doesNotFireOnCallStartMessage() throws {
+        // Mirrors `test_handle_ownSentMessageInPull_doesNotIncrementUnread`:
+        // my own CallStart coming back through a pull is just an ack, not a
+        // notification that *someone else* is calling me.
+        var fired = false
+        handler.onCallStartMessage = { _ in fired = true }
+
+        var message = Im_Message()
+        message.messageID = 501
+        message.fromUser = "me"
+        message.conversation.type = 0
+        message.conversation.target = "them"
+        message.conversation.line = 0
+        message.content = MessageContentCodec.encode(.callRecord(callId: "call-2", targetId: "them", audioOnly: false, status: 0, connectTime: 0, endTime: 0))
+        message.serverTimestamp = 1_000
+        let frame = try makePullResultFrame(messages: [message], head: 501)
+
+        handler.handle(frame: frame)
+
+        XCTAssertFalse(fired)
+    }
+
+    func test_handle_answerSignal_doesNotPersistAndFiresOnCallSignal() throws {
+        var capturedWireMessage: Im_Message?
+        handler.onCallSignal = { capturedWireMessage = $0 }
+
+        var message = Im_Message()
+        message.messageID = 502
+        message.fromUser = "them"
+        message.conversation.type = 0
+        message.conversation.target = "them"
+        message.conversation.line = 0
+        var wireContent = Im_MessageContent()
+        wireContent.type = 401 // Answer
+        wireContent.searchableContent = "call-1"
+        wireContent.data = Data("1".utf8)
+        message.content = wireContent
+        message.serverTimestamp = 1_000
+        let frame = try makePullResultFrame(messages: [message], head: 502)
+
+        handler.handle(frame: frame)
+
+        XCTAssertNil(try storage.messages.message(uid: 502)) // never persisted
+        XCTAssertEqual(capturedWireMessage?.content.type, 401)
+        XCTAssertEqual(capturedWireMessage?.content.searchableContent, "call-1")
+    }
+
+    func test_handle_byeSignalMessageSignalModify_allSkipPersistence() throws {
+        for wireType: Int32 in [401, 402, 403, 404] {
+            var message = Im_Message()
+            message.messageID = Int64(600 + wireType)
+            message.fromUser = "them"
+            message.conversation.type = 0
+            message.conversation.target = "them"
+            message.conversation.line = 0
+            var wireContent = Im_MessageContent()
+            wireContent.type = wireType
+            wireContent.searchableContent = "call-1"
+            message.content = wireContent
+            message.serverTimestamp = 1_000
+            let frame = try makePullResultFrame(messages: [message], head: Int64(600 + wireType))
+
+            handler.handle(frame: frame)
+
+            XCTAssertNil(try storage.messages.message(uid: Int64(600 + wireType)), "type \(wireType) must not persist")
+        }
+    }
+
+    func test_handle_callSignal_stillAdvancesSyncHead() throws {
+        var message = Im_Message()
+        message.messageID = 503
+        message.fromUser = "them"
+        message.conversation.type = 0
+        message.conversation.target = "them"
+        message.conversation.line = 0
+        var wireContent = Im_MessageContent()
+        wireContent.type = 402 // Bye
+        wireContent.searchableContent = "call-1"
+        message.content = wireContent
+        message.serverTimestamp = 1_000
+        let frame = try makePullResultFrame(messages: [message], head: 503)
+
+        handler.handle(frame: frame)
+
+        XCTAssertEqual(try storage.syncState.get().msgHead, 503)
+    }
 }
