@@ -106,6 +106,7 @@ final class CreateGroupViewModelTests: XCTestCase {
 
 final class FakeGroupActing: GroupActing {
     var resultToReturn: Result<String, Error> = .success("g1")
+    var addMembersResultToReturn: Result<Void, Error> = .success(())
     private(set) var lastName: String?
     private(set) var lastMemberIds: [String]?
 
@@ -116,7 +117,7 @@ final class FakeGroupActing: GroupActing {
     }
     func addMembers(groupId: String, memberIds: [String], completion: @escaping (Result<Void, Error>) -> Void) {
         lastMemberIds = memberIds
-        completion(.success(()))
+        completion(addMembersResultToReturn)
     }
     func kickMember(groupId: String, memberId: String, completion: @escaping (Result<Void, Error>) -> Void) {}
     func modifyGroupInfo(groupId: String, type: ModifyGroupInfoType, value: String, completion: @escaping (Result<Void, Error>) -> Void) {}
@@ -126,6 +127,7 @@ final class FakeGroupActing: GroupActing {
 
 final class FakeGroupSyncing: GroupSyncing {
     private(set) var lastRefreshedGroupId: String?
+    private(set) var lastRefreshedMembersGroupId: String?
     func refreshGroup(targetId: String) { lastRefreshedGroupId = targetId }
-    func refreshMembers(targetId: String) {}
+    func refreshMembers(targetId: String) { lastRefreshedMembersGroupId = targetId }
 }
