@@ -20,7 +20,11 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/apple/swift-protobuf.git", from: "1.25.0"),
         .package(url: "https://github.com/groue/GRDB.swift.git", from: "6.0.0"),
-        .package(url: "https://github.com/stasel/WebRTC.git", from: "149.0.0"),
+        // Pinned exactly, not `from:` — stasel/WebRTC's version numbers track
+        // Chromium milestones, not semver compatibility promises, so an
+        // unbounded range risks a silent ABI-breaking jump on `swift package
+        // update` (see the Phase 3 design doc's risk note on this dependency).
+        .package(url: "https://github.com/stasel/WebRTC.git", exact: "149.0.0"),
     ],
     targets: [
         .target(
