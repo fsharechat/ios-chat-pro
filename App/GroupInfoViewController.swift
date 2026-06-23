@@ -137,8 +137,12 @@ extension GroupInfoViewController: UITableViewDelegate {
     func tableView(_ tableView: UITableView, trailingSwipeActionsConfigurationForRowAt indexPath: IndexPath) -> UISwipeActionsConfiguration? {
         guard viewModel.canKickMembers, let row = dataSource.itemIdentifier(for: indexPath), !row.isOwner else { return nil }
         let kick = UIContextualAction(style: .destructive, title: "移出") { [weak self] _, _, completion in
-            self?.viewModel.kickMember(row.uid) { _ in }
-            completion(true)
+            self?.viewModel.kickMember(row.uid) { result in
+                if case .failure = result {
+                    self?.presentResultAlert(title: "移出失败", message: "请稍后重试")
+                }
+                completion(true)
+            }
         }
         return UISwipeActionsConfiguration(actions: [kick])
     }
