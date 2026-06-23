@@ -362,4 +362,52 @@ final class ConversationViewModelTests: XCTestCase {
     private func waitForFirstRow(_ viewModel: ConversationViewModel) throws -> ChatMessageRow {
         try XCTUnwrap(viewModel.rows.first)
     }
+
+    func test_callRecordRow_audioOnlyConnected_showsDurationText() throws {
+        try storage.messages.insert(StoredMessage(
+            localMessageId: 1, conversationType: .single, target: "them", from: "me",
+            content: .callRecord(callId: "call-1", targetId: "them", audioOnly: true, status: 2, connectTime: 5_000, endTime: 65_000),
+            timestamp: 1_000, status: .sent, direction: .send
+        ))
+        waitForFirstNonEmptyRows()
+
+        guard case .message(let row)? = viewModel.rows.first else { return XCTFail("expected a message row") }
+        XCTAssertEqual(row.text, "📞 语音通话 01:00")
+    }
+
+    func test_callRecordRow_videoConnected_showsDurationTextWithVideoIcon() throws {
+        try storage.messages.insert(StoredMessage(
+            localMessageId: 1, conversationType: .single, target: "them", from: "me",
+            content: .callRecord(callId: "call-1", targetId: "them", audioOnly: false, status: 2, connectTime: 5_000, endTime: 35_000),
+            timestamp: 1_000, status: .sent, direction: .send
+        ))
+        waitForFirstNonEmptyRows()
+
+        guard case .message(let row)? = viewModel.rows.first else { return XCTFail("expected a message row") }
+        XCTAssertEqual(row.text, "📹 视频通话 00:30")
+    }
+
+    func test_callRecordRow_neverConnected_outgoing_showsCancelledText() throws {
+        try storage.messages.insert(StoredMessage(
+            localMessageId: 1, conversationType: .single, target: "them", from: "me",
+            content: .callRecord(callId: "call-1", targetId: "them", audioOnly: true, status: 2, connectTime: 0, endTime: 0),
+            timestamp: 1_000, status: .sent, direction: .send
+        ))
+        waitForFirstNonEmptyRows()
+
+        guard case .message(let row)? = viewModel.rows.first else { return XCTFail("expected a message row") }
+        XCTAssertEqual(row.text, "📞 已取消")
+    }
+
+    func test_callRecordRow_neverConnected_incoming_showsMissedText() throws {
+        try storage.messages.insert(StoredMessage(
+            localMessageId: 1, conversationType: .single, target: "them", from: "them",
+            content: .callRecord(callId: "call-1", targetId: "me", audioOnly: false, status: 2, connectTime: 0, endTime: 0),
+            timestamp: 1_000, status: .read, direction: .receive
+        ))
+        waitForFirstNonEmptyRows()
+
+        guard case .message(let row)? = viewModel.rows.first else { return XCTFail("expected a message row") }
+        XCTAssertEqual(row.text, "📹 未接听")
+    }
 }

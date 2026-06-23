@@ -186,14 +186,8 @@ public final class ConversationViewModel {
                 text: renderSystemTipText(type: type, operatorUid: operatorUid, memberUids: memberUids, value: value),
                 timestamp: message.timestamp
             ))
-        case .callRecord:
-            // Placeholder arm only — forced by `MessageContent` gaining this
-            // case in Task 1 (storage representation). The real call-bubble
-            // rendering (digest text, tap-to-callback affordance, etc.) is
-            // Task 10's job; this exists solely to keep this exhaustive
-            // switch compiling until then. Reuses the plain message-row path
-            // with the precomputed `searchableContent` digest as a stopgap.
-            return .message(buildStoredMessageRow(message, text: message.searchableContent, imageThumbnail: nil, imageRemoteURL: nil))
+        case .callRecord(_, _, let audioOnly, let status, let connectTime, let endTime):
+            return .message(buildStoredMessageRow(message, text: renderCallRecordText(isOutgoing: message.direction == .send, audioOnly: audioOnly, status: status, connectTime: connectTime, endTime: endTime), imageThumbnail: nil, imageRemoteURL: nil))
         }
     }
 
@@ -253,5 +247,21 @@ public final class ConversationViewModel {
         case .text, .image, .callStart:
             return "" // unreachable: makeRow only calls this for .groupNotification content
         }
+    }
+
+    /// Bubble text for a `.callRecord` row — design doc §2's rule: status 2
+    /// with a real `connectTime` shows duration; status 2 with no
+    /// `connectTime` (call never connected) shows "已取消" from the caller's
+    /// side, "未接听" from the callee's side. Status 0/1 rows are only ever
+    /// momentarily on screen mid-call (this device's own `CallManager`
+    /// updates them to status 2 the instant the call ends) and don't need
+    /// distinct wording.
+    private func renderCallRecordText(isOutgoing: Bool, audioOnly: Bool, status: Int, connectTime: Int64, endTime: Int64) -> String {
+        let icon = audioOnly ? "📞" : "📹"
+        let kind = audioOnly ? "语音通话" : "视频通话"
+        guard status == 2 else { return "\(icon) \(kind)" }
+        guard connectTime > 0 else { return isOutgoing ? "\(icon) 已取消" : "\(icon) 未接听" }
+        let durationSeconds = Int(max(0, (endTime - connectTime) / 1000))
+        return String(format: "\(icon) \(kind) %02d:%02d", durationSeconds / 60, durationSeconds % 60)
     }
 }
