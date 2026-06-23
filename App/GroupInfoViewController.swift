@@ -12,6 +12,10 @@ final class GroupInfoViewController: UIViewController {
     private let quitButton = UIButton(type: .system)
     private let dismissButton = UIButton(type: .system)
     private lazy var addMembersButton = UIBarButtonItem(barButtonSystemItem: .add, target: self, action: #selector(addMembersTapped))
+    private let headerView = UIView()
+    private let groupAvatarImageView = AvatarImageView(loader: AvatarLoader())
+    private let groupNameLabel = UILabel()
+    private let changePortraitButton = UIButton(type: .system)
 
     /// Fired when the user taps the add-members bar button. The actual
     /// `AddGroupMemberViewModel`/`AddGroupMemberViewController` construction
@@ -56,12 +60,45 @@ final class GroupInfoViewController: UIViewController {
         dismissButton.addTarget(self, action: #selector(dismissTapped), for: .touchUpInside)
         dismissButton.translatesAutoresizingMaskIntoConstraints = false
 
+        groupAvatarImageView.translatesAutoresizingMaskIntoConstraints = false
+
+        groupNameLabel.font = .systemFont(ofSize: 16, weight: .semibold)
+        groupNameLabel.textColor = Theme.textPrimary
+        groupNameLabel.translatesAutoresizingMaskIntoConstraints = false
+
+        changePortraitButton.setTitle("更换头像", for: .normal)
+        changePortraitButton.addTarget(self, action: #selector(changePortraitTapped), for: .touchUpInside)
+        changePortraitButton.translatesAutoresizingMaskIntoConstraints = false
+
+        headerView.translatesAutoresizingMaskIntoConstraints = false
+        headerView.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(renameGroupTapped)))
+        headerView.addSubview(groupAvatarImageView)
+        headerView.addSubview(groupNameLabel)
+        headerView.addSubview(changePortraitButton)
+        view.addSubview(headerView)
+
         view.addSubview(tableView)
         view.addSubview(quitButton)
         view.addSubview(dismissButton)
 
         NSLayoutConstraint.activate([
-            tableView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
+            headerView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
+            headerView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            headerView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            headerView.heightAnchor.constraint(equalToConstant: 64),
+
+            groupAvatarImageView.leadingAnchor.constraint(equalTo: headerView.leadingAnchor, constant: 16),
+            groupAvatarImageView.centerYAnchor.constraint(equalTo: headerView.centerYAnchor),
+            groupAvatarImageView.widthAnchor.constraint(equalToConstant: 48),
+            groupAvatarImageView.heightAnchor.constraint(equalToConstant: 48),
+
+            groupNameLabel.leadingAnchor.constraint(equalTo: groupAvatarImageView.trailingAnchor, constant: 12),
+            groupNameLabel.centerYAnchor.constraint(equalTo: headerView.centerYAnchor),
+
+            changePortraitButton.trailingAnchor.constraint(equalTo: headerView.trailingAnchor, constant: -16),
+            changePortraitButton.centerYAnchor.constraint(equalTo: headerView.centerYAnchor),
+
+            tableView.topAnchor.constraint(equalTo: headerView.bottomAnchor),
             tableView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             tableView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             tableView.bottomAnchor.constraint(equalTo: quitButton.topAnchor, constant: -8),
@@ -98,7 +135,12 @@ final class GroupInfoViewController: UIViewController {
             .store(in: &cancellables)
 
         viewModel.$group
-            .sink { [weak self] group in self?.title = group?.name ?? "群信息" }
+            .sink { [weak self] group in
+                guard let self else { return }
+                self.title = group?.name ?? "群信息"
+                self.groupNameLabel.text = group?.name ?? "群信息"
+                self.groupAvatarImageView.setAvatar(urlString: group?.portrait, displayName: group?.name ?? "群")
+            }
             .store(in: &cancellables)
 
         viewModel.$canDismiss
@@ -109,6 +151,13 @@ final class GroupInfoViewController: UIViewController {
             .sink { [weak self] canAddMembers in
                 guard let self else { return }
                 self.navigationItem.rightBarButtonItem = canAddMembers ? self.addMembersButton : nil
+            }
+            .store(in: &cancellables)
+
+        viewModel.$canModifyInfo
+            .sink { [weak self] canModifyInfo in
+                self?.headerView.isUserInteractionEnabled = canModifyInfo
+                self?.changePortraitButton.isHidden = !canModifyInfo
             }
             .store(in: &cancellables)
 
@@ -142,6 +191,34 @@ final class GroupInfoViewController: UIViewController {
             }
         }
     }
+
+    @objc private func renameGroupTapped() {
+        let alert = UIAlertController(title: "修改群名", message: nil, preferredStyle: .alert)
+        alert.addTextField { [weak self] textField in
+            textField.text = self?.viewModel.group?.name
+            textField.placeholder = "群聊名称"
+        }
+        alert.addAction(UIAlertAction(title: "取消", style: .cancel))
+        alert.addAction(UIAlertAction(title: "保存", style: .default) { [weak self, weak alert] _ in
+            guard let name = alert?.textFields?.first?.text?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty else { return }
+            self?.viewModel.renameGroup(name) { result in
+                if case .failure = result {
+                    self?.presentResultAlert(title: "修改失败", message: "请稍后重试")
+                }
+            }
+        })
+        present(alert, animated: true)
+    }
+
+    @objc private func changePortraitTapped() {
+        viewModel.updatePortrait(url: Self.placeholderGroupAvatarURL) { [weak self] result in
+            if case .failure = result {
+                self?.presentResultAlert(title: "修改失败", message: "请稍后重试")
+            }
+        }
+    }
+
+    private static let placeholderGroupAvatarURL = "https://api.dicebear.com/7.x/shapes/png?seed=group"
 
     private func presentResultAlert(title: String, message: String) {
         let alert = UIAlertController(title: title, message: message, preferredStyle: .alert)
