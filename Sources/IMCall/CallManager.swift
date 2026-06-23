@@ -97,7 +97,7 @@ public final class CallManager {
 
         mediaEngine.start(audioOnly: audioOnly)
         mediaEngine.createOffer { [weak self] sdp in
-            guard let self, let session = self.session else { return }
+            guard let self, let session = self.session, session.callId == callId else { return }
             try? self.sendSignal(.sdpOffer(callId: session.callId, sdp: sdp), to: session.peerUid)
         }
     }
@@ -114,8 +114,9 @@ public final class CallManager {
 
         if let offerSDP = pendingRemoteOfferSDP {
             pendingRemoteOfferSDP = nil
+            let answeringCallId = session.callId
             mediaEngine.createAnswer(forRemoteOffer: offerSDP) { [weak self] answerSDP in
-                guard let self, let session = self.session else { return }
+                guard let self, let session = self.session, session.callId == answeringCallId else { return }
                 try? self.sendSignal(.sdpAnswer(callId: session.callId, sdp: answerSDP), to: session.peerUid)
             }
         }
@@ -141,10 +142,10 @@ public final class CallManager {
             startConnectingTimeoutTimer()
         case .bye:
             endSession(reason: .remoteBye)
-        case .sdpOffer(_, let sdp):
+        case .sdpOffer(let offerCallId, let sdp):
             if state == .connecting {
                 mediaEngine.createAnswer(forRemoteOffer: sdp) { [weak self] answerSDP in
-                    guard let self, let session = self.session else { return }
+                    guard let self, let session = self.session, session.callId == offerCallId else { return }
                     try? self.sendSignal(.sdpAnswer(callId: session.callId, sdp: answerSDP), to: session.peerUid)
                 }
             } else {
