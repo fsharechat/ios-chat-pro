@@ -100,4 +100,38 @@ final class StoredMessageContentTests: XCTestCase {
         XCTAssertEqual(withMention.mentionedType, 1)
         XCTAssertEqual(withMention.mentionedTargets, ["u2", "u3"])
     }
+
+    func test_callRecordContent_roundTripsThroughInit() {
+        let message = StoredMessage(
+            localMessageId: 1, conversationType: .single, target: "u2", from: "u1",
+            content: .callRecord(callId: "call-1", targetId: "u2", audioOnly: false, status: 0, connectTime: 0, endTime: 0),
+            timestamp: 1000, status: .sending, direction: .send
+        )
+        XCTAssertEqual(message.contentType, .callStart)
+        XCTAssertEqual(message.searchableContent, "[视频通话]")
+        XCTAssertEqual(message.content, .callRecord(callId: "call-1", targetId: "u2", audioOnly: false, status: 0, connectTime: 0, endTime: 0))
+    }
+
+    func test_callRecordContent_audioOnlyUsesVoiceDigest() {
+        let message = StoredMessage(
+            localMessageId: 1, conversationType: .single, target: "u2", from: "u1",
+            content: .callRecord(callId: "call-1", targetId: "u2", audioOnly: true, status: 2, connectTime: 5_000, endTime: 65_000),
+            timestamp: 1000, status: .sent, direction: .send
+        )
+        XCTAssertEqual(message.searchableContent, "[语音通话]")
+        XCTAssertEqual(message.content, .callRecord(callId: "call-1", targetId: "u2", audioOnly: true, status: 2, connectTime: 5_000, endTime: 65_000))
+    }
+
+    func test_textMessage_callFieldsStayAtDefaults() {
+        // A non-call message must not leak stale values into the new
+        // call-record columns — guards the `setContent` refactor in Task 1.
+        let message = StoredMessage(
+            localMessageId: 1, conversationType: .single, target: "u2", from: "u1",
+            content: .text("hi"), timestamp: 1000, status: .sent, direction: .send
+        )
+        XCTAssertEqual(message.callId, nil)
+        XCTAssertEqual(message.callTargetId, nil)
+        XCTAssertEqual(message.callAudioOnly, false)
+        XCTAssertEqual(message.callStatus, 0)
+    }
 }

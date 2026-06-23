@@ -186,6 +186,14 @@ public final class ConversationViewModel {
                 text: renderSystemTipText(type: type, operatorUid: operatorUid, memberUids: memberUids, value: value),
                 timestamp: message.timestamp
             ))
+        case .callRecord:
+            // Placeholder arm only — forced by `MessageContent` gaining this
+            // case in Task 1 (storage representation). The real call-bubble
+            // rendering (digest text, tap-to-callback affordance, etc.) is
+            // Task 10's job; this exists solely to keep this exhaustive
+            // switch compiling until then. Reuses the plain message-row path
+            // with the precomputed `searchableContent` digest as a stopgap.
+            return .message(buildStoredMessageRow(message, text: message.searchableContent, imageThumbnail: nil, imageRemoteURL: nil))
         }
     }
 
@@ -242,7 +250,7 @@ public final class ConversationViewModel {
             return "\(operatorName)修改群名为「\(value ?? "")」"
         case .changeGroupPortrait:
             return "\(operatorName)修改了群头像"
-        case .text, .image:
+        case .text, .image, .callStart:
             return "" // unreachable: makeRow only calls this for .groupNotification content
         }
     }

@@ -44,6 +44,11 @@ public enum MessageContentType: Int, Codable, Equatable {
     case dismissGroup = 108
     case changeGroupName = 110
     case changeGroupPortrait = 112
+    /// Matches Android `cn.wildfirechat.message.CallStartMessageContent`'s
+    /// `ContentType_Call_Start`(400) — the only one of the 6 call-signaling
+    /// types (400-405) that persists/displays as a chat bubble; 401-404 are
+    /// transient and never reach `IMStorage` (see `ReceiveMessageHandler`).
+    case callStart = 400
 }
 
 /// Matches `ProtoConstants.GroupType` (`chat-server-pro`'s

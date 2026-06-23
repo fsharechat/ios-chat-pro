@@ -17,6 +17,13 @@ public enum MessageContent: Equatable {
     /// `.createGroup`/`.addGroupMember`/`.kickoffGroupMember`, empty
     /// otherwise.
     case groupNotification(type: MessageContentType, operatorUid: String, memberUids: [String], value: String?)
+    /// Wire type 400 (`CallStart`, see Phase 3 design doc §2). `status`:
+    /// 0=未接听/1=通话中/2=已结束, matching Android's `CallStartMessageContent`.
+    /// `connectTime`/`endTime` are 0 until the call actually connects/ends —
+    /// `IMCall.CallManager` updates this in place via `MessageStore.updateContent`
+    /// as the call progresses, it is never re-sent over the wire after the
+    /// initial invite.
+    case callRecord(callId: String, targetId: String, audioOnly: Bool, status: Int, connectTime: Int64, endTime: Int64)
 }
 
 public struct StoredMessage: Codable, Equatable, FetchableRecord, MutablePersistableRecord {
@@ -43,6 +50,12 @@ public struct StoredMessage: Codable, Equatable, FetchableRecord, MutablePersist
     public var groupNotificationOperator: String?
     public var groupNotificationMembersRaw: String?
     public var groupNotificationValue: String?
+    public var callId: String?
+    public var callTargetId: String?
+    public var callAudioOnly: Bool
+    public var callStatus: Int
+    public var callConnectTime: Int64
+    public var callEndTime: Int64
 
     public mutating func didInsert(_ inserted: InsertionSuccess) {
         id = inserted.rowID
@@ -61,6 +74,15 @@ public struct StoredMessage: Codable, Equatable, FetchableRecord, MutablePersist
                 operatorUid: groupNotificationOperator ?? "",
                 memberUids: groupNotificationMembers,
                 value: groupNotificationValue
+            )
+        case .callStart:
+            return .callRecord(
+                callId: callId ?? "",
+                targetId: callTargetId ?? "",
+                audioOnly: callAudioOnly,
+                status: callStatus,
+                connectTime: callConnectTime,
+                endTime: callEndTime
             )
         }
     }
@@ -109,6 +131,37 @@ public struct StoredMessage: Codable, Equatable, FetchableRecord, MutablePersist
         self.mentionedType = mentionedType
         self.mentionedTargetsRaw = mentionedTargets.isEmpty ? nil : mentionedTargets.joined(separator: ",")
 
+        // Placeholder values so every stored property has *some* value
+        // before `setContent` (below) assigns the real ones per-case — a
+        // Swift struct init must finish assigning every stored property
+        // before calling any method on `self`, including a mutating one.
+        contentType = .text
+        textContent = nil
+        searchableContent = nil
+        mediaRemoteURL = nil
+        mediaLocalPath = nil
+        mediaThumbnail = nil
+        groupNotificationOperator = nil
+        groupNotificationMembersRaw = nil
+        groupNotificationValue = nil
+        callId = nil
+        callTargetId = nil
+        callAudioOnly = false
+        callStatus = 0
+        callConnectTime = 0
+        callEndTime = 0
+
+        setContent(content)
+    }
+
+    /// Flattens `content` into this row's storage columns, clearing every
+    /// column owned by a *different* content case along the way (so e.g.
+    /// updating a row from `.callRecord` to anything else, or vice versa,
+    /// never leaves a stale value behind from the previous case). Shared by
+    /// `init` (placeholder-then-set, see above) and `MessageStore.updateContent`
+    /// (Task 2), which is the only reason this exists as its own method
+    /// rather than being inlined back into `init`.
+    public mutating func setContent(_ content: MessageContent) {
         switch content {
         case .text(let text):
             contentType = .text
@@ -120,6 +173,12 @@ public struct StoredMessage: Codable, Equatable, FetchableRecord, MutablePersist
             groupNotificationOperator = nil
             groupNotificationMembersRaw = nil
             groupNotificationValue = nil
+            callId = nil
+            callTargetId = nil
+            callAudioOnly = false
+            callStatus = 0
+            callConnectTime = 0
+            callEndTime = 0
         case .image(let thumbnail, let remoteURL, let localPath):
             contentType = .image
             textContent = nil
@@ -130,6 +189,12 @@ public struct StoredMessage: Codable, Equatable, FetchableRecord, MutablePersist
             groupNotificationOperator = nil
             groupNotificationMembersRaw = nil
             groupNotificationValue = nil
+            callId = nil
+            callTargetId = nil
+            callAudioOnly = false
+            callStatus = 0
+            callConnectTime = 0
+            callEndTime = 0
         case .groupNotification(let type, let operatorUid, let memberUids, let value):
             contentType = type
             textContent = nil
@@ -140,6 +205,28 @@ public struct StoredMessage: Codable, Equatable, FetchableRecord, MutablePersist
             groupNotificationOperator = operatorUid
             groupNotificationMembersRaw = memberUids.isEmpty ? nil : memberUids.joined(separator: ",")
             groupNotificationValue = value
+            callId = nil
+            callTargetId = nil
+            callAudioOnly = false
+            callStatus = 0
+            callConnectTime = 0
+            callEndTime = 0
+        case .callRecord(let callId, let targetId, let audioOnly, let status, let connectTime, let endTime):
+            contentType = .callStart
+            textContent = nil
+            searchableContent = audioOnly ? "[语音通话]" : "[视频通话]"
+            mediaRemoteURL = nil
+            mediaLocalPath = nil
+            mediaThumbnail = nil
+            groupNotificationOperator = nil
+            groupNotificationMembersRaw = nil
+            groupNotificationValue = nil
+            self.callId = callId
+            self.callTargetId = targetId
+            self.callAudioOnly = audioOnly
+            self.callStatus = status
+            self.callConnectTime = connectTime
+            self.callEndTime = endTime
         }
     }
 }

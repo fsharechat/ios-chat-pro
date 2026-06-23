@@ -56,6 +56,13 @@ public enum MessageContentCodec {
             // at its default (text=0-equivalent) value if this is ever
             // called.
             wire.type = Int32(type.rawValue)
+        case .callRecord:
+            // Placeholder arm only — forced by `MessageContent` gaining this
+            // case in Task 1 (storage representation). The real wire
+            // mapping (`searchableContent`=callId, `data`=JSON payload) is
+            // Task 3's job; this exists solely to keep this exhaustive
+            // switch compiling until then.
+            wire.type = Int32(MessageContentType.callStart.rawValue)
         }
         if mentionedType != 0 {
             wire.mentionedType = mentionedType
@@ -117,7 +124,7 @@ public enum MessageContentCodec {
             return .groupNotification(type: type, operatorUid: parsed.o ?? "", memberUids: [], value: parsed.n)
         case .dismissGroup, .changeGroupPortrait:
             return .groupNotification(type: type, operatorUid: parsed.o ?? "", memberUids: [], value: nil)
-        case .text, .image, .quitGroup:
+        case .text, .image, .quitGroup, .callStart:
             return .groupNotification(type: type, operatorUid: parsed.o ?? "", memberUids: [], value: nil) // unreachable
         }
     }

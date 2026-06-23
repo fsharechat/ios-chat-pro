@@ -142,6 +142,16 @@ public final class IMDatabase {
                 t.add(column: "unreadMentionCount", .integer).notNull().defaults(to: 0)
             }
         }
+        migrator.registerMigration("v5_addCallRecord") { db in
+            try db.alter(table: "message") { t in
+                t.add(column: "callId", .text)
+                t.add(column: "callTargetId", .text)
+                t.add(column: "callAudioOnly", .boolean).notNull().defaults(to: false)
+                t.add(column: "callStatus", .integer).notNull().defaults(to: 0)
+                t.add(column: "callConnectTime", .integer).notNull().defaults(to: 0)
+                t.add(column: "callEndTime", .integer).notNull().defaults(to: 0)
+            }
+        }
         return migrator
     }
 }
