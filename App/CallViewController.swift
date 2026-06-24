@@ -29,11 +29,20 @@ final class CallViewController: UIViewController {
     private let hangUpButton = CallControlButton(systemImageName: "phone.down.fill", backgroundColor: .systemRed)
     private var isMuted = false
     private var isSpeakerOn = false
+    /// Captured once at construction time, before any toggle could have
+    /// happened — `callManager.audioOnly` at this instant is still the
+    /// call's original mode. `toggleVideoButton` only ever does anything
+    /// for a call that started with video (see `CallManager.setAudioOnly`'s
+    /// doc comment: turning video on mid-call requires SDP renegotiation
+    /// that isn't implemented), so a call that started audio-only never
+    /// shows it at all — there'd be nothing for the user to tap into.
+    private let startedAsVideo: Bool
 
     init(callManager: CallManager, webRTCClient: WebRTCClient, peerDisplayName: String) {
         self.callManager = callManager
         self.webRTCClient = webRTCClient
         self.peerDisplayName = peerDisplayName
+        self.startedAsVideo = !callManager.audioOnly
         super.init(nibName: nil, bundle: nil)
         modalPresentationStyle = .fullScreen
     }
@@ -144,6 +153,10 @@ final class CallViewController: UIViewController {
     }
 
     private func applyState(_ state: CallState) {
+        // `toggleVideoButton` only ever does something once media is live
+        // (`CallManager.setAudioOnly`'s own state gate), and only for a
+        // call that started with video — see `startedAsVideo`'s doc comment.
+        toggleVideoButton.isHidden = !startedAsVideo || (state != .connecting && state != .connected)
         switch state {
         case .idle:
             durationTimer?.invalidate()

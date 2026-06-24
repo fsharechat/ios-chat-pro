@@ -416,6 +416,43 @@ final class CallManagerTests: XCTestCase {
         XCTAssertTrue(mediaEngine.audioOnlyCalls.isEmpty)
     }
 
+    func test_setAudioOnly_turningVideoBackOn_whenCallStartedAsVideo_succeeds() throws {
+        // The call started with video (audioOnly: false), so WebRTCClient
+        // already created a video track/capturer to re-enable — turning
+        // it off then back on is just toggling that existing track.
+        try manager.startCall(to: "them", audioOnly: false)
+        let callId = callIdFromLastCallStart()
+        try deliverSignal(.answer(callId: callId, audioOnly: false), from: "them")
+        mediaEngine.simulateConnected()
+
+        try manager.setAudioOnly(true) // turn video off
+        try manager.setAudioOnly(false) // turn it back on
+
+        XCTAssertEqual(manager.audioOnly, false)
+        XCTAssertEqual(mediaEngine.audioOnlyCalls, [true, false])
+        let messages = try sentWireMessages()
+        XCTAssertTrue(messages.contains { CallSignalCodec.decode($0) == .modify(callId: callId, audioOnly: false) })
+    }
+
+    func test_setAudioOnly_turningVideoOn_whenCallStartedAsAudioOnly_isANoOp() throws {
+        // The call started audio-only, so WebRTCClient never created a
+        // video track/capturer — there is nothing to re-enable, and
+        // upgrading to video would require SDP renegotiation this method
+        // doesn't do. Must no-op rather than flip `audioOnly`/notify the
+        // peer for a switch that wouldn't actually produce video.
+        try manager.startCall(to: "them", audioOnly: true)
+        let callId = callIdFromLastCallStart()
+        try deliverSignal(.answer(callId: callId, audioOnly: true), from: "them")
+        mediaEngine.simulateConnected()
+        let countBefore = try sentWireMessages().count
+
+        try manager.setAudioOnly(false)
+
+        XCTAssertEqual(manager.audioOnly, true) // unchanged
+        XCTAssertTrue(mediaEngine.audioOnlyCalls.isEmpty)
+        XCTAssertEqual(try sentWireMessages().count, countBefore)
+    }
+
     // MARK: - Helpers
 
     private func callIdFromLastCallStart() -> String {

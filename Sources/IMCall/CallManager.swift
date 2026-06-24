@@ -139,8 +139,20 @@ public final class CallManager {
 
     // MARK: - Mid-call controls
 
+    /// Turning video *off* mid-call always works (disables the already-
+    /// existing local video track). Turning it back *on* only works if
+    /// this call had video from the start (`!session.audioOnly` — that
+    /// field holds the call's original mode, set once at `startCall`/
+    /// `acceptIncomingCall` and never mutated by this method, see
+    /// `CallSession`), because that's the only case `WebRTCClient` already
+    /// created a video track/capturer to re-enable. Upgrading an
+    /// audio-only call to video mid-call would require renegotiating a new
+    /// SDP offer with a video track added — not implemented; this method
+    /// silently no-ops that direction rather than flipping `audioOnly`/
+    /// notifying the peer for a switch that wouldn't actually produce video.
     public func setAudioOnly(_ audioOnly: Bool) throws {
         guard let session, state == .connecting || state == .connected else { return }
+        guard audioOnly || !session.audioOnly else { return }
         try sendSignal(.modify(callId: session.callId, audioOnly: audioOnly), to: session.peerUid)
         self.audioOnly = audioOnly
         mediaEngine.setAudioOnly(audioOnly)
