@@ -35,6 +35,12 @@ public final class CallManager {
     /// call screen, CallKit adapter reports the end.
     public var onCallEnded: ((CallEndReason) -> Void)?
 
+    /// Set by the App target after constructing both this `CallManager`
+    /// and its `CallKitProvider` — `nil` is a valid state (e.g. in every
+    /// `CallManagerTests` test that doesn't explicitly set
+    /// `FakeCallKitAdapter`), every call site below uses optional chaining.
+    public var callKitAdapter: CallKitAdapting?
+
     private static let answerTimeoutSeconds: TimeInterval = 60
     private static let connectingTimeoutSeconds: TimeInterval = 60
 
@@ -93,6 +99,7 @@ public final class CallManager {
         self.audioOnly = audioOnly
         self.peerUid = peerUid
         state = .outgoing
+        callKitAdapter?.reportOutgoingCallStarted(callId: callId)
 
         mediaEngine.start(audioOnly: audioOnly)
         mediaEngine.createOffer { [weak self] sdp in
@@ -202,6 +209,7 @@ public final class CallManager {
         peerUid = callerUid
         state = .incoming
         startAnswerTimeoutTimer()
+        callKitAdapter?.reportIncomingCall(callId: callId, callerName: callerUid, audioOnly: audioOnly, completion: { _ in })
         onIncomingCall?(callerUid, audioOnly)
     }
 
@@ -213,6 +221,7 @@ public final class CallManager {
         state = .connected
         session?.connectTime = nowMillis()
         updateCallBubble(status: 1, endTime: 0)
+        if let session { callKitAdapter?.reportConnected(callId: session.callId) }
     }
 
     private func handleMediaDisconnected() {
@@ -245,6 +254,7 @@ public final class CallManager {
     private func endSession(reason: CallEndReason) {
         answerTimeoutToken?.cancel()
         connectingTimeoutToken?.cancel()
+        if let session { callKitAdapter?.reportCallEnded(callId: session.callId, reason: reason) }
         updateCallBubble(status: 2, endTime: nowMillis())
         mediaEngine.close()
         session = nil

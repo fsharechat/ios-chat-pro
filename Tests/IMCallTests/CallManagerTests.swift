@@ -15,6 +15,7 @@ final class CallManagerTests: XCTestCase {
     private var messagingService: MessagingService!
     private var mediaEngine: FakeMediaEngine!
     private var manager: CallManager!
+    private var callKitAdapter: FakeCallKitAdapter!
 
     override func setUpWithError() throws {
         try super.setUpWithError()
@@ -33,6 +34,8 @@ final class CallManagerTests: XCTestCase {
 
         mediaEngine = FakeMediaEngine()
         manager = CallManager(messagingService: messagingService, storage: storage, mediaEngine: mediaEngine, scheduler: scheduler, myUserId: { "me" })
+        callKitAdapter = FakeCallKitAdapter()
+        manager.callKitAdapter = callKitAdapter
     }
 
     private func sentWireMessages() throws -> [Im_Message] {
@@ -327,6 +330,38 @@ final class CallManagerTests: XCTestCase {
         } else {
             XCTFail("expected the abandoned outgoing call's bubble to still be a callRecord")
         }
+    }
+
+    func test_startCall_reportsOutgoingCallStartedToCallKit() throws {
+        try manager.startCall(to: "them", audioOnly: false)
+        XCTAssertEqual(callKitAdapter.reportedOutgoingStarted, [callIdFromLastCallStart()])
+    }
+
+    func test_incomingCallStart_reportsIncomingCallToCallKit() throws {
+        try deliverCallStart(callId: "call-incoming-1", audioOnly: true, from: "them")
+        XCTAssertEqual(callKitAdapter.reportedIncomingCalls.first?.callId, "call-incoming-1")
+        XCTAssertEqual(callKitAdapter.reportedIncomingCalls.first?.callerName, "them")
+        XCTAssertEqual(callKitAdapter.reportedIncomingCalls.first?.audioOnly, true)
+    }
+
+    func test_mediaEngineConnected_reportsConnectedToCallKit() throws {
+        try manager.startCall(to: "them", audioOnly: false)
+        let callId = callIdFromLastCallStart()
+        try deliverSignal(.answer(callId: callId, audioOnly: false), from: "them")
+
+        mediaEngine.simulateConnected()
+
+        XCTAssertEqual(callKitAdapter.reportedConnected, [callId])
+    }
+
+    func test_hangUp_reportsCallEndedToCallKit() throws {
+        try manager.startCall(to: "them", audioOnly: false)
+        let callId = callIdFromLastCallStart()
+
+        try manager.hangUp()
+
+        XCTAssertEqual(callKitAdapter.reportedEnded.first?.callId, callId)
+        XCTAssertEqual(callKitAdapter.reportedEnded.first?.reason, .localHangup)
     }
 
     // MARK: - Helpers

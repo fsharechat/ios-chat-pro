@@ -28,6 +28,7 @@
 		9E209FB56ACB4975796F5B20 /* AppCore in Frameworks */ = {isa = PBXBuildFile; productRef = AF6EC4831921C0CD2F8F91AD /* AppCore */; };
 		A1611CC727D61FF89025CA77 /* IMClient in Frameworks */ = {isa = PBXBuildFile; productRef = 99257818497BC42EED99DC6C /* IMClient */; };
 		AC4CF93C08183929C472085A /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93FA326C9B762DCAB590F502 /* AppDelegate.swift */; };
+		C11B3CC6453FDBCA1FAEEB3A /* CallKitProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD09A292E1A246B595416DC6 /* CallKitProvider.swift */; };
 		D91AD4CA3FBFB2F6A396A9DE /* NewFriendsViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0832B3942D777D6A0D67E100 /* NewFriendsViewController.swift */; };
 		D91FAF18E648543CFB927ED6 /* ConversationListCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60C53CDF7ECE24AB7925139E /* ConversationListCell.swift */; };
 		DD3207003DBDA1B1CC3ED7CE /* ImagePreviewViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B7725E347391300F698E8D6 /* ImagePreviewViewController.swift */; };
@@ -61,6 +62,7 @@
 		93FA326C9B762DCAB590F502 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		A0E388EB556B39D1EFCF7DEA /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
 		A2304C4B950D810E9C549F1C /* phase3-av-call */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "phase3-av-call"; path = .; sourceTree = SOURCE_ROOT; };
+		BD09A292E1A246B595416DC6 /* CallKitProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CallKitProvider.swift; sourceTree = "<group>"; };
 		E3FE0167E8E8C013706DF83B /* ConversationListViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationListViewController.swift; sourceTree = "<group>"; };
 		E4F8B269AD818644389D362C /* FriendRequestCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FriendRequestCell.swift; sourceTree = "<group>"; };
 		E696B814AB99A34483A11EA8 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
@@ -115,6 +117,7 @@
 				929AC72577A219C38775E51D /* AddGroupMemberViewController.swift */,
 				93FA326C9B762DCAB590F502 /* AppDelegate.swift */,
 				5ACDCE0BC8F9E8EF7A77D603 /* AvatarImageView.swift */,
+				BD09A292E1A246B595416DC6 /* CallKitProvider.swift */,
 				F8EB6D5DBC0051B5D576A085 /* ContactListCell.swift */,
 				8DFDF68D07E4AD79AFB0B169 /* ContactListViewController.swift */,
 				60C53CDF7ECE24AB7925139E /* ConversationListCell.swift */,
@@ -208,6 +211,7 @@
 				92EE14C2D330B858ECE87B6C /* AddGroupMemberViewController.swift in Sources */,
 				AC4CF93C08183929C472085A /* AppDelegate.swift in Sources */,
 				2B03B7D44659C520AEFC917E /* AvatarImageView.swift in Sources */,
+				C11B3CC6453FDBCA1FAEEB3A /* CallKitProvider.swift in Sources */,
 				7AB9633A25E6AFDC3D82E429 /* ContactListCell.swift in Sources */,
 				951AC39EF02FC7F336FCCFCB /* ContactListViewController.swift in Sources */,
 				D91FAF18E648543CFB927ED6 /* ConversationListCell.swift in Sources */,
