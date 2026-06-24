@@ -1,3 +1,4 @@
+import AVFoundation
 import WebRTC
 
 /// Plain ICE/TURN server config — defined here rather than reusing
@@ -65,6 +66,8 @@ public final class WebRTCClient: NSObject, MediaEngine {
     }
 
     public func start(audioOnly: Bool) {
+        configureAudioSession()
+
         let configuration = RTCConfiguration()
         configuration.iceServers = iceServers.map {
             RTCIceServer(urlStrings: [$0.urlString], username: $0.username, credential: $0.credential)
@@ -89,6 +92,20 @@ public final class WebRTCClient: NSObject, MediaEngine {
             connection.add(videoTrack, streamIds: ["stream0"])
             startCapture(front: true)
         }
+    }
+
+    /// Without this, `setMuted`/the in-call screen's speaker toggle
+    /// (`AVAudioSession.overrideOutputAudioPort`) silently no-op: that API
+    /// only takes effect on a session already in `.playAndRecord` — the
+    /// default category does nothing of the sort, and nothing else in this
+    /// codebase configures it. `.voiceChat` mode is Apple's recommended
+    /// mode for this exact case (gives WebRTC's own audio unit the routing
+    /// behavior VoIP calls expect — echo cancellation, automatic
+    /// receiver/speaker switching — for free).
+    private func configureAudioSession() {
+        let session = AVAudioSession.sharedInstance()
+        try? session.setCategory(.playAndRecord, mode: .voiceChat, options: [.allowBluetooth, .allowBluetoothA2DP])
+        try? session.setActive(true)
     }
 
     /// Front camera by default — matches the chosen in-call UI (design doc
@@ -167,6 +184,10 @@ public final class WebRTCClient: NSObject, MediaEngine {
         // `guard !hasReportedConnected` permanently suppress `onConnected`
         // for every subsequent call after the first one in a session.
         hasReportedConnected = false
+        // Deactivate with `.notifyOthersOnDeactivation` so apps that were
+        // ducked/interrupted by `configureAudioSession`'s `.playAndRecord`
+        // activation (e.g. background music) get a chance to resume.
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
 }
 

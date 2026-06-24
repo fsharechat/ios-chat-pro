@@ -40,6 +40,15 @@ final class CallViewController: UIViewController {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
 
+    deinit {
+        // Defensive: the only wired-up dismissal path already invalidates
+        // this via `applyState(.idle)`, but don't rely on that being the
+        // only way this VC ever goes away — a repeating `Timer` left
+        // running with no owner is a real leak regardless of how harmless
+        // it looks today.
+        durationTimer?.invalidate()
+    }
+
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .black
