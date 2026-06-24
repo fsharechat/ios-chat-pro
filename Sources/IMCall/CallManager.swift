@@ -190,6 +190,14 @@ public final class CallManager {
             } else {
                 answerTimeoutToken?.cancel()
                 updateCallBubble(status: 2, endTime: nowMillis())
+                // Must report the abandoned outgoing call's end to CallKit
+                // *before* `acceptIncomingCall` overwrites it with the new
+                // incoming call below — `CallKitProvider` tracks only one
+                // call's UUID at a time, so without this it would silently
+                // drop the old call from CallKit's ledger as a dangling,
+                // never-ended system call instead of properly retiring it
+                // (the same bug class as the bubble-staleness fix above).
+                callKitAdapter?.reportCallEnded(callId: session.callId, reason: .localHangup)
                 acceptIncomingCall(callId: callId, callerUid: callerUid, audioOnly: audioOnlyFlag, localMessageRowId: message.id)
                 return
             }

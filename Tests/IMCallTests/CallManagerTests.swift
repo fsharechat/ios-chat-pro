@@ -314,7 +314,10 @@ final class CallManagerTests: XCTestCase {
     func test_glare_myUidLarger_abandonsMyOutgoingAndAcceptsTheirs() throws {
         // "me" > "a" lexicographically — I lose, and accept their call instead.
         let losingManager = CallManager(messagingService: messagingService, storage: storage, mediaEngine: mediaEngine, scheduler: scheduler, myUserId: { "me" })
+        let losingManagerCallKitAdapter = FakeCallKitAdapter()
+        losingManager.callKitAdapter = losingManagerCallKitAdapter
         try losingManager.startCall(to: "a", audioOnly: false)
+        let abandonedCallId = losingManagerCallKitAdapter.reportedOutgoingStarted.first!
         var capturedPeer: String?
         losingManager.onIncomingCall = { peer, _ in capturedPeer = peer }
 
@@ -330,6 +333,14 @@ final class CallManagerTests: XCTestCase {
         } else {
             XCTFail("expected the abandoned outgoing call's bubble to still be a callRecord")
         }
+
+        // The abandoned outgoing call must also be retired in CallKit's own
+        // ledger before the new incoming call overwrites the adapter's
+        // single-call tracking — otherwise it's left as a dangling,
+        // never-ended system call.
+        XCTAssertEqual(losingManagerCallKitAdapter.reportedEnded.first?.callId, abandonedCallId)
+        XCTAssertEqual(losingManagerCallKitAdapter.reportedEnded.first?.reason, .localHangup)
+        XCTAssertEqual(losingManagerCallKitAdapter.reportedIncomingCalls.first?.callId, "their-call-id")
     }
 
     func test_startCall_reportsOutgoingCallStartedToCallKit() throws {
