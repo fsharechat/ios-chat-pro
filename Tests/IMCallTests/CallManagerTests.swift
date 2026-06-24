@@ -397,6 +397,8 @@ final class CallManagerTests: XCTestCase {
         try manager.setAudioOnly(true)
 
         XCTAssertEqual(manager.audioOnly, true)
+        let messages = try sentWireMessages()
+        XCTAssertTrue(messages.contains { CallSignalCodec.decode($0) == .modify(callId: callId, audioOnly: true) })
     }
 
     func test_setAudioOnly_whileIdle_isANoOp() throws {
