@@ -256,12 +256,20 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             .store(in: &cancellables)
     }
 
-    /// Presents `CallViewController` full-screen the moment a call starts
-    /// (either `.outgoing` from tapping the call button below, or
-    /// `.incoming` from `CallKitProvider.reportIncomingCall`'s completion
-    /// firing `CallManager.onIncomingCall`), and dismisses it once the call
-    /// returns to `.idle`. One screen for the whole call lifecycle — see
-    /// `CallViewController`'s own header comment for why.
+    /// Presents `CallViewController` full-screen once a call is actually
+    /// answered, and dismisses it once the call returns to `.idle`. One
+    /// screen for the whole call lifecycle — see `CallViewController`'s own
+    /// header comment for why.
+    ///
+    /// Deliberately does **not** present on `.incoming` — `CallManager.state`
+    /// flips to `.incoming` synchronously (this `sink` runs) before
+    /// `CallKitAdapting.reportIncomingCall` even calls
+    /// `CXProvider.reportNewIncomingCall`, so presenting here would race the
+    /// system incoming-call UI, or briefly show our screen first. `.outgoing`
+    /// has no competing system UI (`CallKitProvider.reportOutgoingCallStarted`
+    /// reports no ringing UI), so it presents immediately; `.connecting`
+    /// covers the incoming-call case — by the time a call reaches it, the
+    /// user has already answered via the system UI, which is dismissing.
     private func handleCallStateChange(_ state: IMCall.CallState) {
         guard let callManager = environment.callManager else { return }
         if state == .idle {
@@ -269,10 +277,25 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             presentedCallViewController = nil
             return
         }
+        guard state == .outgoing || state == .connecting else { return }
         guard presentedCallViewController == nil, let webRTCClient = environment.webRTCClient, let peerUid = callManager.peerUid else { return }
         let displayName = (try? environment.storage.users.user(uid: peerUid))?.displayName ?? peerUid
         let callViewController = CallViewController(callManager: callManager, webRTCClient: webRTCClient, peerDisplayName: displayName)
         presentedCallViewController = callViewController
-        window?.rootViewController?.present(callViewController, animated: true)
+        // Present from whatever's actually on top, not blindly from the
+        // root — a call must be able to interrupt any other modal flow
+        // (e.g. `CreateGroupViewController`/`AddGroupMemberViewController`)
+        // already presented, or `UIKit` silently drops the presentation and
+        // this VC would never appear despite `presentedCallViewController`
+        // being set (permanently blocking this guard for the rest of the call).
+        topmostPresentedViewController()?.present(callViewController, animated: true)
+    }
+
+    private func topmostPresentedViewController() -> UIViewController? {
+        var top = window?.rootViewController
+        while let presented = top?.presentedViewController {
+            top = presented
+        }
+        return top
     }
 }
