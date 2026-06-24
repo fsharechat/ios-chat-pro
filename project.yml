@@ -6,6 +6,13 @@ options:
 packages:
   IMCore:
     path: .
+  # `App` needs `import WebRTC` directly (for `RTCMTLVideoView`), not just
+  # transitively through `IMCall` — pinned to the same exact version as
+  # `Package.swift`'s `IMCall` target dependency so both resolve to one
+  # checkout, not two diverging ones.
+  WebRTC:
+    url: https://github.com/stasel/WebRTC.git
+    exactVersion: 149.0.0
 targets:
   App:
     type: application
@@ -48,6 +55,8 @@ targets:
         product: IMKit
       - package: IMCore
         product: IMCall
+      - package: WebRTC
+        product: WebRTC
 schemes:
   App:
     build:
