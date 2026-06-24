@@ -25,6 +25,7 @@ final class CallViewController: UIViewController {
     private let muteButton = CallControlButton(systemImageName: "mic.slash.fill")
     private let speakerButton = CallControlButton(systemImageName: "speaker.wave.2.fill")
     private let switchCameraButton = CallControlButton(systemImageName: "camera.rotate.fill")
+    private let toggleVideoButton = CallControlButton(systemImageName: "video.fill")
     private let hangUpButton = CallControlButton(systemImageName: "phone.down.fill", backgroundColor: .systemRed)
     private var isMuted = false
     private var isSpeakerOn = false
@@ -77,9 +78,10 @@ final class CallViewController: UIViewController {
         muteButton.addTarget(self, action: #selector(muteTapped), for: .touchUpInside)
         speakerButton.addTarget(self, action: #selector(speakerTapped), for: .touchUpInside)
         switchCameraButton.addTarget(self, action: #selector(switchCameraTapped), for: .touchUpInside)
+        toggleVideoButton.addTarget(self, action: #selector(toggleVideoTapped), for: .touchUpInside)
         hangUpButton.addTarget(self, action: #selector(hangUpTapped), for: .touchUpInside)
 
-        let controlBar = UIStackView(arrangedSubviews: [muteButton, switchCameraButton, hangUpButton, speakerButton])
+        let controlBar = UIStackView(arrangedSubviews: [muteButton, switchCameraButton, toggleVideoButton, hangUpButton, speakerButton])
         controlBar.axis = .horizontal
         controlBar.distribution = .equalSpacing
         controlBar.alignment = .center
@@ -136,6 +138,7 @@ final class CallViewController: UIViewController {
                 self?.localVideoView.isHidden = audioOnly
                 self?.avatarView.isHidden = !audioOnly
                 self?.switchCameraButton.isHidden = audioOnly
+                self?.toggleVideoButton.setImage(UIImage(systemName: audioOnly ? "video.fill" : "video.slash.fill"), for: .normal)
             }
             .store(in: &cancellables)
     }
@@ -191,6 +194,10 @@ final class CallViewController: UIViewController {
 
     @objc private func switchCameraTapped() {
         webRTCClient.switchCamera()
+    }
+
+    @objc private func toggleVideoTapped() {
+        try? callManager.setAudioOnly(!callManager.audioOnly)
     }
 
     @objc private func hangUpTapped() {
