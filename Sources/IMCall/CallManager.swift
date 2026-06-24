@@ -183,6 +183,14 @@ public final class CallManager {
         case .iceCandidate(_, let index, let mid, let candidate):
             mediaEngine.addRemoteCandidate(sdpMLineIndex: index, sdpMid: mid, candidate: candidate)
         case .modify(_, let newAudioOnly):
+            // Mirrors `setAudioOnly`'s own gate — a peer asking to turn
+            // video ON for a call *this device* started audio-only would
+            // hit the same nil-track no-op in `WebRTCClient` (no SDP
+            // renegotiation either side), but here there'd be nothing
+            // stopping `self.audioOnly`/the UI from flipping anyway, since
+            // this path runs regardless of what the peer sends. Ignore a
+            // turn-on request this side can't actually honor.
+            guard newAudioOnly || !(session?.audioOnly ?? true) else { return }
             self.audioOnly = newAudioOnly
             mediaEngine.setAudioOnly(newAudioOnly)
         }

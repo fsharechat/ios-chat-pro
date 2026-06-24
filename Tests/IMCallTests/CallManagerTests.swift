@@ -453,6 +453,35 @@ final class CallManagerTests: XCTestCase {
         XCTAssertEqual(try sentWireMessages().count, countBefore)
     }
 
+    func test_receivingModify_turnVideoOff_appliesLocally() throws {
+        try manager.startCall(to: "them", audioOnly: false)
+        let callId = callIdFromLastCallStart()
+        try deliverSignal(.answer(callId: callId, audioOnly: false), from: "them")
+        mediaEngine.simulateConnected()
+
+        try deliverSignal(.modify(callId: callId, audioOnly: true), from: "them")
+
+        XCTAssertEqual(manager.audioOnly, true)
+        XCTAssertEqual(mediaEngine.audioOnlyCalls, [true])
+    }
+
+    func test_receivingModify_turnVideoOn_whenCallStartedAsAudioOnly_isIgnored() throws {
+        // Same gate as `setAudioOnly`, mirrored for the inbound direction:
+        // a peer asking this side to turn video on for a call *this
+        // device* started audio-only would hit the same nil-track no-op
+        // in `WebRTCClient` — ignore it rather than flipping `audioOnly`/
+        // the UI for a switch that wouldn't actually produce video.
+        try manager.startCall(to: "them", audioOnly: true)
+        let callId = callIdFromLastCallStart()
+        try deliverSignal(.answer(callId: callId, audioOnly: true), from: "them")
+        mediaEngine.simulateConnected()
+
+        try deliverSignal(.modify(callId: callId, audioOnly: false), from: "them")
+
+        XCTAssertEqual(manager.audioOnly, true) // unchanged
+        XCTAssertTrue(mediaEngine.audioOnlyCalls.isEmpty)
+    }
+
     // MARK: - Helpers
 
     private func callIdFromLastCallStart() -> String {
