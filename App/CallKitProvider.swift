@@ -104,6 +104,12 @@ extension CallKitProvider: CXProviderDelegate {
         let audioOnly = callManager?.audioOnly ?? true
         CallPermissions.ensureAuthorized(audioOnly: audioOnly) { [weak self] authorized in
             guard authorized else {
+                // `reject()` (via `hangUp`/`endSession`) already reports
+                // this call's end through `reportCallEnded` — that's the
+                // independent "what happened to the call" channel.
+                // `action.fail()` here is a separate acknowledgement that
+                // resolves *this pending `CXAnswerCallAction`*, not a
+                // second end-of-call report; both are expected to fire.
                 try? self?.callManager?.reject()
                 action.fail()
                 return
