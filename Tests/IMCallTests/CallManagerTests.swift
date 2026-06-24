@@ -375,6 +375,45 @@ final class CallManagerTests: XCTestCase {
         XCTAssertEqual(callKitAdapter.reportedEnded.first?.reason, .localHangup)
     }
 
+    func test_setAudioOnly_whileConnected_sendsModifySignalAndUpdatesLocalStateAndMediaEngine() throws {
+        try manager.startCall(to: "them", audioOnly: false)
+        let callId = callIdFromLastCallStart()
+        try deliverSignal(.answer(callId: callId, audioOnly: false), from: "them")
+        mediaEngine.simulateConnected()
+
+        try manager.setAudioOnly(true)
+
+        XCTAssertEqual(manager.audioOnly, true)
+        XCTAssertEqual(mediaEngine.audioOnlyCalls, [true])
+        let messages = try sentWireMessages()
+        XCTAssertTrue(messages.contains { CallSignalCodec.decode($0) == .modify(callId: callId, audioOnly: true) })
+    }
+
+    func test_setAudioOnly_whileConnecting_sendsModifySignal() throws {
+        try manager.startCall(to: "them", audioOnly: false)
+        let callId = callIdFromLastCallStart()
+        try deliverSignal(.answer(callId: callId, audioOnly: false), from: "them")
+
+        try manager.setAudioOnly(true)
+
+        XCTAssertEqual(manager.audioOnly, true)
+    }
+
+    func test_setAudioOnly_whileIdle_isANoOp() throws {
+        XCTAssertNoThrow(try manager.setAudioOnly(true))
+        XCTAssertEqual(manager.audioOnly, false)
+        XCTAssertTrue(mediaEngine.audioOnlyCalls.isEmpty)
+    }
+
+    func test_setAudioOnly_whileOutgoing_isANoOp() throws {
+        try manager.startCall(to: "them", audioOnly: false)
+
+        XCTAssertNoThrow(try manager.setAudioOnly(true))
+
+        XCTAssertEqual(manager.audioOnly, false) // unchanged — answer hasn't arrived yet
+        XCTAssertTrue(mediaEngine.audioOnlyCalls.isEmpty)
+    }
+
     // MARK: - Helpers
 
     private func callIdFromLastCallStart() -> String {

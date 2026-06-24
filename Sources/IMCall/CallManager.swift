@@ -137,6 +137,15 @@ public final class CallManager {
         endSession(reason: reason)
     }
 
+    // MARK: - Mid-call controls
+
+    public func setAudioOnly(_ audioOnly: Bool) throws {
+        guard let session, state == .connecting || state == .connected else { return }
+        try sendSignal(.modify(callId: session.callId, audioOnly: audioOnly), to: session.peerUid)
+        self.audioOnly = audioOnly
+        mediaEngine.setAudioOnly(audioOnly)
+    }
+
     // MARK: - Incoming signal dispatch (401-404 via `MessagingService.onCallSignal`)
 
     private func handleIncomingSignal(_ wireMessage: Im_Message) {
