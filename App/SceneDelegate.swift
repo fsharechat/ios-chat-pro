@@ -79,7 +79,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             let conversationViewController = ConversationViewController(row: row, viewModel: conversationViewModel)
             self.wireGroupInfoNavigation(on: conversationViewController, groupId: row.target)
             conversationViewController.onCallTapped = { [weak self] audioOnly in
-                try? self?.environment.callManager?.startCall(to: row.target, audioOnly: audioOnly)
+                self?.startCallIfAuthorized(to: row.target, audioOnly: audioOnly)
             }
             listViewController?.navigationController?.pushViewController(conversationViewController, animated: true)
         }
@@ -192,7 +192,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             )
             let conversationViewController = ConversationViewController(row: conversationRow, viewModel: conversationViewModel)
             conversationViewController.onCallTapped = { [weak self] audioOnly in
-                try? self?.environment.callManager?.startCall(to: row.uid, audioOnly: audioOnly)
+                self?.startCallIfAuthorized(to: row.uid, audioOnly: audioOnly)
             }
             listViewController?.navigationController?.pushViewController(
                 conversationViewController,
@@ -297,5 +297,37 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             top = presented
         }
         return top
+    }
+
+    /// Gates `CallManager.startCall` on the design spec's permission check
+    /// (§5 edge-case table) — denied mic/camera access must redirect to
+    /// Settings and must NOT enter the dialing state, so `startCall` is only
+    /// reached in the `true` branch below.
+    private func startCallIfAuthorized(to peerUid: String, audioOnly: Bool) {
+        CallPermissions.ensureAuthorized(audioOnly: audioOnly) { [weak self] authorized in
+            guard let self else { return }
+            guard authorized else {
+                self.presentPermissionDeniedAlert(audioOnly: audioOnly)
+                return
+            }
+            try? self.environment.callManager?.startCall(to: peerUid, audioOnly: audioOnly)
+        }
+    }
+
+    /// Presented instead of starting the call when `CallPermissions`
+    /// reports the mic (or, for video calls, camera) is not authorized —
+    /// since the system never re-prompts once denied, the only way forward
+    /// is the Settings app.
+    private func presentPermissionDeniedAlert(audioOnly: Bool) {
+        let message = audioOnly
+            ? "需要访问麦克风才能进行语音通话,请前往系统设置开启权限"
+            : "需要访问麦克风和摄像头才能进行视频通话,请前往系统设置开启权限"
+        let alert = UIAlertController(title: "无法发起通话", message: message, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "取消", style: .cancel))
+        alert.addAction(UIAlertAction(title: "前往设置", style: .default) { _ in
+            guard let settingsURL = URL(string: UIApplication.openSettingsURLString) else { return }
+            UIApplication.shared.open(settingsURL)
+        })
+        topmostPresentedViewController()?.present(alert, animated: true)
     }
 }

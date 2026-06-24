@@ -86,8 +86,31 @@ extension CallKitProvider: CXProviderDelegate {
     }
 
     func provider(_ provider: CXProvider, perform action: CXAnswerCallAction) {
-        try? callManager?.answer()
-        action.fulfill()
+        // Design spec §5's edge-case table requires checking mic/camera
+        // permission before entering the dialing/answering state. Unlike
+        // the outgoing path in `SceneDelegate` (which can present a rich
+        // "go to Settings" alert from a normal view controller), this fires
+        // mid-`CXProviderDelegate` callback with no reasonable view
+        // controller to present from. So the asymmetry is deliberate:
+        // outgoing calls get a Settings-redirect alert, incoming calls get
+        // a graceful auto-decline instead of answering into a broken
+        // audio/video state.
+        //
+        // `callManager?.audioOnly` reflects the just-accepted incoming
+        // call's actual flag (set in `CallManager.acceptIncomingCall`
+        // before `state` becomes `.incoming`), so this checks exactly the
+        // permissions this call needs — no need to over-ask for camera on
+        // an audio-only call.
+        let audioOnly = callManager?.audioOnly ?? true
+        CallPermissions.ensureAuthorized(audioOnly: audioOnly) { [weak self] authorized in
+            guard authorized else {
+                try? self?.callManager?.reject()
+                action.fail()
+                return
+            }
+            try? self?.callManager?.answer()
+            action.fulfill()
+        }
     }
 
     func provider(_ provider: CXProvider, perform action: CXEndCallAction) {

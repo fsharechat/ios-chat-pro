@@ -29,6 +29,7 @@
 		9E209FB56ACB4975796F5B20 /* AppCore in Frameworks */ = {isa = PBXBuildFile; productRef = AF6EC4831921C0CD2F8F91AD /* AppCore */; };
 		A1611CC727D61FF89025CA77 /* IMClient in Frameworks */ = {isa = PBXBuildFile; productRef = 99257818497BC42EED99DC6C /* IMClient */; };
 		AC4CF93C08183929C472085A /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93FA326C9B762DCAB590F502 /* AppDelegate.swift */; };
+		95CD823609CB4DD1964B5D87 /* CallPermissions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B86D45C565842479CF3AD47 /* CallPermissions.swift */; };
 		C11B3CC6453FDBCA1FAEEB3A /* CallKitProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD09A292E1A246B595416DC6 /* CallKitProvider.swift */; };
 		D91AD4CA3FBFB2F6A396A9DE /* NewFriendsViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0832B3942D777D6A0D67E100 /* NewFriendsViewController.swift */; };
 		D91FAF18E648543CFB927ED6 /* ConversationListCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60C53CDF7ECE24AB7925139E /* ConversationListCell.swift */; };
@@ -53,6 +54,7 @@
 		38D6C28B7BC3F34AF2780264 /* LoginViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginViewController.swift; sourceTree = "<group>"; };
 		3CE3F018CE1845A6A279978F /* SystemTipMessageCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemTipMessageCell.swift; sourceTree = "<group>"; };
 		433A3515C086B0178E667801 /* CallViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CallViewController.swift; sourceTree = "<group>"; };
+		6B86D45C565842479CF3AD47 /* CallPermissions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CallPermissions.swift; sourceTree = "<group>"; };
 		5498ADC10D1D656C19EC7A4E /* App.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = App.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		57813ACEB21053B529B765B0 /* ImageMessageCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageMessageCell.swift; sourceTree = "<group>"; };
 		5ACDCE0BC8F9E8EF7A77D603 /* AvatarImageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AvatarImageView.swift; sourceTree = "<group>"; };
@@ -122,6 +124,7 @@
 				93FA326C9B762DCAB590F502 /* AppDelegate.swift */,
 				5ACDCE0BC8F9E8EF7A77D603 /* AvatarImageView.swift */,
 				BD09A292E1A246B595416DC6 /* CallKitProvider.swift */,
+				6B86D45C565842479CF3AD47 /* CallPermissions.swift */,
 				433A3515C086B0178E667801 /* CallViewController.swift */,
 				F8EB6D5DBC0051B5D576A085 /* ContactListCell.swift */,
 				8DFDF68D07E4AD79AFB0B169 /* ContactListViewController.swift */,
@@ -219,6 +222,7 @@
 				AC4CF93C08183929C472085A /* AppDelegate.swift in Sources */,
 				2B03B7D44659C520AEFC917E /* AvatarImageView.swift in Sources */,
 				C11B3CC6453FDBCA1FAEEB3A /* CallKitProvider.swift in Sources */,
+				95CD823609CB4DD1964B5D87 /* CallPermissions.swift in Sources */,
 				DFE88FBF3B3A22EEF47634EB /* CallViewController.swift in Sources */,
 				7AB9633A25E6AFDC3D82E429 /* ContactListCell.swift in Sources */,
 				951AC39EF02FC7F336FCCFCB /* ContactListViewController.swift in Sources */,
