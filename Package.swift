@@ -52,7 +52,7 @@ let package = Package(
         .testTarget(name: "IMMediaTests", dependencies: ["IMMedia"]),
         .target(name: "IMCall", dependencies: ["IMMessaging", "IMStorage", "IMProto", "IMClient", .product(name: "WebRTC", package: "WebRTC")]),
         .testTarget(name: "IMCallTests", dependencies: ["IMCall", "IMMessaging", "IMStorage", "IMClient", "IMTransport", "IMProto"]),
-        .target(name: "AppCore", dependencies: ["IMClient", "IMStorage", "IMMessaging", "IMContacts", "IMMedia", "IMGroups"]),
+        .target(name: "AppCore", dependencies: ["IMClient", "IMStorage", "IMMessaging", "IMContacts", "IMMedia", "IMGroups", "IMCall"]),
         .testTarget(name: "AppCoreTests", dependencies: ["AppCore", "IMClient", "IMProto", "IMTransport"]),
     ]
 )

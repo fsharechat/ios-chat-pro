@@ -5,6 +5,7 @@ import IMMessaging
 import IMContacts
 import IMMedia
 import IMGroups
+import IMCall
 
 /// The app's dependency container: owns the long-lived `IMStorage`, and
 /// constructs `IMClient`/`MessagingService`/`ConnectAckHandler` once
@@ -25,6 +26,13 @@ public final class AppEnvironment {
     public private(set) var contactSyncService: ContactSyncService?
     public private(set) var groupSyncService: GroupSyncService?
     public private(set) var mediaUploadService: MediaUploadService?
+    public private(set) var callManager: CallManager?
+    /// Exposed separately from `callManager` because `CallViewController`
+    /// needs the concrete `WebRTCClient` for its video renderers
+    /// (`attachLocalRenderer`/`attachRemoteRenderer`) and mute/camera-switch
+    /// controls — `CallManager` only sees it through the narrower
+    /// `MediaEngine` protocol.
+    public private(set) var webRTCClient: WebRTCClient?
 
     public init(
         config: AppConfig = .production,
@@ -87,6 +95,9 @@ public final class AppEnvironment {
         contactSyncService = contactSync
         groupSyncService = groupSync
         mediaUploadService = MediaUploadService(imClient: client)
+        let webRTC = WebRTCClient(iceServers: config.iceServers.map { IceServer(urlString: $0.urlString, username: $0.username, credential: $0.credential) })
+        webRTCClient = webRTC
+        callManager = CallManager(messagingService: service, storage: storage, mediaEngine: webRTC, myUserId: { client.userId })
         client.connect()
         return true
     }
@@ -98,6 +109,8 @@ public final class AppEnvironment {
         contactSyncService = nil
         groupSyncService = nil
         mediaUploadService = nil
+        callManager = nil
+        webRTCClient = nil
         credentialsStore.clear()
     }
 

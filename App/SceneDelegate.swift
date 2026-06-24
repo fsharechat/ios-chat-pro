@@ -4,11 +4,14 @@ import Combine
 import AppCore
 import IMStorage
 import IMKit
+import IMCall
 
 final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     var window: UIWindow?
     private var environment: AppEnvironment!
     private var cancellables = Set<AnyCancellable>()
+    private var callKitProvider: CallKitProvider?
+    private var presentedCallViewController: CallViewController?
 
     func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
         guard let windowScene = scene as? UIWindowScene else { return }
@@ -27,6 +30,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 
         let window = UIWindow(windowScene: windowScene)
         window.rootViewController = rootViewController()
+        wireCallManagerIfReady()
         window.makeKeyAndVisible()
         self.window = window
     }
@@ -74,6 +78,9 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             )
             let conversationViewController = ConversationViewController(row: row, viewModel: conversationViewModel)
             self.wireGroupInfoNavigation(on: conversationViewController, groupId: row.target)
+            conversationViewController.onCallTapped = { [weak self] audioOnly in
+                try? self?.environment.callManager?.startCall(to: row.target, audioOnly: audioOnly)
+            }
             listViewController?.navigationController?.pushViewController(conversationViewController, animated: true)
         }
         listViewController.onCreateGroupTapped = { [weak self, weak listViewController] in
@@ -183,8 +190,12 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
                 isMuted: false,
                 lastMessageStatus: nil
             )
+            let conversationViewController = ConversationViewController(row: conversationRow, viewModel: conversationViewModel)
+            conversationViewController.onCallTapped = { [weak self] audioOnly in
+                try? self?.environment.callManager?.startCall(to: row.uid, audioOnly: audioOnly)
+            }
             listViewController?.navigationController?.pushViewController(
-                ConversationViewController(row: conversationRow, viewModel: conversationViewModel),
+                conversationViewController,
                 animated: true
             )
         }
@@ -220,8 +231,48 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         viewModel.onLoginSucceeded = { [weak self] _ in
             guard let self else { return }
             self.environment.connectIfPossible()
+            self.wireCallManagerIfReady()
             self.window?.rootViewController = self.makeMainTabBarController()
         }
         return LoginViewController(viewModel: viewModel)
+    }
+
+    /// No-ops if `environment.callManager` is still `nil` (no stored
+    /// credentials yet, login screen showing) — called again from
+    /// `makeLoginViewController`'s `onLoginSucceeded` once it exists.
+    /// Idempotent: a second call after `callKitProvider` already exists
+    /// just re-runs harmlessly (re-creating a fresh `CallKitProvider` would
+    /// be wrong — `CXProvider` is meant to be a singleton-ish per-app
+    /// object — so this guards against that).
+    private func wireCallManagerIfReady() {
+        guard let callManager = environment.callManager, callKitProvider == nil else { return }
+        let provider = CallKitProvider(callManager: callManager)
+        callKitProvider = provider
+        callManager.callKitAdapter = provider
+
+        callManager.$state
+            .removeDuplicates()
+            .sink { [weak self] state in self?.handleCallStateChange(state) }
+            .store(in: &cancellables)
+    }
+
+    /// Presents `CallViewController` full-screen the moment a call starts
+    /// (either `.outgoing` from tapping the call button below, or
+    /// `.incoming` from `CallKitProvider.reportIncomingCall`'s completion
+    /// firing `CallManager.onIncomingCall`), and dismisses it once the call
+    /// returns to `.idle`. One screen for the whole call lifecycle — see
+    /// `CallViewController`'s own header comment for why.
+    private func handleCallStateChange(_ state: IMCall.CallState) {
+        guard let callManager = environment.callManager else { return }
+        if state == .idle {
+            presentedCallViewController?.dismiss(animated: true)
+            presentedCallViewController = nil
+            return
+        }
+        guard presentedCallViewController == nil, let webRTCClient = environment.webRTCClient, let peerUid = callManager.peerUid else { return }
+        let displayName = (try? environment.storage.users.user(uid: peerUid))?.displayName ?? peerUid
+        let callViewController = CallViewController(callManager: callManager, webRTCClient: webRTCClient, peerDisplayName: displayName)
+        presentedCallViewController = callViewController
+        window?.rootViewController?.present(callViewController, animated: true)
     }
 }

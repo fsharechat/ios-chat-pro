@@ -15,6 +15,7 @@ final class ConversationViewController: UIViewController {
     private var inputBarBottomConstraint: NSLayoutConstraint!
 
     var onGroupInfoTapped: (() -> Void)?
+    var onCallTapped: ((_ audioOnly: Bool) -> Void)?
 
     init(row: ConversationRow, viewModel: ConversationViewModel) {
         self.row = row
@@ -43,9 +44,17 @@ final class ConversationViewController: UIViewController {
             titleButton.addTarget(self, action: #selector(groupTitleTapped), for: .touchUpInside)
             navigationItem.titleView = titleButton
         }
+
+        if row.conversationType == .single {
+            let videoCallItem = UIBarButtonItem(image: UIImage(systemName: "video.fill"), style: .plain, target: self, action: #selector(videoCallTapped))
+            let audioCallItem = UIBarButtonItem(image: UIImage(systemName: "phone.fill"), style: .plain, target: self, action: #selector(audioCallTapped))
+            navigationItem.rightBarButtonItems = [videoCallItem, audioCallItem]
+        }
     }
 
     @objc private func groupTitleTapped() { onGroupInfoTapped?() }
+    @objc private func videoCallTapped() { onCallTapped?(false) }
+    @objc private func audioCallTapped() { onCallTapped?(true) }
 
     private func layoutViews() {
         tableView.register(TextMessageCell.self, forCellReuseIdentifier: TextMessageCell.reuseIdentifier)
