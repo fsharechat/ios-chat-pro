@@ -10,7 +10,6 @@ import IMCall
 /// answer/decline on the system call screen) can drive it back.
 final class CallKitProvider: NSObject, CallKitAdapting {
     private let provider: CXProvider
-    private let callController = CXCallController()
     private weak var callManager: CallManager?
     /// CallKit identifies calls by `UUID`, call signaling identifies them
     /// by the `String` `callId` used on the wire — this is the mapping
@@ -46,10 +45,19 @@ final class CallKitProvider: NSObject, CallKitAdapting {
     }
 
     func reportOutgoingCallStarted(callId: String) {
+        // Must assign a UUID here, not just `currentCallId` — `reportConnected`/
+        // `reportCallEnded` below both gate on `currentCallUUID` being set, so
+        // without this an outgoing call's `reportConnected`/`reportCallEnded`
+        // would silently no-op for its entire lifetime.
+        //
+        // Deliberately not registered with the system via `CXStartCallAction`/
+        // `CXCallController` here — Phase 3 is foreground-only and CallKit's
+        // job is limited to the incoming-call system UI (design doc §3/§4);
+        // an outgoing call gets no status-bar pill / Siri "hang up" support
+        // while ringing, only `reportOutgoingCall(with:connectedAt:)` once it
+        // connects, via `reportConnected` below.
+        currentCallUUID = UUID()
         currentCallId = callId
-        // No system UI to report for an outgoing call until it connects —
-        // `CXProvider` only needs `reportOutgoingCall(with:startedConnectingAt:)`
-        // once the far end actually answers, which `reportConnected` covers.
     }
 
     func reportConnected(callId: String) {
