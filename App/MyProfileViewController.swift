@@ -46,7 +46,6 @@ final class MyProfileViewController: UIViewController {
         changeAvatarLabel.textColor = .secondaryLabel
         changeAvatarLabel.translatesAutoresizingMaskIntoConstraints = false
 
-        headerView.translatesAutoresizingMaskIntoConstraints = false
         headerView.addSubview(avatarImageView)
         headerView.addSubview(changeAvatarLabel)
         NSLayoutConstraint.activate([

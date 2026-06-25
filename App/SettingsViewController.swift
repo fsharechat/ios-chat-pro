@@ -33,7 +33,7 @@ final class SettingsViewController: UIViewController {
         view.backgroundColor = Theme.backgroundPrimary
         tableView.dataSource = self
         tableView.delegate = self
-        tableView.backgroundColor = Theme.backgroundPrimary
+        tableView.backgroundColor = Theme.backgroundSecondary
         tableView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(tableView)
         NSLayoutConstraint.activate([
@@ -75,6 +75,7 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate {
             cell.textLabel?.textColor = .systemRed
             cell.accessoryType = .none
         }
+        cell.backgroundColor = Theme.backgroundTertiary
         return cell
     }
 

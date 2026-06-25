@@ -27,7 +27,7 @@ final class ThemeViewController: UIViewController {
         view.backgroundColor = Theme.backgroundPrimary
         tableView.dataSource = self
         tableView.delegate = self
-        tableView.backgroundColor = Theme.backgroundPrimary
+        tableView.backgroundColor = Theme.backgroundSecondary
         tableView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(tableView)
         NSLayoutConstraint.activate([
@@ -50,6 +50,7 @@ extension ThemeViewController: UITableViewDataSource, UITableViewDelegate {
         cell.textLabel?.text = Self.titles[mode]
         cell.textLabel?.textColor = Theme.textPrimary
         cell.accessoryType = (mode == store.mode) ? .checkmark : .none
+        cell.backgroundColor = Theme.backgroundTertiary
         return cell
     }
 
