@@ -25,17 +25,20 @@ public final class ContactSyncService {
     private let storage: IMStorage
     private let userSearchTracker: UserSearchTracker
     private let friendRequestActionTracker: FriendRequestActionTracker
+    private let profileUpdateTracker: ProfileUpdateTracker
 
     public init(imClient: IMClient, storage: IMStorage, scheduler: Scheduler = DispatchQueueScheduler()) {
         self.imClient = imClient
         self.storage = storage
         userSearchTracker = UserSearchTracker(scheduler: scheduler)
         friendRequestActionTracker = FriendRequestActionTracker(scheduler: scheduler)
+        profileUpdateTracker = ProfileUpdateTracker(scheduler: scheduler)
 
         imClient.register(FriendSyncHandler(storage: storage))
         imClient.register(UserInfoSyncHandler(storage: storage))
         imClient.register(UserSearchHandler(storage: storage, tracker: userSearchTracker))
         imClient.register(FriendRequestActionHandler(tracker: friendRequestActionTracker))
+        imClient.register(ProfileUpdateHandler(tracker: profileUpdateTracker))
 
         let friendRequestSyncHandler = FriendRequestSyncHandler(storage: storage)
         friendRequestSyncHandler.onRemoteUpdateNotified = { [weak self] in self?.syncFriendRequests() }
@@ -171,5 +174,64 @@ public final class ContactSyncService {
         request.version = Int64(Date().timeIntervalSince1970 * 1000)
         guard let body = try? request.serializedData() else { return }
         imClient.sendFrame(signal: .publish, subSignal: .frus, body: body)
+    }
+
+    /// Changes the logged-in user's own nickname (`InfoEntry.type=0`,
+    /// matching Android `ModifyMyInfoType.Modify_DisplayName`). Only writes
+    /// `UserStore` once the server acks success — no optimistic update, so
+    /// a failed write never leaves the local cache out of sync with the
+    /// server.
+    public func updateDisplayName(_ name: String, completion: @escaping (Result<Void, Error>) -> Void) {
+        sendModifyMyInfo(type: 0, value: name) { [weak self] result in
+            if case .success = result { self?.applyLocalProfileUpdate(displayName: name) }
+            completion(result)
+        }
+    }
+
+    /// Changes the logged-in user's own avatar URL (`InfoEntry.type=1`,
+    /// matching Android `ModifyMyInfoType.Modify_Portrait`). The caller is
+    /// responsible for uploading the image first (`IMMedia.MediaUploadService`)
+    /// and passing the resulting remote URL here — this method only does
+    /// the profile-field write, mirroring `updateDisplayName`'s shape.
+    public func updatePortrait(_ url: String, completion: @escaping (Result<Void, Error>) -> Void) {
+        sendModifyMyInfo(type: 1, value: url) { [weak self] result in
+            if case .success = result { self?.applyLocalProfileUpdate(portrait: url) }
+            completion(result)
+        }
+    }
+
+    private func sendModifyMyInfo(type: Int32, value: String, completion: @escaping (Result<Void, Error>) -> Void) {
+        var entry = Im_InfoEntry()
+        entry.type = type
+        entry.value = value
+        var request = Im_ModifyMyInfoRequest()
+        request.entry = [entry]
+        guard let body = try? request.serializedData() else {
+            completion(.failure(ContactSyncServiceError.requestEncodingFailed))
+            return
+        }
+        let wireMessageId = imClient.sendFrame(signal: .publish, subSignal: .mmi, body: body)
+        profileUpdateTracker.track(wireMessageId: wireMessageId) { result in
+            completion(result.mapError { $0 as Error })
+        }
+    }
+
+    /// Merges a successful `.mmi` ack into `UserStore`, keeping every other
+    /// profile field at its current local value — a naive `upsertProfile`
+    /// call with only the changed field set would clobber the other
+    /// columns back to `nil`/default (see `UserStore.upsertProfile`'s doc
+    /// comment: it overwrites every profile column it's given).
+    private func applyLocalProfileUpdate(displayName: String? = nil, portrait: String? = nil) {
+        let uid = imClient.userId
+        let existing = try? storage.users.user(uid: uid)
+        try? storage.users.upsertProfile(
+            uid: uid,
+            name: existing?.name,
+            displayName: displayName ?? existing?.displayName,
+            portrait: portrait ?? existing?.portrait,
+            mobile: existing?.mobile,
+            gender: existing?.gender ?? 0,
+            updateDt: existing?.updateDt ?? 0
+        )
     }
 }

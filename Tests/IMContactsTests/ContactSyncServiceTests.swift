@@ -202,4 +202,74 @@ final class ContactSyncServiceTests: XCTestCase {
         let frame = try XCTUnwrap(FrameDecoder().feed(fakeTransport.sentFrames.last!).first)
         XCTAssertEqual(frame.header.subSignal, .frp)
     }
+
+    func test_updateDisplayName_sendsInfoEntryTypeZeroWithName() throws {
+        service.updateDisplayName("NewName") { _ in }
+
+        let frame = try decodeOnlySentFrame()
+        XCTAssertEqual(frame.header.signal, .publish)
+        XCTAssertEqual(frame.header.subSignal, .mmi)
+        let request = try Im_ModifyMyInfoRequest(serializedBytes: frame.body)
+        XCTAssertEqual(request.entry.count, 1)
+        XCTAssertEqual(request.entry.first?.type, 0)
+        XCTAssertEqual(request.entry.first?.value, "NewName")
+    }
+
+    func test_updatePortrait_sendsInfoEntryTypeOneWithURL() throws {
+        service.updatePortrait("https://example.com/a.png") { _ in }
+
+        let frame = try decodeOnlySentFrame()
+        XCTAssertEqual(frame.header.subSignal, .mmi)
+        let request = try Im_ModifyMyInfoRequest(serializedBytes: frame.body)
+        XCTAssertEqual(request.entry.first?.type, 1)
+        XCTAssertEqual(request.entry.first?.value, "https://example.com/a.png")
+    }
+
+    func test_updateDisplayName_onSuccess_mergesIntoUserStoreKeepingOtherFields() throws {
+        try storage.users.upsertProfile(uid: "me", name: "real-name", displayName: "Old", portrait: "old-url", mobile: "123", gender: 1, updateDt: 5)
+
+        var capturedResult: Result<Void, Error>?
+        service.updateDisplayName("New") { result in capturedResult = result }
+
+        let frame = try decodeOnlySentFrame()
+        let ackFrame = FrameEncoder.encode(signal: .pubAck, subSignal: .mmi, messageId: frame.header.messageId, body: Data([0x00]))
+        fakeTransport.simulateReceivedData(ackFrame)
+
+        switch capturedResult {
+        case .success: break
+        default: XCTFail("expected .success, got \(String(describing: capturedResult))")
+        }
+        let updated = try storage.users.user(uid: "me")
+        XCTAssertEqual(updated?.displayName, "New")
+        XCTAssertEqual(updated?.name, "real-name")
+        XCTAssertEqual(updated?.portrait, "old-url")
+        XCTAssertEqual(updated?.mobile, "123")
+        XCTAssertEqual(updated?.gender, 1)
+    }
+
+    func test_updateDisplayName_onFailure_doesNotWriteUserStore() throws {
+        try storage.users.upsertProfile(uid: "me", name: nil, displayName: "Old", portrait: nil, mobile: nil, gender: 0, updateDt: 0)
+
+        service.updateDisplayName("New") { _ in }
+
+        let frame = try decodeOnlySentFrame()
+        let ackFrame = FrameEncoder.encode(signal: .pubAck, subSignal: .mmi, messageId: frame.header.messageId, body: Data([0x06]))
+        fakeTransport.simulateReceivedData(ackFrame)
+
+        XCTAssertEqual(try storage.users.user(uid: "me")?.displayName, "Old")
+    }
+
+    func test_updatePortrait_onSuccess_mergesIntoUserStoreKeepingDisplayName() throws {
+        try storage.users.upsertProfile(uid: "me", name: nil, displayName: "Old", portrait: "old-url", mobile: nil, gender: 0, updateDt: 0)
+
+        service.updatePortrait("new-url") { _ in }
+
+        let frame = try decodeOnlySentFrame()
+        let ackFrame = FrameEncoder.encode(signal: .pubAck, subSignal: .mmi, messageId: frame.header.messageId, body: Data([0x00]))
+        fakeTransport.simulateReceivedData(ackFrame)
+
+        let updated = try storage.users.user(uid: "me")
+        XCTAssertEqual(updated?.portrait, "new-url")
+        XCTAssertEqual(updated?.displayName, "Old")
+    }
 }
