@@ -61,11 +61,27 @@ public final class ReceiveMessageHandler: MessageHandler {
         // in ConversationListViewModel (visible as UI lag right after
         // login), plus a redundant UPUI re-fetch for any uid still
         // unresolved at that snapshot.
+        var groupNotificationTargets: Set<String> = []
+        var callStartMessages: [StoredMessage] = []
         try? storage.write { db in
             for wireMessage in result.message {
-                persist(wireMessage, db: db)
+                persist(wireMessage, db: db, groupNotificationTargets: &groupNotificationTargets, callStartMessages: &callStartMessages)
             }
             advanceSyncHead(to: result.head, db: db)
+        }
+        // Fired only once the write transaction above has released the
+        // GRDB serial queue: both callbacks can themselves trigger further
+        // synchronous database access (`GroupSyncService.refreshGroup` reads,
+        // `CallManager`'s call-bubble updates write) — GRDB's queue isn't
+        // reentrant, so calling these from inside `storage.write` crashes
+        // (`GRDBPrecondition` fatal error) the first time either fires
+        // during a batch, e.g. a group-notification message in the
+        // historical pull right after logging into a different account.
+        for target in groupNotificationTargets {
+            onGroupNotificationMessage?(target)
+        }
+        for message in callStartMessages {
+            onCallStartMessage?(message)
         }
     }
 
@@ -79,7 +95,7 @@ public final class ReceiveMessageHandler: MessageHandler {
     /// conversation flow runs. Type 400 (CallStart) is the one call-related
     /// type that *does* persist — it's the call-record bubble — so it falls
     /// through to the same path as every other message type below.
-    private func persist(_ wireMessage: Im_Message, db: Database) {
+    private func persist(_ wireMessage: Im_Message, db: Database, groupNotificationTargets: inout Set<String>, callStartMessages: inout [StoredMessage]) {
         guard wireMessage.messageID != 0 else { return }
         if (try? storage.messages.message(uid: wireMessage.messageID, db: db)) != nil {
             return // already have it via server uid — pull windows can overlap
@@ -152,10 +168,10 @@ public final class ReceiveMessageHandler: MessageHandler {
                 db: db
             )
             if case .groupNotification = content {
-                onGroupNotificationMessage?(target)
+                groupNotificationTargets.insert(target)
             }
             if case .callRecord = content, direction == .receive {
-                onCallStartMessage?(inserted)
+                callStartMessages.append(inserted)
             }
         } catch {
             // Best-effort: one malformed/unexpected row shouldn't abort the rest of the batch.
