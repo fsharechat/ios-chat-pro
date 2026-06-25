@@ -113,6 +113,11 @@ public final class AppEnvironment {
         callManager = nil
         webRTCClient = nil
         credentialsStore.clear()
+        // Matches Android's `SqliteDatabaseStore.stop()` scope exactly
+        // (see `IMStorage.clearSessionData()`'s doc comment) — `try?`
+        // because logout must still proceed (disconnect/clear credentials
+        // already happened above) even if this fails, e.g. disk full.
+        try? storage.clearSessionData()
     }
 
     /// The on-disk path for `IMStorage`'s SQLite file: `<Application
