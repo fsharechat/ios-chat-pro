@@ -45,4 +45,27 @@ final class IMStorageTests: XCTestCase {
             .store(in: &cancellables)
         wait(for: [expectation], timeout: 2)
     }
+
+    func test_clearSessionData_deletesMessagesAndConversationsAndResetsSyncState() throws {
+        let storage = try IMStorage.openInMemory()
+        try storage.messages.insert(StoredMessage(
+            localMessageId: 1, conversationType: .single, target: "u2", from: "u1",
+            content: .text("hi"), timestamp: 1_000, status: .sent, direction: .send
+        ))
+        try storage.conversations.recordIncomingMessage(conversationType: .single, target: "u2", line: 0, messageUid: 1, timestamp: 1_000, incrementUnread: true)
+        try storage.syncState.set(StoredSyncState(msgHead: 42, friendHead: 7, friendRequestHead: 3, settingHead: 9))
+        try storage.users.upsert(StoredUser(uid: "u2", name: "bob", displayName: "Bob", portrait: nil, mobile: nil, gender: 0, updateDt: 1))
+
+        try storage.clearSessionData()
+
+        XCTAssertNil(try storage.messages.message(localMessageId: 1))
+        XCTAssertTrue(try storage.conversations.conversations().isEmpty)
+        let syncState = try storage.syncState.get()
+        XCTAssertEqual(syncState.msgHead, 0)
+        XCTAssertEqual(syncState.friendHead, 0)
+        XCTAssertEqual(syncState.friendRequestHead, 0)
+        XCTAssertEqual(syncState.settingHead, 0)
+        // users table is untouched — matches Android's SqliteDatabaseStore.stop() scope
+        XCTAssertEqual(try storage.users.user(uid: "u2")?.displayName, "Bob")
+    }
 }

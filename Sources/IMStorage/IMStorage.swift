@@ -36,6 +36,24 @@ public final class IMStorage {
         try database.dbQueue.write(updates)
     }
 
+    /// Clears the locally cached chat history on logout, matching Android's
+    /// `SqliteDatabaseStore.stop()` scope exactly: deletes every row from
+    /// `message`/`conversation` and resets `syncState` back to its all-zero
+    /// defaults — the iOS equivalent of Android also `clear()`-ing the
+    /// SharedPreferences that hold its sync cursors. `users`/`groups`/
+    /// `friendRequests` are deliberately left untouched — Android doesn't
+    /// clear them either, and the next login's normal sync flow overwrites
+    /// them anyway. Without the `syncState` reset, logging into a different
+    /// account on the same device would resume incremental sync from the
+    /// previous account's cursors, silently dropping messages.
+    public func clearSessionData() throws {
+        try database.dbQueue.write { db in
+            try StoredMessage.deleteAll(db)
+            try StoredConversation.deleteAll(db)
+            try StoredSyncState(msgHead: 0, friendHead: 0, friendRequestHead: 0, settingHead: 0).save(db)
+        }
+    }
+
     private let database: IMDatabase
 
     private init(database: IMDatabase) {
