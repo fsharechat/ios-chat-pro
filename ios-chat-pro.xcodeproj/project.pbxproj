@@ -25,6 +25,7 @@
 		890FAE1EC814F14A52439526 /* MyProfileViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FED7AD303D48EFB2741ED7BD /* MyProfileViewController.swift */; };
 		925E32D89E4D590BFE89B808 /* TextMessageCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 648E9F022D0DE7CACE6E5C39 /* TextMessageCell.swift */; };
 		92EE14C2D330B858ECE87B6C /* AddGroupMemberViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 929AC72577A219C38775E51D /* AddGroupMemberViewController.swift */; };
+		942E1DEC4481B341B23959E7 /* MeViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55F30F8F9D722D06F08E8D99 /* MeViewController.swift */; };
 		951AC39EF02FC7F336FCCFCB /* ContactListViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DFDF68D07E4AD79AFB0B169 /* ContactListViewController.swift */; };
 		9D341582713FAD5C8A889E68 /* ImageMessageCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57813ACEB21053B529B765B0 /* ImageMessageCell.swift */; };
 		9D5257C3863A7F98DACD6D8B /* MyQRCodeViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCCFBE9437171B403CF11393 /* MyQRCodeViewController.swift */; };
@@ -57,6 +58,7 @@
 		3CE3F018CE1845A6A279978F /* SystemTipMessageCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemTipMessageCell.swift; sourceTree = "<group>"; };
 		433A3515C086B0178E667801 /* CallViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CallViewController.swift; sourceTree = "<group>"; };
 		5498ADC10D1D656C19EC7A4E /* App.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = App.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		55F30F8F9D722D06F08E8D99 /* MeViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeViewController.swift; sourceTree = "<group>"; };
 		57813ACEB21053B529B765B0 /* ImageMessageCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageMessageCell.swift; sourceTree = "<group>"; };
 		5ACDCE0BC8F9E8EF7A77D603 /* AvatarImageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AvatarImageView.swift; sourceTree = "<group>"; };
 		5E20A628F05F52DE37B82DB6 /* CallPermissions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CallPermissions.swift; sourceTree = "<group>"; };
@@ -144,6 +146,7 @@
 				38D6C28B7BC3F34AF2780264 /* LoginViewController.swift */,
 				0CE65FB3E4BBBDBC011338C7 /* MentionPickerViewController.swift */,
 				1A7AF95FBB4F8D27A5F4067D /* MessageInputBar.swift */,
+				55F30F8F9D722D06F08E8D99 /* MeViewController.swift */,
 				FED7AD303D48EFB2741ED7BD /* MyProfileViewController.swift */,
 				FCCFBE9437171B403CF11393 /* MyQRCodeViewController.swift */,
 				1499CDEAF049F73974F200A4 /* NewFriendsEntryView.swift */,
@@ -245,6 +248,7 @@
 				9D341582713FAD5C8A889E68 /* ImageMessageCell.swift in Sources */,
 				DD3207003DBDA1B1CC3ED7CE /* ImagePreviewViewController.swift in Sources */,
 				8671C543D4A6428B08FE1E74 /* LoginViewController.swift in Sources */,
+				942E1DEC4481B341B23959E7 /* MeViewController.swift in Sources */,
 				471B25795C53FC319DED0CCD /* MentionPickerViewController.swift in Sources */,
 				F0E0711134156FE1E30507ED /* MessageInputBar.swift in Sources */,
 				890FAE1EC814F14A52439526 /* MyProfileViewController.swift in Sources */,
