@@ -29,14 +29,24 @@ public final class SyncStateStore {
     }
 
     public func get() throws -> StoredSyncState {
-        try dbQueue.read { db in
-            try StoredSyncState.fetchOne(db, key: 1) ?? StoredSyncState(msgHead: 0, friendHead: 0, friendRequestHead: 0, settingHead: 0)
-        }
+        try dbQueue.read { db in try self.get(db: db) }
+    }
+
+    /// Same as `get()`, run against a caller-managed transaction.
+    public func get(db: Database) throws -> StoredSyncState {
+        try StoredSyncState.fetchOne(db, key: 1) ?? StoredSyncState(msgHead: 0, friendHead: 0, friendRequestHead: 0, settingHead: 0)
     }
 
     public func set(_ state: StoredSyncState) throws {
+        try dbQueue.write { db in try self.set(state, db: db) }
+    }
+
+    /// Same as `set(_:)`, run against a caller-managed transaction — see
+    /// `ReceiveMessageHandler`, the first caller batching this with
+    /// `messages`/`conversations` writes into one transaction.
+    public func set(_ state: StoredSyncState, db: Database) throws {
         var state = state
         state.id = 1
-        try dbQueue.write { db in try state.save(db) }
+        try state.save(db)
     }
 }

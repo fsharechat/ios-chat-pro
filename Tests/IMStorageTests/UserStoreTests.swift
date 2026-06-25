@@ -117,6 +117,46 @@ final class UserStoreTests: XCTestCase {
         XCTAssertFalse(user?.isFriend ?? true) // a profile-only upsert never makes someone a friend
     }
 
+    func test_upsertProfiles_upsertsEveryEntry() throws {
+        try store.upsertProfiles([
+            .init(uid: "u1", name: nil, displayName: "Alice", portrait: nil, mobile: nil, gender: 0, updateDt: 1),
+            .init(uid: "u2", name: nil, displayName: "Bob", portrait: nil, mobile: nil, gender: 0, updateDt: 1),
+        ])
+
+        XCTAssertEqual(try store.user(uid: "u1")?.displayName, "Alice")
+        XCTAssertEqual(try store.user(uid: "u2")?.displayName, "Bob")
+    }
+
+    func test_upsertProfiles_doesNotClobberExistingIsFriendFlag() throws {
+        try store.replaceFriendList(uids: ["u1"])
+
+        try store.upsertProfiles([.init(uid: "u1", name: nil, displayName: "Alice", portrait: nil, mobile: nil, gender: 0, updateDt: 1)])
+
+        XCTAssertTrue(try store.user(uid: "u1")?.isFriend ?? false)
+    }
+
+    func test_upsertProfiles_emitsOnlyOnePublisherUpdateForTheWholeBatch() throws {
+        var receivedCounts: [Int] = []
+        let expectation = expectation(description: "received exactly 2 updates: initial empty + one batched update")
+        expectation.expectedFulfillmentCount = 2
+
+        store.usersPublisher()
+            .sink(receiveCompletion: { _ in }, receiveValue: { users in
+                receivedCounts.append(users.count)
+                expectation.fulfill()
+            })
+            .store(in: &cancellables)
+
+        try store.upsertProfiles([
+            .init(uid: "u1", name: nil, displayName: "Alice", portrait: nil, mobile: nil, gender: 0, updateDt: 1),
+            .init(uid: "u2", name: nil, displayName: "Bob", portrait: nil, mobile: nil, gender: 0, updateDt: 1),
+            .init(uid: "u3", name: nil, displayName: "Carol", portrait: nil, mobile: nil, gender: 0, updateDt: 1),
+        ])
+
+        wait(for: [expectation], timeout: 2)
+        XCTAssertEqual(receivedCounts, [0, 3])
+    }
+
     func test_friends_excludesNonFriendProfiles() throws {
         try store.upsertProfile(uid: "stranger", name: nil, displayName: "Stranger", portrait: nil, mobile: nil, gender: 0, updateDt: 0)
         try store.replaceFriendList(uids: ["friend1"])

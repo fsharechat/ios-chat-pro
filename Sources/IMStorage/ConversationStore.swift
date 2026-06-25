@@ -48,23 +48,43 @@ public final class ConversationStore {
         incrementMention: Bool = false
     ) throws {
         try dbQueue.write { db in
-            let existing = try StoredConversation
-                .filter(Column("conversationType") == conversationType.rawValue)
-                .filter(Column("target") == target)
-                .filter(Column("line") == line)
-                .fetchOne(db)
-
-            var conversation = existing ?? StoredConversation(conversationType: conversationType, target: target, line: line)
-            conversation.lastMessageUid = messageUid
-            conversation.timestamp = timestamp
-            if incrementUnread {
-                conversation.unreadCount += 1
-            }
-            if incrementMention {
-                conversation.unreadMentionCount += 1
-            }
-            try conversation.save(db)
+            try self.recordIncomingMessage(
+                conversationType: conversationType, target: target, line: line,
+                messageUid: messageUid, timestamp: timestamp,
+                incrementUnread: incrementUnread, incrementMention: incrementMention, db: db
+            )
         }
+    }
+
+    /// Same as `recordIncomingMessage(...)`, run against a caller-managed
+    /// transaction — see `ReceiveMessageHandler`, the first caller batching
+    /// many of these into one transaction.
+    public func recordIncomingMessage(
+        conversationType: ConversationType,
+        target: String,
+        line: Int = 0,
+        messageUid: Int64,
+        timestamp: Int64,
+        incrementUnread: Bool,
+        incrementMention: Bool = false,
+        db: Database
+    ) throws {
+        let existing = try StoredConversation
+            .filter(Column("conversationType") == conversationType.rawValue)
+            .filter(Column("target") == target)
+            .filter(Column("line") == line)
+            .fetchOne(db)
+
+        var conversation = existing ?? StoredConversation(conversationType: conversationType, target: target, line: line)
+        conversation.lastMessageUid = messageUid
+        conversation.timestamp = timestamp
+        if incrementUnread {
+            conversation.unreadCount += 1
+        }
+        if incrementMention {
+            conversation.unreadMentionCount += 1
+        }
+        try conversation.save(db)
     }
 
     public func clearUnread(conversationType: ConversationType, target: String, line: Int = 0) throws {

@@ -13,9 +13,20 @@ private final class FakeContactInfoFetcher: ContactInfoFetching {
     }
 }
 
+private final class FakeGroupSyncer: GroupSyncing {
+    private(set) var refreshedGroupIds: [String] = []
+
+    func refreshGroup(targetId: String) {
+        refreshedGroupIds.append(targetId)
+    }
+
+    func refreshMembers(targetId: String) {}
+}
+
 final class ConversationListViewModelTests: XCTestCase {
     private var storage: IMStorage!
     private var fetcher: FakeContactInfoFetcher!
+    private var groupSyncer: FakeGroupSyncer!
     private var viewModel: ConversationListViewModel!
     private var cancellables: Set<AnyCancellable> = []
 
@@ -23,7 +34,8 @@ final class ConversationListViewModelTests: XCTestCase {
         try super.setUpWithError()
         storage = try IMStorage.openInMemory()
         fetcher = FakeContactInfoFetcher()
-        viewModel = ConversationListViewModel(storage: storage, contactSync: fetcher)
+        groupSyncer = FakeGroupSyncer()
+        viewModel = ConversationListViewModel(storage: storage, contactSync: fetcher, groupSync: groupSyncer)
     }
 
     func test_initialState_emptyRows() {
@@ -92,6 +104,53 @@ final class ConversationListViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.rows.first?.displayName, "them")
     }
 
+    /// The regression this guards against: a sender's profile resolves
+    /// asynchronously (a `UPUI` round trip after `fetchUserInfo` fires),
+    /// with no new message/conversation event accompanying it. Before this
+    /// test was added, `ConversationListViewModel` only re-derived rows on
+    /// `conversationsPublisher` updates, so a profile arriving after that
+    /// publisher had already fired (its only emission for this
+    /// conversation) left the row frozen on the uid-fallback/no-avatar
+    /// placeholder forever — exactly what reopening the app "fixed" by
+    /// re-reading already-resolved local data on the next single emission.
+    func test_profileResolvingAfterTheRowAlreadyExists_updatesTheRowInPlace() throws {
+        try storage.messages.insert(StoredMessage(localMessageId: 1, messageUid: 100, conversationType: .single, target: "them", from: "them", content: .text("hi"), timestamp: 1_000, status: .unread, direction: .receive))
+        try storage.conversations.recordIncomingMessage(conversationType: .single, target: "them", line: 0, messageUid: 100, timestamp: 1_000, incrementUnread: true)
+        _ = try waitForRow(target: "them")
+        XCTAssertEqual(viewModel.rows.first?.displayName, "them")
+
+        try storage.users.upsertProfile(uid: "them", name: nil, displayName: "Resolved Name", portrait: "http://x/p.png", mobile: nil, gender: 0, updateDt: 1)
+
+        let expectation = expectation(description: "row updates with the resolved profile")
+        expectation.assertForOverFulfill = false
+        viewModel.$rows.sink { rows in
+            if rows.first(where: { $0.target == "them" })?.displayName == "Resolved Name" { expectation.fulfill() }
+        }.store(in: &cancellables)
+        wait(for: [expectation], timeout: 2)
+
+        XCTAssertEqual(viewModel.rows.first?.avatarURL, "http://x/p.png")
+    }
+
+    /// Same regression as `test_profileResolvingAfterTheRowAlreadyExists_updatesTheRowInPlace`,
+    /// for a group's `refreshGroup`-triggered `gpgi` resolution instead of a
+    /// single chat's `UPUI` resolution.
+    func test_groupInfoResolvingAfterTheRowAlreadyExists_updatesTheRowInPlace() throws {
+        try storage.conversations.recordIncomingMessage(conversationType: .group, target: "g-unknown", messageUid: 1, timestamp: 1_000, incrementUnread: false)
+        _ = try waitForRow(target: "g-unknown")
+        XCTAssertEqual(viewModel.rows.first?.displayName, "g-unknown")
+
+        try storage.groups.upsertGroup(StoredGroup(groupId: "g-unknown", name: "Resolved Group", portrait: "http://x/g.png", owner: "u1", groupType: .normal, memberCount: 2, updateDt: 0, memberUpdateDt: 0))
+
+        let expectation = expectation(description: "row updates with the resolved group info")
+        expectation.assertForOverFulfill = false
+        viewModel.$rows.sink { rows in
+            if rows.first(where: { $0.target == "g-unknown" })?.displayName == "Resolved Group" { expectation.fulfill() }
+        }.store(in: &cancellables)
+        wait(for: [expectation], timeout: 2)
+
+        XCTAssertEqual(viewModel.rows.first?.avatarURL, "http://x/g.png")
+    }
+
     func test_resolvedProfileWithNoDisplayName_fallsBackToName() throws {
         try storage.users.upsertProfile(uid: "them", name: "rawname", displayName: nil, portrait: nil, mobile: nil, gender: 0, updateDt: 1)
         try storage.messages.insert(StoredMessage(localMessageId: 1, messageUid: 100, conversationType: .single, target: "them", from: "them", content: .text("hi"), timestamp: 1_000, status: .unread, direction: .receive))
@@ -107,6 +166,14 @@ final class ConversationListViewModelTests: XCTestCase {
         XCTAssertTrue(fetcher.fetchedUids.isEmpty) // name is resolved, even though displayName isn't — no fetch needed
     }
 
+    func test_groupConversationWithNoCachedGroupInfo_triggersARefreshGroupCall() throws {
+        try storage.conversations.recordIncomingMessage(conversationType: .group, target: "g-unknown", messageUid: 1, timestamp: 1_000, incrementUnread: false)
+
+        _ = try waitForRow(target: "g-unknown")
+
+        XCTAssertTrue(groupSyncer.refreshedGroupIds.contains("g-unknown"))
+    }
+
     func test_groupConversation_resolvesDisplayNameAndAvatarFromGroupStoreNotUserStore() throws {
         try storage.groups.upsertGroup(StoredGroup(groupId: "g1", name: "Group One", portrait: "http://x/g.png", owner: "u1", groupType: .normal, memberCount: 2, updateDt: 0, memberUpdateDt: 0))
         try storage.conversations.recordIncomingMessage(conversationType: .group, target: "g1", messageUid: 1, timestamp: 1_000, incrementUnread: false)
@@ -115,6 +182,7 @@ final class ConversationListViewModelTests: XCTestCase {
 
         XCTAssertEqual(row.displayName, "Group One")
         XCTAssertEqual(row.avatarURL, "http://x/g.png")
+        XCTAssertTrue(groupSyncer.refreshedGroupIds.isEmpty) // already resolved — no refresh needed
     }
 
     func test_groupConversation_previewTextIsPrefixedWithSenderDisplayName() throws {

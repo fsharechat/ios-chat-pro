@@ -30,7 +30,11 @@ public final class ConnectAckHandler: MessageHandler {
     }
 
     public func handle(frame: Frame) {
-        guard let payload = try? Im_ConnectAckPayload(serializedBytes: frame.body) else { return }
+        guard let payload = try? Im_ConnectAckPayload(serializedBytes: frame.body) else {
+            print("[DEBUG-FP] ConnectAckHandler: Im_ConnectAckPayload parse failed, bodyBytes=\(frame.body.count)")
+            return
+        }
+        print("[DEBUG-FP] ConnectAckHandler parsed, friendHead=\(payload.friendHead) msgHead=\(payload.msgHead), onSyncState set=\(onSyncState != nil)")
         onSyncState?(ConnectAckSyncState(
             messageHead: payload.msgHead,
             friendHead: payload.friendHead,

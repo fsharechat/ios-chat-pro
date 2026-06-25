@@ -71,4 +71,20 @@ public final class CredentialsStore {
         // Status code intentionally not checked — same accepted gap as in `save()` above.
         SecItemDelete(query as CFDictionary)
     }
+
+    private static let hasLaunchedKey = "AppCore.CredentialsStore.hasLaunchedBefore"
+
+    /// Keychain items outlive app deletion on iOS — only `UserDefaults` and
+    /// the app's container (including `IMStorage`'s sqlite file) are wiped
+    /// on uninstall. Without this, a fresh install would silently reuse a
+    /// previous install's leftover token and skip straight past the login
+    /// screen. `hasLaunchedKey` lives in `UserDefaults`, so it reads back
+    /// `false` exactly once per install — the first launch after install —
+    /// at which point any stale Keychain credentials are cleared before
+    /// anything else gets a chance to read them.
+    public func clearIfFreshInstall(defaults: UserDefaults = .standard) {
+        guard !defaults.bool(forKey: Self.hasLaunchedKey) else { return }
+        clear()
+        defaults.set(true, forKey: Self.hasLaunchedKey)
+    }
 }

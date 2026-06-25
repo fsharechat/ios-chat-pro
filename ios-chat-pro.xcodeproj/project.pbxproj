@@ -27,9 +27,9 @@
 		951AC39EF02FC7F336FCCFCB /* ContactListViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DFDF68D07E4AD79AFB0B169 /* ContactListViewController.swift */; };
 		9D341582713FAD5C8A889E68 /* ImageMessageCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57813ACEB21053B529B765B0 /* ImageMessageCell.swift */; };
 		9E209FB56ACB4975796F5B20 /* AppCore in Frameworks */ = {isa = PBXBuildFile; productRef = AF6EC4831921C0CD2F8F91AD /* AppCore */; };
+		9E5BFA10E82C0ECB6BF1FD1A /* CallPermissions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E20A628F05F52DE37B82DB6 /* CallPermissions.swift */; };
 		A1611CC727D61FF89025CA77 /* IMClient in Frameworks */ = {isa = PBXBuildFile; productRef = 99257818497BC42EED99DC6C /* IMClient */; };
 		AC4CF93C08183929C472085A /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93FA326C9B762DCAB590F502 /* AppDelegate.swift */; };
-		95CD823609CB4DD1964B5D87 /* CallPermissions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B86D45C565842479CF3AD47 /* CallPermissions.swift */; };
 		C11B3CC6453FDBCA1FAEEB3A /* CallKitProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD09A292E1A246B595416DC6 /* CallKitProvider.swift */; };
 		D91AD4CA3FBFB2F6A396A9DE /* NewFriendsViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0832B3942D777D6A0D67E100 /* NewFriendsViewController.swift */; };
 		D91FAF18E648543CFB927ED6 /* ConversationListCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60C53CDF7ECE24AB7925139E /* ConversationListCell.swift */; };
@@ -54,10 +54,10 @@
 		38D6C28B7BC3F34AF2780264 /* LoginViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginViewController.swift; sourceTree = "<group>"; };
 		3CE3F018CE1845A6A279978F /* SystemTipMessageCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemTipMessageCell.swift; sourceTree = "<group>"; };
 		433A3515C086B0178E667801 /* CallViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CallViewController.swift; sourceTree = "<group>"; };
-		6B86D45C565842479CF3AD47 /* CallPermissions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CallPermissions.swift; sourceTree = "<group>"; };
 		5498ADC10D1D656C19EC7A4E /* App.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = App.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		57813ACEB21053B529B765B0 /* ImageMessageCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageMessageCell.swift; sourceTree = "<group>"; };
 		5ACDCE0BC8F9E8EF7A77D603 /* AvatarImageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AvatarImageView.swift; sourceTree = "<group>"; };
+		5E20A628F05F52DE37B82DB6 /* CallPermissions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CallPermissions.swift; sourceTree = "<group>"; };
 		60C53CDF7ECE24AB7925139E /* ConversationListCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationListCell.swift; sourceTree = "<group>"; };
 		648E9F022D0DE7CACE6E5C39 /* TextMessageCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextMessageCell.swift; sourceTree = "<group>"; };
 		690D108BAFD2ED791E23C0A9 /* SearchUserViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchUserViewController.swift; sourceTree = "<group>"; };
@@ -66,7 +66,7 @@
 		929AC72577A219C38775E51D /* AddGroupMemberViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AddGroupMemberViewController.swift; sourceTree = "<group>"; };
 		93FA326C9B762DCAB590F502 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		A0E388EB556B39D1EFCF7DEA /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
-		A2304C4B950D810E9C549F1C /* phase3-av-call */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "phase3-av-call"; path = .; sourceTree = SOURCE_ROOT; };
+		B766EE90E234D3816221C5E5 /* ios-chat-pro */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "ios-chat-pro"; path = .; sourceTree = SOURCE_ROOT; };
 		BD09A292E1A246B595416DC6 /* CallKitProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CallKitProvider.swift; sourceTree = "<group>"; };
 		E3FE0167E8E8C013706DF83B /* ConversationListViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationListViewController.swift; sourceTree = "<group>"; };
 		E4F8B269AD818644389D362C /* FriendRequestCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FriendRequestCell.swift; sourceTree = "<group>"; };
@@ -95,7 +95,7 @@
 		2508EF70DEF7D81099F4D107 /* Packages */ = {
 			isa = PBXGroup;
 			children = (
-				A2304C4B950D810E9C549F1C /* phase3-av-call */,
+				B766EE90E234D3816221C5E5 /* ios-chat-pro */,
 			);
 			name = Packages;
 			sourceTree = "<group>";
@@ -124,7 +124,7 @@
 				93FA326C9B762DCAB590F502 /* AppDelegate.swift */,
 				5ACDCE0BC8F9E8EF7A77D603 /* AvatarImageView.swift */,
 				BD09A292E1A246B595416DC6 /* CallKitProvider.swift */,
-				6B86D45C565842479CF3AD47 /* CallPermissions.swift */,
+				5E20A628F05F52DE37B82DB6 /* CallPermissions.swift */,
 				433A3515C086B0178E667801 /* CallViewController.swift */,
 				F8EB6D5DBC0051B5D576A085 /* ContactListCell.swift */,
 				8DFDF68D07E4AD79AFB0B169 /* ContactListViewController.swift */,
@@ -188,6 +188,10 @@
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
+					F648DF2BBCD2BE09C8AAEB41 = {
+						DevelopmentTeam = S9PWD6X38T;
+						ProvisioningStyle = Automatic;
+					};
 				};
 			};
 			buildConfigurationList = 150CD20C87A40C357F599316 /* Build configuration list for PBXProject "ios-chat-pro" */;
@@ -222,7 +226,7 @@
 				AC4CF93C08183929C472085A /* AppDelegate.swift in Sources */,
 				2B03B7D44659C520AEFC917E /* AvatarImageView.swift in Sources */,
 				C11B3CC6453FDBCA1FAEEB3A /* CallKitProvider.swift in Sources */,
-				95CD823609CB4DD1964B5D87 /* CallPermissions.swift in Sources */,
+				9E5BFA10E82C0ECB6BF1FD1A /* CallPermissions.swift in Sources */,
 				DFE88FBF3B3A22EEF47634EB /* CallViewController.swift in Sources */,
 				7AB9633A25E6AFDC3D82E429 /* ContactListCell.swift in Sources */,
 				951AC39EF02FC7F336FCCFCB /* ContactListViewController.swift in Sources */,
@@ -318,6 +322,8 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = "";
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = S9PWD6X38T;
 				INFOPLIST_FILE = App/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -390,6 +396,8 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = "";
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = S9PWD6X38T;
 				INFOPLIST_FILE = App/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

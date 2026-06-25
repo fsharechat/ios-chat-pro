@@ -1,4 +1,5 @@
 import XCTest
+import Combine
 import IMClient
 import IMTransport
 import IMProto
@@ -8,6 +9,7 @@ import IMStorage
 final class ReceiveMessageHandlerTests: XCTestCase {
     private var storage: IMStorage!
     private var handler: ReceiveMessageHandler!
+    private var cancellables: Set<AnyCancellable> = []
 
     override func setUpWithError() throws {
         try super.setUpWithError()
@@ -299,6 +301,59 @@ final class ReceiveMessageHandlerTests: XCTestCase {
 
             XCTAssertNil(try storage.messages.message(uid: Int64(600 + wireType)), "type \(wireType) must not persist")
         }
+    }
+
+    /// The regression this guards against: a first-login (or long-offline)
+    /// pull can return hundreds of messages across many distinct
+    /// conversations in a single `MP` response. Before batching, each
+    /// message's insert+conversation-update ran as its own transaction, so
+    /// `conversationsPublisher` re-fired (and `ConversationListViewModel`
+    /// re-sorted its whole list) once per message — visible as UI lag right
+    /// after login.
+    func test_handle_multipleMessagesAcrossDifferentConversations_emitsOnlyOneConversationsPublisherUpdateForTheWholeBatch() throws {
+        var receivedCounts: [Int] = []
+        let expectation = expectation(description: "received exactly 2 updates: initial empty + one batched update")
+        expectation.expectedFulfillmentCount = 2
+
+        storage.conversations.conversationsPublisher()
+            .replaceError(with: [])
+            .sink { conversations in
+                receivedCounts.append(conversations.count)
+                expectation.fulfill()
+            }
+            .store(in: &cancellables)
+
+        let frame = try makePullResultFrame(messages: [
+            makeWireMessage(uid: 700, from: "alice", target: "alice", text: "hi from alice"),
+            makeWireMessage(uid: 701, from: "bob", target: "bob", text: "hi from bob"),
+            makeWireMessage(uid: 702, from: "carol", target: "carol", text: "hi from carol"),
+        ], head: 702)
+
+        handler.handle(frame: frame)
+
+        wait(for: [expectation], timeout: 2)
+        XCTAssertEqual(receivedCounts, [0, 3])
+    }
+
+    /// `chat-server-pro`'s system-notification push API
+    /// (`ImOpenApiController.pushNotificationByMobile` et al.) deliberately
+    /// sends `conversation.target = ""` for these messages — see
+    /// `sendMessage.setTarget("")` in that controller — and puts the real
+    /// identity in `fromUser` (always `"SystemNotification"`) instead. A
+    /// single-chat conversation keyed by the literal empty string can never
+    /// resolve a display name/avatar (no user has uid `""`), so the
+    /// received message's sender must become the conversation target
+    /// whenever the wire payload leaves it blank.
+    func test_handle_receivedSingleMessageWithEmptyConversationTarget_usesFromUserAsTheConversationTarget() throws {
+        var message = makeWireMessage(uid: 900, from: "SystemNotification", target: "", text: "system push")
+        message.conversation.target = ""
+        let frame = try makePullResultFrame(messages: [message], head: 900)
+
+        handler.handle(frame: frame)
+
+        let conversation = try storage.conversations.conversation(conversationType: .single, target: "SystemNotification")
+        XCTAssertEqual(conversation?.unreadCount, 1)
+        XCTAssertEqual(try storage.messages.message(uid: 900)?.target, "SystemNotification")
     }
 
     func test_handle_callSignal_stillAdvancesSyncHead() throws {

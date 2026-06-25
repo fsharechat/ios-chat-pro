@@ -13,8 +13,17 @@ public final class MessageStore {
 
     @discardableResult
     public func insert(_ message: StoredMessage) throws -> StoredMessage {
+        try dbQueue.write { db in try self.insert(message, db: db) }
+    }
+
+    /// Same as `insert(_:)`, run against a caller-managed transaction
+    /// (`IMStorage.write`) instead of opening its own — see
+    /// `ReceiveMessageHandler`, the first caller batching many of these
+    /// into one transaction.
+    @discardableResult
+    public func insert(_ message: StoredMessage, db: Database) throws -> StoredMessage {
         var message = message
-        try dbQueue.write { db in try message.insert(db) }
+        try message.insert(db)
         return message
     }
 
@@ -26,12 +35,15 @@ public final class MessageStore {
     /// must never return/touch a received message as a side effect of an
     /// unrelated collision.
     public func message(localMessageId: Int64) throws -> StoredMessage? {
-        try dbQueue.read { db in
-            try StoredMessage
-                .filter(Column("localMessageId") == localMessageId)
-                .filter(Column("direction") == MessageDirection.send.rawValue)
-                .fetchOne(db)
-        }
+        try dbQueue.read { db in try self.message(localMessageId: localMessageId, db: db) }
+    }
+
+    /// Same as `message(localMessageId:)`, run against a caller-managed transaction.
+    public func message(localMessageId: Int64, db: Database) throws -> StoredMessage? {
+        try StoredMessage
+            .filter(Column("localMessageId") == localMessageId)
+            .filter(Column("direction") == MessageDirection.send.rawValue)
+            .fetchOne(db)
     }
 
     /// Looks up a message by server-assigned `messageUid` — used by
@@ -41,9 +53,13 @@ public final class MessageStore {
     /// would be ambiguous to look up — short-circuits to `nil`.
     public func message(uid: Int64) throws -> StoredMessage? {
         guard uid != 0 else { return nil }
-        return try dbQueue.read { db in
-            try StoredMessage.filter(Column("messageUid") == uid).fetchOne(db)
-        }
+        return try dbQueue.read { db in try self.message(uid: uid, db: db) }
+    }
+
+    /// Same as `message(uid:)`, run against a caller-managed transaction.
+    public func message(uid: Int64, db: Database) throws -> StoredMessage? {
+        guard uid != 0 else { return nil }
+        return try StoredMessage.filter(Column("messageUid") == uid).fetchOne(db)
     }
 
     public func messages(
@@ -131,23 +147,29 @@ public final class MessageStore {
     /// for Phase 1's only caller (a future `SendMessageHandler` that already
     /// knows the row exists, having just inserted it itself).
     public func updateStatus(localMessageId: Int64, status: MessageStatus) throws {
-        try dbQueue.write { db in
-            try db.execute(
-                sql: "UPDATE message SET status = ? WHERE localMessageId = ? AND direction = ?",
-                arguments: [status.rawValue, localMessageId, MessageDirection.send.rawValue]
-            )
-        }
+        try dbQueue.write { db in try self.updateStatus(localMessageId: localMessageId, status: status, db: db) }
+    }
+
+    /// Same as `updateStatus(localMessageId:status:)`, run against a caller-managed transaction.
+    public func updateStatus(localMessageId: Int64, status: MessageStatus, db: Database) throws {
+        try db.execute(
+            sql: "UPDATE message SET status = ? WHERE localMessageId = ? AND direction = ?",
+            arguments: [status.rawValue, localMessageId, MessageDirection.send.rawValue]
+        )
     }
 
     /// Scoped to `direction = .send`; see `updateStatus` above for why, and
     /// for the no-op-on-not-found behavior.
     public func updateMessageUid(localMessageId: Int64, messageUid: Int64) throws {
-        try dbQueue.write { db in
-            try db.execute(
-                sql: "UPDATE message SET messageUid = ? WHERE localMessageId = ? AND direction = ?",
-                arguments: [messageUid, localMessageId, MessageDirection.send.rawValue]
-            )
-        }
+        try dbQueue.write { db in try self.updateMessageUid(localMessageId: localMessageId, messageUid: messageUid, db: db) }
+    }
+
+    /// Same as `updateMessageUid(localMessageId:messageUid:)`, run against a caller-managed transaction.
+    public func updateMessageUid(localMessageId: Int64, messageUid: Int64, db: Database) throws {
+        try db.execute(
+            sql: "UPDATE message SET messageUid = ? WHERE localMessageId = ? AND direction = ?",
+            arguments: [messageUid, localMessageId, MessageDirection.send.rawValue]
+        )
     }
 
     /// Updates a previously-inserted row's content in place, keyed by its

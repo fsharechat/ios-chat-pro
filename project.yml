@@ -42,6 +42,8 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.fshare.ios-chat-pro.App
         ASSETCATALOG_COMPILER_APPICON_NAME: ""
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: S9PWD6X38T
     dependencies:
       - package: IMCore
         product: IMClient

@@ -76,8 +76,8 @@ public final class LoginAPIClient: LoginAPIClientProtocol {
         let trimmedBase = baseURLString.hasSuffix("/") ? String(baseURLString.dropLast()) : baseURLString
         var request = URLRequest(url: URL(string: trimmedBase + path)!)
         request.httpMethod = "POST"
-        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
-        request.httpBody = Data(params.map { "\($0.key)=\($0.value.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? $0.value)" }.joined(separator: "&").utf8)
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(params)
 
         let (data, _) = try await session.data(for: request)
 

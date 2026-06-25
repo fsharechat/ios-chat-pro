@@ -116,13 +116,28 @@ final class MessagingServiceTests: XCTestCase {
         XCTAssertEqual(request.id, 49) // head - 1
     }
 
-    func test_pullMessagesSinceLastSync_sendsPullRequestSeededFromSyncState() throws {
-        service.pullMessagesSinceLastSync(syncState: ConnectAckSyncState(messageHead: 77, friendHead: 0, friendRequestHead: 0, settingHead: 0, serverTime: 0))
+    func test_pullMessagesSinceLastSync_seedsRequestFromTheLocallyPersistedHead() throws {
+        try storage.syncState.set(StoredSyncState(msgHead: 77, friendHead: 0, friendRequestHead: 0, settingHead: 0))
+
+        service.pullMessagesSinceLastSync()
 
         let frame = try decodeOnlySentFrame()
         XCTAssertEqual(frame.header.subSignal, .mp)
         let request = try Im_PullMessageRequest(serializedBytes: frame.body)
         XCTAssertEqual(request.id, 77)
+    }
+
+    /// The regression this guards against: using the CONNECT_ACK payload's
+    /// `msgHead` (the server's *current* head) as the first pull's cursor
+    /// instead of the locally persisted one always comes back empty, even
+    /// when the account has real history — see `pullMessagesSinceLastSync`'s
+    /// doc comment.
+    func test_pullMessagesSinceLastSync_onFreshDevice_seedsRequestFromZeroNotFromAnyServerHead() throws {
+        service.pullMessagesSinceLastSync()
+
+        let frame = try decodeOnlySentFrame()
+        let request = try Im_PullMessageRequest(serializedBytes: frame.body)
+        XCTAssertEqual(request.id, 0)
     }
 
     func test_resend_afterSendFailure_resetsStatusAndSendsNewWireFrame() throws {

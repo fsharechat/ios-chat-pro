@@ -9,21 +9,31 @@ public final class ContactListViewModel {
     @Published public private(set) var unreadFriendRequestCount: Int = 0
 
     private let storage: IMStorage
+    private let contactSync: ContactInfoFetching?
     private var cancellable: AnyCancellable?
     private var friendRequestCountCancellable: AnyCancellable?
 
-    public init(storage: IMStorage) {
+    public init(storage: IMStorage, contactSync: ContactInfoFetching?) {
         self.storage = storage
+        self.contactSync = contactSync
         cancellable = storage.users.friendsPublisher()
             .replaceError(with: [])
-            .sink { [weak self] users in self?.handleFriendsUpdate(users) }
+            .sink { [weak self] users in
+                print("[DEBUG-FP] friendsPublisher emitted \(users.count) rows")
+                self?.handleFriendsUpdate(users)
+            }
         friendRequestCountCancellable = storage.friendRequests.unreadIncomingCountPublisher()
             .replaceError(with: 0)
             .sink { [weak self] count in self?.unreadFriendRequestCount = count }
     }
 
     private func handleFriendsUpdate(_ users: [StoredUser]) {
+        var unresolvedUids: [String] = []
+
         let rows = users.map { user -> ContactRow in
+            if user.displayName == nil && user.name == nil {
+                unresolvedUids.append(user.uid)
+            }
             let displayName = user.displayName ?? user.name ?? user.uid
             return ContactRow(
                 uid: user.uid,
@@ -31,6 +41,10 @@ public final class ContactListViewModel {
                 avatarURL: user.portrait,
                 sectionLetter: PinyinIndexer.sectionLetter(for: displayName)
             )
+        }
+
+        if !unresolvedUids.isEmpty {
+            contactSync?.fetchUserInfo(uids: unresolvedUids, forceRefresh: false)
         }
 
         let grouped = Dictionary(grouping: rows, by: { $0.sectionLetter })

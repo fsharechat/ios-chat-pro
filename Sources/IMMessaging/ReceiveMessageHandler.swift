@@ -3,6 +3,7 @@ import IMClient
 import IMTransport
 import IMProto
 import IMStorage
+import GRDB
 
 /// Parses a `PUB_ACK`/`MP` pulled-message batch, persists new messages,
 /// updates the affected conversations, and advances the local sync state.
@@ -52,10 +53,20 @@ public final class ReceiveMessageHandler: MessageHandler {
     public func handle(frame: Frame) {
         guard let errorCode = frame.body.first, errorCode == 0 else { return }
         guard let result = try? Im_PullMessageResult(serializedBytes: frame.body.dropFirst()) else { return }
-        for wireMessage in result.message {
-            persist(wireMessage)
+        // One write transaction for the whole pulled batch, not one per
+        // message — a first-login (or long-offline) pull can return
+        // hundreds of messages in a single MP response, and per-message
+        // transactions would re-trigger conversationsPublisher once per
+        // message, each causing a full conversation-list re-sort downstream
+        // in ConversationListViewModel (visible as UI lag right after
+        // login), plus a redundant UPUI re-fetch for any uid still
+        // unresolved at that snapshot.
+        try? storage.write { db in
+            for wireMessage in result.message {
+                persist(wireMessage, db: db)
+            }
+            advanceSyncHead(to: result.head, db: db)
         }
-        advanceSyncHead(to: result.head)
     }
 
     /// Wire types 401/402/403/404 (Answer/Bye/Signal/Modify) are
@@ -68,9 +79,9 @@ public final class ReceiveMessageHandler: MessageHandler {
     /// conversation flow runs. Type 400 (CallStart) is the one call-related
     /// type that *does* persist — it's the call-record bubble — so it falls
     /// through to the same path as every other message type below.
-    private func persist(_ wireMessage: Im_Message) {
+    private func persist(_ wireMessage: Im_Message, db: Database) {
         guard wireMessage.messageID != 0 else { return }
-        if (try? storage.messages.message(uid: wireMessage.messageID)) != nil {
+        if (try? storage.messages.message(uid: wireMessage.messageID, db: db)) != nil {
             return // already have it via server uid — pull windows can overlap
         }
 
@@ -82,9 +93,9 @@ public final class ReceiveMessageHandler: MessageHandler {
         let direction: MessageDirection = wireMessage.fromUser == myUserId() ? .send : .receive
 
         if direction == .send, wireMessage.localMessageID != 0,
-           (try? storage.messages.message(localMessageId: wireMessage.localMessageID)) != nil {
-            try? storage.messages.updateMessageUid(localMessageId: wireMessage.localMessageID, messageUid: wireMessage.messageID)
-            try? storage.messages.updateStatus(localMessageId: wireMessage.localMessageID, status: .sent)
+           (try? storage.messages.message(localMessageId: wireMessage.localMessageID, db: db)) != nil {
+            try? storage.messages.updateMessageUid(localMessageId: wireMessage.localMessageID, messageUid: wireMessage.messageID, db: db)
+            try? storage.messages.updateStatus(localMessageId: wireMessage.localMessageID, status: .sent, db: db)
             return
         }
 
@@ -98,7 +109,17 @@ public final class ReceiveMessageHandler: MessageHandler {
         }
 
         let conversationType = ConversationType(rawValue: Int(wireMessage.conversation.type)) ?? .single
-        let target = wireMessage.conversation.target
+        // System-notification pushes (`chat-server-pro`'s `ImOpenApiController`,
+        // `fromUser` always `"SystemNotification"`) deliberately send
+        // `conversation.target = ""` and rely on the receiver treating the
+        // sender as the conversation party — there's no "other side" to
+        // name for a server-originated broadcast. A single-chat
+        // conversation literally keyed by `""` can never resolve a display
+        // name/avatar (no user has uid `""`), so the sender fills in here
+        // whenever the wire payload leaves the target blank.
+        let target = (conversationType == .single && direction == .receive && wireMessage.conversation.target.isEmpty)
+            ? wireMessage.fromUser
+            : wireMessage.conversation.target
         let line = Int(wireMessage.conversation.line)
         let mentionedType = Int(wireMessage.content.mentionedType)
         let mentionedTargets = wireMessage.content.mentionedTarget
@@ -119,7 +140,7 @@ public final class ReceiveMessageHandler: MessageHandler {
                 direction: direction,
                 mentionedType: mentionedType,
                 mentionedTargets: mentionedTargets
-            ))
+            ), db: db)
             try storage.conversations.recordIncomingMessage(
                 conversationType: conversationType,
                 target: target,
@@ -127,7 +148,8 @@ public final class ReceiveMessageHandler: MessageHandler {
                 messageUid: wireMessage.messageID,
                 timestamp: wireMessage.serverTimestamp,
                 incrementUnread: direction == .receive,
-                incrementMention: isMentioned
+                incrementMention: isMentioned,
+                db: db
             )
             if case .groupNotification = content {
                 onGroupNotificationMessage?(target)
@@ -140,13 +162,13 @@ public final class ReceiveMessageHandler: MessageHandler {
         }
     }
 
-    private func advanceSyncHead(to head: Int64) {
-        guard let current = try? storage.syncState.get(), head > current.msgHead else { return }
+    private func advanceSyncHead(to head: Int64, db: Database) {
+        guard let current = try? storage.syncState.get(db: db), head > current.msgHead else { return }
         try? storage.syncState.set(StoredSyncState(
             msgHead: head,
             friendHead: current.friendHead,
             friendRequestHead: current.friendRequestHead,
             settingHead: current.settingHead
-        ))
+        ), db: db)
     }
 }

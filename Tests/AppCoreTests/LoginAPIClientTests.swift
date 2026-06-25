@@ -30,7 +30,10 @@ final class LoginAPIClientTests: XCTestCase {
 
         XCTAssertEqual(capturedRequest?.url?.path, "/send_code")
         XCTAssertEqual(capturedRequest?.httpMethod, "POST")
-        XCTAssertEqual(MockURLProtocol.capturedBody(of: capturedRequest!), "mobile=13800000000")
+        XCTAssertEqual(capturedRequest?.value(forHTTPHeaderField: "Content-Type"), "application/json")
+        let body = try XCTUnwrap(MockURLProtocol.capturedBody(of: capturedRequest!))
+        let params = try JSONDecoder().decode([String: String].self, from: Data(body.utf8))
+        XCTAssertEqual(params, ["mobile": "13800000000"])
     }
 
     func test_requestCode_nonZeroCode_throwsServerError() async {
@@ -59,8 +62,8 @@ final class LoginAPIClientTests: XCTestCase {
 
         XCTAssertEqual(capturedRequest?.url?.path, "/login")
         let body = try XCTUnwrap(MockURLProtocol.capturedBody(of: capturedRequest!))
-        let params = Set(body.split(separator: "&").map(String.init))
-        XCTAssertEqual(params, ["mobile=13800000000", "code=1234", "clientId=device-1"])
+        let params = try JSONDecoder().decode([String: String].self, from: Data(body.utf8))
+        XCTAssertEqual(params, ["mobile": "13800000000", "code": "1234", "clientId": "device-1"])
     }
 
     func test_login_decodesResultIntoLoginResult() async throws {

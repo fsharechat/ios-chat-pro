@@ -49,7 +49,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         let conversationListNav = makeConversationListNavigationController()
         conversationListNav.tabBarItem = UITabBarItem(title: "消息", image: UIImage(systemName: "message"), tag: 0)
 
-        let contactListViewModel = ContactListViewModel(storage: environment.storage)
+        let contactListViewModel = ContactListViewModel(storage: environment.storage, contactSync: environment.contactSyncService)
         let contactListNav = makeContactListNavigationController(viewModel: contactListViewModel)
         contactListNav.tabBarItem = UITabBarItem(title: "联系人", image: UIImage(systemName: "person.2"), tag: 1)
         contactListViewModel.$unreadFriendRequestCount
@@ -63,7 +63,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     }
 
     private func makeConversationListNavigationController() -> UIViewController {
-        let viewModel = ConversationListViewModel(storage: environment.storage, contactSync: environment.contactSyncService)
+        let viewModel = ConversationListViewModel(storage: environment.storage, contactSync: environment.contactSyncService, groupSync: environment.groupSyncService)
         let listViewController = ConversationListViewController(viewModel: viewModel)
         listViewController.onConversationSelected = { [weak self, weak listViewController] row in
             guard let self else { return }

@@ -8,10 +8,14 @@ import IMClient
 // import takes precedence over the ambiguous unqualified `Scheduler` lookup.
 import protocol IMClient.Scheduler
 
-/// **Threading contract:** like the rest of this codebase (see `IMClient`'s
-/// own threading-contract doc comment), this has no internal locking and
-/// must be called from a single consistent queue — by convention the main
-/// queue, since `requestCode()`/`login()` are driven by UIKit button taps.
+/// **Threading contract:** confined to the main actor — `requestCode()`/
+/// `login()` are driven by UIKit button taps, and `@MainActor` ensures
+/// `await`s inside them resume back on the main thread before touching
+/// `@Published` properties, instead of wherever `URLSession`'s continuation
+/// happens to resume them (previously a real crash: Combine delivered
+/// `$errorMessage` on a background thread, and `LoginViewController`'s sink
+/// touched UIKit there, tripping Auto Layout's background-thread check).
+@MainActor
 public final class LoginViewModel {
     @Published public var phoneNumber: String = ""
     @Published public var code: String = ""

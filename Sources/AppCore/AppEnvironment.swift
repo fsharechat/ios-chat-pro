@@ -48,6 +48,7 @@ public final class AppEnvironment {
         self.credentialsStore = credentialsStore
         self.deviceIdentifierProvider = deviceIdentifierProvider
         self.transportFactory = transportFactory
+        credentialsStore.clearIfFreshInstall()
     }
 
     /// Reads `credentialsStore`; if credentials exist, (re)constructs
@@ -83,8 +84,8 @@ public final class AppEnvironment {
         let contactSync = ContactSyncService(imClient: client, storage: storage)
         let groupSync = GroupSyncService(imClient: client, storage: storage)
         service.onGroupNotificationMessage = { [weak groupSync] groupId in groupSync?.refreshGroup(targetId: groupId) }
-        connectAckHandler.onSyncState = { [weak service, weak contactSync] syncState in
-            service?.pullMessagesSinceLastSync(syncState: syncState)
+        connectAckHandler.onSyncState = { [weak service, weak contactSync] _ in
+            service?.pullMessagesSinceLastSync()
             contactSync?.syncFriendList()
             contactSync?.syncFriendRequests()
         }

@@ -3,12 +3,17 @@
 
 # Xcode / Swift
 .build/
+.build-sim/
 *.xcodeproj/xcuserdata/
 *.xcworkspace/xcuserdata/
+**/*.xcworkspace/xcshareddata/IDEWorkspaceChecks.plist
 xcuserdata/
 DerivedData/
 .swiftpm/
 .tools/
+
+# Claude Code local project state (settings.local.json, scheduled task locks)
+.claude/
 
 # Local git worktrees used for isolated feature work (subagent-driven-development)
 .worktrees/

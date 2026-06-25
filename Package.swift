@@ -40,7 +40,7 @@ let package = Package(
         .testTarget(name: "IMClientTests", dependencies: ["IMClient"]),
         .target(name: "IMStorage", dependencies: [.product(name: "GRDB", package: "GRDB.swift")]),
         .testTarget(name: "IMStorageTests", dependencies: ["IMStorage"]),
-        .target(name: "IMMessaging", dependencies: ["IMClient", "IMStorage", "IMProto", "IMTransport"]),
+        .target(name: "IMMessaging", dependencies: ["IMClient", "IMStorage", "IMProto", "IMTransport", .product(name: "GRDB", package: "GRDB.swift")]),
         .testTarget(name: "IMMessagingTests", dependencies: ["IMMessaging"]),
         .target(name: "IMContacts", dependencies: ["IMClient", "IMStorage", "IMProto", "IMTransport"]),
         .testTarget(name: "IMContactsTests", dependencies: ["IMContacts"]),

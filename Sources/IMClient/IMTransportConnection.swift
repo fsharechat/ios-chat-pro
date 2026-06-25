@@ -44,6 +44,7 @@ public final class NWConnectionTransport: IMTransportConnection {
 
     public func start() {
         connection.stateUpdateHandler = { [weak self] state in
+            print("[DEBUG-FP] NWConnection state -> \(state)")
             switch state {
             case .ready:
                 self?.onEvent?(.connected)
@@ -74,8 +75,13 @@ public final class NWConnectionTransport: IMTransportConnection {
     }
 
     private func receiveLoop() {
+        print("[DEBUG-FP] receiveLoop: arming connection.receive()")
         connection.receive(minimumIncompleteLength: 1, maximumLength: 65536) { [weak self] data, _, isComplete, error in
-            guard let self else { return }
+            guard let self else {
+                print("[DEBUG-FP] receive callback fired but self is nil")
+                return
+            }
+            print("[DEBUG-FP] NWConnectionTransport.receive callback: bytes=\(data?.count ?? -1) isComplete=\(isComplete) error=\(String(describing: error))")
             if let data, !data.isEmpty {
                 self.onDataReceived?(data)
             }
@@ -87,7 +93,9 @@ public final class NWConnectionTransport: IMTransportConnection {
                 self.onEvent?(.cancelled)
                 return
             }
+            print("[DEBUG-FP] receiveLoop: about to re-arm")
             self.receiveLoop()
         }
+        print("[DEBUG-FP] receiveLoop: connection.receive() call returned (registration done)")
     }
 }

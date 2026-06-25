@@ -80,15 +80,52 @@ public final class UserStore {
     /// upsert here would be a real bug (it would clobber friend status on
     /// every profile refresh).
     public func upsertProfile(uid: String, name: String?, displayName: String?, portrait: String?, mobile: String?, gender: Int, updateDt: Int64) throws {
-        try dbQueue.write { db in
-            var user = try StoredUser.fetchOne(db, key: uid) ?? StoredUser(uid: uid, name: nil, displayName: nil, portrait: nil, mobile: nil, gender: 0, updateDt: 0)
-            user.name = name
-            user.displayName = displayName
-            user.portrait = portrait
-            user.mobile = mobile
-            user.gender = gender
-            user.updateDt = updateDt
-            try user.save(db)
+        try dbQueue.write { db in try Self.saveProfile(uid: uid, name: name, displayName: displayName, portrait: portrait, mobile: mobile, gender: gender, updateDt: updateDt, db: db) }
+    }
+
+    public struct ProfileUpdate {
+        public let uid: String
+        public let name: String?
+        public let displayName: String?
+        public let portrait: String?
+        public let mobile: String?
+        public let gender: Int
+        public let updateDt: Int64
+
+        public init(uid: String, name: String?, displayName: String?, portrait: String?, mobile: String?, gender: Int, updateDt: Int64) {
+            self.uid = uid
+            self.name = name
+            self.displayName = displayName
+            self.portrait = portrait
+            self.mobile = mobile
+            self.gender = gender
+            self.updateDt = updateDt
         }
+    }
+
+    /// Same merge semantics as `upsertProfile(...)`, applied to every entry
+    /// in a single write transaction — one `friendsPublisher`/`usersPublisher`
+    /// emission for the whole batch instead of one per entry. Matters when a
+    /// single `UPUI` response resolves dozens/hundreds of profiles at once
+    /// (e.g. right after a fresh friend-list sync): without batching, each
+    /// per-entry transaction re-triggers a full re-query and re-sort
+    /// downstream in `ContactListViewModel`.
+    public func upsertProfiles(_ updates: [ProfileUpdate]) throws {
+        try dbQueue.write { db in
+            for update in updates {
+                try Self.saveProfile(uid: update.uid, name: update.name, displayName: update.displayName, portrait: update.portrait, mobile: update.mobile, gender: update.gender, updateDt: update.updateDt, db: db)
+            }
+        }
+    }
+
+    private static func saveProfile(uid: String, name: String?, displayName: String?, portrait: String?, mobile: String?, gender: Int, updateDt: Int64, db: Database) throws {
+        var user = try StoredUser.fetchOne(db, key: uid) ?? StoredUser(uid: uid, name: nil, displayName: nil, portrait: nil, mobile: nil, gender: 0, updateDt: 0)
+        user.name = name
+        user.displayName = displayName
+        user.portrait = portrait
+        user.mobile = mobile
+        user.gender = gender
+        user.updateDt = updateDt
+        try user.save(db)
     }
 }

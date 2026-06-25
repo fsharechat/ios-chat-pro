@@ -43,4 +43,33 @@ final class CredentialsStoreTests: XCTestCase {
 
         XCTAssertNil(store.load())
     }
+
+    /// Keychain items survive app deletion on iOS, so a leftover token from
+    /// a previous install must be wiped the first time `UserDefaults`
+    /// (which *is* cleared on uninstall) shows no "already launched" flag.
+    func test_clearIfFreshInstall_wipesStaleCredentialsOnFirstLaunch() {
+        let defaults = makeIsolatedDefaults()
+        store.save(Credentials(userId: "stale", token: "leftover-from-previous-install"))
+
+        store.clearIfFreshInstall(defaults: defaults)
+
+        XCTAssertNil(store.load())
+    }
+
+    func test_clearIfFreshInstall_leavesCredentialsAloneOnSubsequentLaunches() {
+        let defaults = makeIsolatedDefaults()
+        store.clearIfFreshInstall(defaults: defaults) // simulates the first-ever launch
+        store.save(Credentials(userId: "u1", token: "t1")) // user logs in normally afterward
+
+        store.clearIfFreshInstall(defaults: defaults) // simulates a later, ordinary launch
+
+        XCTAssertEqual(store.load()?.userId, "u1")
+    }
+
+    private func makeIsolatedDefaults() -> UserDefaults {
+        let suiteName = "AppCoreTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        addTeardownBlock { defaults.removePersistentDomain(forName: suiteName) }
+        return defaults
+    }
 }

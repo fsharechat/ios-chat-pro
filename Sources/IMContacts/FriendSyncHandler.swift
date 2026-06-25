@@ -23,13 +23,26 @@ public final class FriendSyncHandler: MessageHandler {
     }
 
     public func handle(frame: Frame) {
-        guard let errorCode = frame.body.first, errorCode == 0 else { return }
-        guard let result = try? Im_GetFriendsResult(serializedBytes: frame.body.dropFirst()) else { return }
+        print("[DEBUG-FP] FriendSyncHandler.handle bodyBytes=\(frame.body.count)")
+        guard let errorCode = frame.body.first, errorCode == 0 else {
+            print("[DEBUG-FP] FriendSyncHandler bailed: errorCode=\(frame.body.first.map(String.init) ?? "nil")")
+            return
+        }
+        guard let result = try? Im_GetFriendsResult(serializedBytes: frame.body.dropFirst()) else {
+            print("[DEBUG-FP] FriendSyncHandler bailed: Im_GetFriendsResult parse failed")
+            return
+        }
+        print("[DEBUG-FP] FriendSyncHandler parsed entries=\(result.entry.count) uids=\(result.entry.map(\.uid))")
         // If the write fails, the friend list is silently left stale with no
         // diagnostic trail — accepted for Phase 1 since there's no logging
         // facility yet, the same accepted gap documented in
         // `ReceiveMessageHandler`'s persist method and `CredentialsStore`'s
         // save/clear methods.
-        try? storage.users.replaceFriendList(uids: result.entry.map(\.uid))
+        do {
+            try storage.users.replaceFriendList(uids: result.entry.map(\.uid))
+            print("[DEBUG-FP] replaceFriendList succeeded")
+        } catch {
+            print("[DEBUG-FP] replaceFriendList THREW: \(error)")
+        }
     }
 }

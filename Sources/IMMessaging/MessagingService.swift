@@ -71,8 +71,22 @@ public final class MessagingService {
     /// `ConnectAckHandler.onSyncState`, Plan B Task 11) to catch up on
     /// anything missed while disconnected, seeded from the locally stored
     /// sync state rather than starting from zero.
-    public func pullMessagesSinceLastSync(syncState: ConnectAckSyncState) {
-        pullMessages(from: syncState.messageHead, type: 0)
+    ///
+    /// Deliberately ignores `ConnectAckSyncState.messageHead` (the
+    /// CONNECT_ACK payload's `msgHead`) — that field is the server's
+    /// *current* head, not "where this device last synced to." Using it as
+    /// the pull cursor on first login asks the server for messages newer
+    /// than "right now," which always comes back empty even when there's
+    /// real history — Android's `ConnectAckMessageHandler` makes the same
+    /// distinction (`getLastMessageSeq()`, a value it explicitly never
+    /// calibrates from the ack's `msgHead`). The locally stored
+    /// `IMStorage.syncState` head defaults to 0 for a fresh device, which is
+    /// exactly "give me everything," and is advanced to the server's real
+    /// value only as `ReceiveMessageHandler` actually persists pulled
+    /// messages.
+    public func pullMessagesSinceLastSync() {
+        let localHead = (try? storage.syncState.get())?.msgHead ?? 0
+        pullMessages(from: localHead, type: 0)
     }
 
     public func sendText(to target: String, conversationType: ConversationType = .single, line: Int = 0, text: String, mentionedType: Int32 = 0, mentionedTargets: [String] = []) throws {

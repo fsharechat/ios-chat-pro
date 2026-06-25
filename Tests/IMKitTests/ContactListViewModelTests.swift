@@ -4,15 +4,27 @@ import Combine
 import IMStorage
 @testable import IMKit
 
+private final class FakeContactInfoFetcher: ContactInfoFetching {
+    private(set) var fetchedUids: [String] = []
+    private(set) var lastForceRefresh: Bool?
+
+    func fetchUserInfo(uids: [String], forceRefresh: Bool) {
+        fetchedUids.append(contentsOf: uids)
+        lastForceRefresh = forceRefresh
+    }
+}
+
 final class ContactListViewModelTests: XCTestCase {
     private var storage: IMStorage!
+    private var fetcher: FakeContactInfoFetcher!
     private var viewModel: ContactListViewModel!
     private var cancellables: Set<AnyCancellable> = []
 
     override func setUpWithError() throws {
         try super.setUpWithError()
         storage = try IMStorage.openInMemory()
-        viewModel = ContactListViewModel(storage: storage)
+        fetcher = FakeContactInfoFetcher()
+        viewModel = ContactListViewModel(storage: storage, contactSync: fetcher)
     }
 
     private func waitForNonEmptySections() {
@@ -72,6 +84,23 @@ final class ContactListViewModelTests: XCTestCase {
 
         XCTAssertEqual(viewModel.sections.first?.rows.first?.displayName, "zz9")
         XCTAssertEqual(viewModel.sections.map { $0.letter }, ["Z"])
+    }
+
+    func test_unresolvedFriendProfile_triggersAFetchUserInfoCall() throws {
+        try storage.users.upsert(StoredUser(uid: "zz9", name: nil, displayName: nil, portrait: nil, mobile: nil, gender: 0, updateDt: 0, isFriend: true))
+
+        waitForNonEmptySections()
+
+        XCTAssertTrue(fetcher.fetchedUids.contains("zz9"))
+        XCTAssertEqual(fetcher.lastForceRefresh, false)
+    }
+
+    func test_resolvedFriendProfile_doesNotTriggerAFetchUserInfoCall() throws {
+        try storage.users.upsert(StoredUser(uid: "u1", name: nil, displayName: "Alice", portrait: nil, mobile: nil, gender: 0, updateDt: 0, isFriend: true))
+
+        waitForNonEmptySections()
+
+        XCTAssertTrue(fetcher.fetchedUids.isEmpty)
     }
 
     func test_nonLetterName_groupedUnderHash() throws {

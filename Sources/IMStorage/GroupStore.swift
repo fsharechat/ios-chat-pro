@@ -17,6 +17,18 @@ public final class GroupStore {
         try dbQueue.read { db in try StoredGroup.fetchOne(db, key: groupId) }
     }
 
+    /// All groups, re-fired on any insert/update to the `group` table —
+    /// unlike `groupPublisher(groupId:)`, which only tracks one row. Lets a
+    /// list (e.g. `ConversationListViewModel`) re-derive its rows once a
+    /// group's name/portrait resolves asynchronously after the list's own
+    /// driving publisher already fired.
+    public func groupsPublisher() -> AnyPublisher<[StoredGroup], Error> {
+        ValueObservation
+            .tracking { db in try StoredGroup.fetchAll(db) }
+            .publisher(in: dbQueue, scheduling: .immediate)
+            .eraseToAnyPublisher()
+    }
+
     public func groupPublisher(groupId: String) -> AnyPublisher<StoredGroup?, Error> {
         ValueObservation
             .tracking { db in try StoredGroup.fetchOne(db, key: groupId) }

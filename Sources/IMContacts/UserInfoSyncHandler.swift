@@ -33,12 +33,14 @@ public final class UserInfoSyncHandler: MessageHandler {
     public func handle(frame: Frame) {
         guard let errorCode = frame.body.first, errorCode == 0 else { return }
         guard let result = try? Im_PullUserResult(serializedBytes: frame.body.dropFirst()) else { return }
-        for userResult in result.result {
+        // One write transaction for the whole batch, not one per user —
+        // a single UPUI response can resolve dozens/hundreds of profiles at
+        // once (e.g. right after a fresh friend-list sync), and per-entry
+        // transactions would re-trigger friendsPublisher/usersPublisher once
+        // per entry, each causing a full re-query and re-sort downstream.
+        let updates = result.result.map { userResult -> UserStore.ProfileUpdate in
             let user = userResult.user
-            // Accepted Phase-1 gap: a failed upsert for one user is
-            // silently dropped (no logging facility yet), same as
-            // FriendSyncHandler/ReceiveMessageHandler/CredentialsStore.
-            try? storage.users.upsertProfile(
+            return UserStore.ProfileUpdate(
                 uid: user.uid,
                 name: user.hasName ? user.name : nil,
                 displayName: user.hasDisplayName ? user.displayName : nil,
@@ -48,5 +50,8 @@ public final class UserInfoSyncHandler: MessageHandler {
                 updateDt: user.updateDt
             )
         }
+        // Accepted Phase-1 gap: a failed batch upsert is silently dropped (no
+        // logging facility yet), same as FriendSyncHandler/ReceiveMessageHandler/CredentialsStore.
+        try? storage.users.upsertProfiles(updates)
     }
 }

@@ -23,6 +23,19 @@ public final class IMStorage {
     /// stores above.
     public var dbQueueForTesting: DatabaseQueue { database.dbQueue }
 
+    /// The "narrow accessor" this type's doc comment above reserves for
+    /// when a future need arises: runs `updates` inside a single write
+    /// transaction against the shared connection, so writes that span
+    /// multiple stores (e.g. `messages` + `conversations` + `syncState`,
+    /// all touched per pulled message) commit atomically and any reactive
+    /// publisher observing the affected tables fires once for the whole
+    /// batch, not once per row. Callers use each store's `db:`-taking
+    /// overload from inside `updates` — see `ReceiveMessageHandler`
+    /// (`IMMessaging`), the first caller.
+    public func write<T>(_ updates: (Database) throws -> T) throws -> T {
+        try database.dbQueue.write(updates)
+    }
+
     private let database: IMDatabase
 
     private init(database: IMDatabase) {

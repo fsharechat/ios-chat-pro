@@ -19,6 +19,7 @@ private final class StubLoginAPIClient: LoginAPIClientProtocol {
     }
 }
 
+@MainActor
 final class LoginViewModelTests: XCTestCase {
     private var apiClient: StubLoginAPIClient!
     private var credentialsStore: CredentialsStore!
