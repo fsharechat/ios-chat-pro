@@ -26,6 +26,7 @@
 		92EE14C2D330B858ECE87B6C /* AddGroupMemberViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 929AC72577A219C38775E51D /* AddGroupMemberViewController.swift */; };
 		951AC39EF02FC7F336FCCFCB /* ContactListViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DFDF68D07E4AD79AFB0B169 /* ContactListViewController.swift */; };
 		9D341582713FAD5C8A889E68 /* ImageMessageCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57813ACEB21053B529B765B0 /* ImageMessageCell.swift */; };
+		9D5257C3863A7F98DACD6D8B /* MyQRCodeViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCCFBE9437171B403CF11393 /* MyQRCodeViewController.swift */; };
 		9E209FB56ACB4975796F5B20 /* AppCore in Frameworks */ = {isa = PBXBuildFile; productRef = AF6EC4831921C0CD2F8F91AD /* AppCore */; };
 		9E5BFA10E82C0ECB6BF1FD1A /* CallPermissions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E20A628F05F52DE37B82DB6 /* CallPermissions.swift */; };
 		A1611CC727D61FF89025CA77 /* IMClient in Frameworks */ = {isa = PBXBuildFile; productRef = 99257818497BC42EED99DC6C /* IMClient */; };
@@ -72,6 +73,7 @@
 		E4F8B269AD818644389D362C /* FriendRequestCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FriendRequestCell.swift; sourceTree = "<group>"; };
 		E696B814AB99A34483A11EA8 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		F8EB6D5DBC0051B5D576A085 /* ContactListCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactListCell.swift; sourceTree = "<group>"; };
+		FCCFBE9437171B403CF11393 /* MyQRCodeViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MyQRCodeViewController.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -140,6 +142,7 @@
 				38D6C28B7BC3F34AF2780264 /* LoginViewController.swift */,
 				0CE65FB3E4BBBDBC011338C7 /* MentionPickerViewController.swift */,
 				1A7AF95FBB4F8D27A5F4067D /* MessageInputBar.swift */,
+				FCCFBE9437171B403CF11393 /* MyQRCodeViewController.swift */,
 				1499CDEAF049F73974F200A4 /* NewFriendsEntryView.swift */,
 				0832B3942D777D6A0D67E100 /* NewFriendsViewController.swift */,
 				A0E388EB556B39D1EFCF7DEA /* SceneDelegate.swift */,
@@ -241,6 +244,7 @@
 				8671C543D4A6428B08FE1E74 /* LoginViewController.swift in Sources */,
 				471B25795C53FC319DED0CCD /* MentionPickerViewController.swift in Sources */,
 				F0E0711134156FE1E30507ED /* MessageInputBar.swift in Sources */,
+				9D5257C3863A7F98DACD6D8B /* MyQRCodeViewController.swift in Sources */,
 				5419EAD85D7C9132AB94FBA6 /* NewFriendsEntryView.swift in Sources */,
 				D91AD4CA3FBFB2F6A396A9DE /* NewFriendsViewController.swift in Sources */,
 				25D0AC4139A0950DB0CD2B4B /* SceneDelegate.swift in Sources */,
