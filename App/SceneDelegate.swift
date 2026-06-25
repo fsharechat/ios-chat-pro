@@ -12,6 +12,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     private var cancellables = Set<AnyCancellable>()
     private var callKitProvider: CallKitProvider?
     private var presentedCallViewController: CallViewController?
+    private let themePreferenceStore = ThemePreferenceStore()
 
     func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
         guard let windowScene = scene as? UIWindowScene else { return }
@@ -30,6 +31,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 
         let window = UIWindow(windowScene: windowScene)
         window.rootViewController = rootViewController()
+        window.overrideUserInterfaceStyle = themePreferenceStore.mode.userInterfaceStyle
         wireCallManagerIfReady()
         window.makeKeyAndVisible()
         self.window = window
@@ -39,10 +41,8 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         environment.connectIfPossible() ? makeMainTabBarController() : makeLoginViewController()
     }
 
-    /// Two tabs: conversations (default landing tab) and contacts. Both are
-    /// independent `UINavigationController`s, matching the standard
-    /// WeChat-style IM navigation shape — a later phase adding a third
-    /// "我的" tab is a purely additive change here.
+    /// Three tabs: conversations (default landing tab), contacts, and
+    /// "我的" (Phase 4). All three are independent `UINavigationController`s.
     private func makeMainTabBarController() -> UIViewController {
         let tabBarController = UITabBarController()
 
@@ -58,8 +58,68 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             }
             .store(in: &cancellables)
 
-        tabBarController.viewControllers = [conversationListNav, contactListNav]
+        let myProfileViewModel = MyProfileViewModel(
+            myUid: environment.imClient?.userId ?? "",
+            storage: environment.storage,
+            profileUpdating: environment.contactSyncService,
+            contactSync: environment.contactSyncService
+        )
+        let meNav = makeMeNavigationController(viewModel: myProfileViewModel)
+        meNav.tabBarItem = UITabBarItem(title: "我的", image: UIImage(systemName: "person.crop.circle"), tag: 2)
+
+        tabBarController.viewControllers = [conversationListNav, contactListNav, meNav]
         return tabBarController
+    }
+
+    /// Builds the「我的」tab's nav stack and wires its 2 push destinations
+    /// (`MyProfileViewController` from the profile card, `SettingsViewController`
+    /// from the settings row) plus `SettingsViewController`'s own 3
+    /// destinations — same "closure wired from SceneDelegate" pattern as
+    /// `makeContactListNavigationController`/`wireGroupInfoNavigation`.
+    private func makeMeNavigationController(viewModel: MyProfileViewModel) -> UINavigationController {
+        let meViewController = MeViewController(viewModel: viewModel)
+        meViewController.onProfileCardTapped = { [weak self, weak meViewController] in
+            guard let self, let imageUploading = self.environment.mediaUploadService else { return }
+            let profileViewController = MyProfileViewController(viewModel: viewModel, imageUploading: imageUploading)
+            meViewController?.navigationController?.pushViewController(profileViewController, animated: true)
+        }
+        meViewController.onSettingsTapped = { [weak self, weak meViewController] in
+            guard let self else { return }
+            let settingsViewController = SettingsViewController()
+            settingsViewController.onThemeTapped = { [weak self, weak settingsViewController] in
+                guard let self else { return }
+                let themeViewController = ThemeViewController(store: self.themePreferenceStore)
+                themeViewController.onModeChanged = { [weak self] mode in
+                    self?.window?.overrideUserInterfaceStyle = mode.userInterfaceStyle
+                }
+                settingsViewController?.navigationController?.pushViewController(themeViewController, animated: true)
+            }
+            settingsViewController.onAboutTapped = { [weak self, weak settingsViewController] in
+                guard let self else { return }
+                settingsViewController?.navigationController?.pushViewController(AboutViewController(config: self.environment.config), animated: true)
+            }
+            settingsViewController.onLogoutConfirmed = { [weak self] in
+                self?.performLogout()
+            }
+            meViewController?.navigationController?.pushViewController(settingsViewController, animated: true)
+        }
+        return UINavigationController(rootViewController: meViewController)
+    }
+
+    /// Tears down the current session and switches back to the login
+    /// screen — the reverse of `makeLoginViewController`'s
+    /// `onLoginSucceeded`. Drops every `cancellables` subscription (the
+    /// contact-list unread badge, the call-state sink) and
+    /// `callKitProvider` before switching root: those were bound to view
+    /// models / a `CallManager` that `environment.logOut()` is about to
+    /// tear down, and `wireCallManagerIfReady()`'s `callKitProvider == nil`
+    /// guard must see a clean slate so it actually rebuilds a fresh
+    /// `CXProvider` against the next login's new `CallManager`.
+    private func performLogout() {
+        cancellables.removeAll()
+        callKitProvider = nil
+        environment.logOut()
+        window?.rootViewController = makeLoginViewController()
     }
 
     private func makeConversationListNavigationController() -> UIViewController {

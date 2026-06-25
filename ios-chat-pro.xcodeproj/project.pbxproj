@@ -25,6 +25,7 @@
 		7AB9633A25E6AFDC3D82E429 /* ContactListCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8EB6D5DBC0051B5D576A085 /* ContactListCell.swift */; };
 		8671C543D4A6428B08FE1E74 /* LoginViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38D6C28B7BC3F34AF2780264 /* LoginViewController.swift */; };
 		890FAE1EC814F14A52439526 /* MyProfileViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FED7AD303D48EFB2741ED7BD /* MyProfileViewController.swift */; };
+		8C63466A0D9B5726B7F5C6F0 /* ThemeMode+UIKit.swift in Sources */ = {isa = PBXBuildFile; fileRef = 619515E59C475B7B0ECBF677 /* ThemeMode+UIKit.swift */; };
 		925E32D89E4D590BFE89B808 /* TextMessageCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 648E9F022D0DE7CACE6E5C39 /* TextMessageCell.swift */; };
 		92EE14C2D330B858ECE87B6C /* AddGroupMemberViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 929AC72577A219C38775E51D /* AddGroupMemberViewController.swift */; };
 		942E1DEC4481B341B23959E7 /* MeViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55F30F8F9D722D06F08E8D99 /* MeViewController.swift */; };
@@ -68,6 +69,7 @@
 		5ACDCE0BC8F9E8EF7A77D603 /* AvatarImageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AvatarImageView.swift; sourceTree = "<group>"; };
 		5E20A628F05F52DE37B82DB6 /* CallPermissions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CallPermissions.swift; sourceTree = "<group>"; };
 		60C53CDF7ECE24AB7925139E /* ConversationListCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationListCell.swift; sourceTree = "<group>"; };
+		619515E59C475B7B0ECBF677 /* ThemeMode+UIKit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ThemeMode+UIKit.swift"; sourceTree = "<group>"; };
 		648E9F022D0DE7CACE6E5C39 /* TextMessageCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextMessageCell.swift; sourceTree = "<group>"; };
 		690D108BAFD2ED791E23C0A9 /* SearchUserViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchUserViewController.swift; sourceTree = "<group>"; };
 		82A66CD515543FC918230A83 /* ConversationViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationViewController.swift; sourceTree = "<group>"; };
@@ -164,6 +166,7 @@
 				3CE3F018CE1845A6A279978F /* SystemTipMessageCell.swift */,
 				648E9F022D0DE7CACE6E5C39 /* TextMessageCell.swift */,
 				E696B814AB99A34483A11EA8 /* Theme.swift */,
+				619515E59C475B7B0ECBF677 /* ThemeMode+UIKit.swift */,
 				4E848D7102A8E3E27251A49D /* ThemeViewController.swift */,
 			);
 			path = App;
@@ -271,6 +274,7 @@
 				364E10AD59CD0F1727BB41EA /* SystemTipMessageCell.swift in Sources */,
 				925E32D89E4D590BFE89B808 /* TextMessageCell.swift in Sources */,
 				1A8F5F1C4845AC9F553E5CAE /* Theme.swift in Sources */,
+				8C63466A0D9B5726B7F5C6F0 /* ThemeMode+UIKit.swift in Sources */,
 				5DF857D59C206BEC63D76B76 /* ThemeViewController.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
