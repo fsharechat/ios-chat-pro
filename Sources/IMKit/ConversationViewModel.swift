@@ -100,6 +100,10 @@ public final class ConversationViewModel {
         }
     }
 
+    public func clearUnread() {
+        try? storage.conversations.clearUnread(conversationType: conversationType, target: target, line: line)
+    }
+
     /// Loads one older page of history before the currently-oldest loaded
     /// message. A no-op if nothing is loaded yet or a previous call already
     /// determined there's no more history (`canLoadMore == false`).
