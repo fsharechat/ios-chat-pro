@@ -57,7 +57,7 @@ final class EmojiPanelView: UIView {
             collectionView.trailingAnchor.constraint(equalTo: trailingAnchor),
             collectionView.bottomAnchor.constraint(equalTo: pageControl.topAnchor, constant: -4),
             pageControl.centerXAnchor.constraint(equalTo: centerXAnchor),
-            pageControl.bottomAnchor.constraint(equalTo: safeAreaLayoutGuide.bottomAnchor, constant: -4),
+            pageControl.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -4),
             pageControl.heightAnchor.constraint(equalToConstant: 20),
         ])
     }

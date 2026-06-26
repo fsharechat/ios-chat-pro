@@ -155,22 +155,17 @@ final class MessageInputBar: UIView {
         addSubview(panelContainer)
         panelContainerHeightConstraint = panelContainer.heightAnchor.constraint(equalToConstant: 0)
 
-        // safeAreaSpacer sits below panelContainer and fills the home-indicator gap,
-        // so that inputBar height = inputRow + panelHeight + homeIndicator in all states.
-        let safeAreaSpacer = UIView()
-        safeAreaSpacer.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(safeAreaSpacer)
-
+        // panelContainer sits between the text row and inputBar.bottom.
+        // When height = 0: inputBar.height = 8 + textViewHeight + 8 = 52.
+        // When height = panelHeight: inputBar.height = 52 + panelHeight.
+        // Safe area (home indicator) is handled by ConversationViewController which pins
+        // inputBar.bottom to view.safeAreaLayoutGuide.bottomAnchor.
         NSLayoutConstraint.activate([
             panelContainer.topAnchor.constraint(equalTo: textView.bottomAnchor, constant: 8),
             panelContainer.leadingAnchor.constraint(equalTo: leadingAnchor),
             panelContainer.trailingAnchor.constraint(equalTo: trailingAnchor),
+            panelContainer.bottomAnchor.constraint(equalTo: bottomAnchor),
             panelContainerHeightConstraint,
-
-            safeAreaSpacer.topAnchor.constraint(equalTo: panelContainer.bottomAnchor),
-            safeAreaSpacer.bottomAnchor.constraint(equalTo: safeAreaLayoutGuide.bottomAnchor),
-            safeAreaSpacer.leadingAnchor.constraint(equalTo: leadingAnchor),
-            safeAreaSpacer.trailingAnchor.constraint(equalTo: trailingAnchor),
         ])
 
         emojiPanel.translatesAutoresizingMaskIntoConstraints = false
