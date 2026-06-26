@@ -1,6 +1,7 @@
 // App/ConversationViewController.swift
 import UIKit
 import PhotosUI
+import UniformTypeIdentifiers
 import Combine
 import IMKit
 
@@ -74,6 +75,8 @@ final class ConversationViewController: UIViewController {
     private func layoutViews() {
         tableView.register(TextMessageCell.self, forCellReuseIdentifier: TextMessageCell.reuseIdentifier)
         tableView.register(ImageMessageCell.self, forCellReuseIdentifier: ImageMessageCell.reuseIdentifier)
+        tableView.register(VoiceMessageCell.self, forCellReuseIdentifier: VoiceMessageCell.reuseIdentifier)
+        tableView.register(FileMessageCell.self, forCellReuseIdentifier: FileMessageCell.reuseIdentifier)
         tableView.register(SystemTipMessageCell.self, forCellReuseIdentifier: SystemTipMessageCell.reuseIdentifier)
         tableView.register(TimeHeaderCell.self, forCellReuseIdentifier: TimeHeaderCell.reuseIdentifier)
         tableView.delegate = self
@@ -103,6 +106,14 @@ final class ConversationViewController: UIViewController {
     private func configureDataSource() {
         dataSource = UITableViewDiffableDataSource<Int, ChatMessageRow>(tableView: tableView) { tableView, indexPath, row in
             switch row {
+            case .message(let message) where message.text?.hasPrefix("[语音]") == true:
+                let cell = tableView.dequeueReusableCell(withIdentifier: VoiceMessageCell.reuseIdentifier, for: indexPath) as! VoiceMessageCell
+                cell.configure(with: message)
+                return cell
+            case .message(let message) where message.text?.hasPrefix("[文件]") == true:
+                let cell = tableView.dequeueReusableCell(withIdentifier: FileMessageCell.reuseIdentifier, for: indexPath) as! FileMessageCell
+                cell.configure(with: message)
+                return cell
             case .message(let message) where message.text != nil:
                 let cell = tableView.dequeueReusableCell(withIdentifier: TextMessageCell.reuseIdentifier, for: indexPath) as! TextMessageCell
                 cell.configure(with: message)
@@ -256,6 +267,11 @@ final class ConversationViewController: UIViewController {
             self?.viewModel.sendText(text, mentionedType: Int(mentionedType), mentionedTargets: mentionedTargets)
         }
         inputBar.onPickImage = { [weak self] in self?.presentImagePicker() }
+        inputBar.onCamera = { [weak self] in self?.presentCamera() }
+        inputBar.onPickFile = { [weak self] in self?.presentFilePicker() }
+        inputBar.onSendVoice = { [weak self] audioData, duration, fileName in
+            self?.viewModel.sendVoice(audioData: audioData, duration: duration, fileName: fileName)
+        }
         inputBar.onMentionTriggered = { [weak self] in self?.presentMentionPicker() }
     }
 
@@ -268,6 +284,21 @@ final class ConversationViewController: UIViewController {
         }
         picker.onCancelled = { [weak self] in self?.inputBar.removeTrailingMentionTrigger() }
         present(UINavigationController(rootViewController: picker), animated: true)
+    }
+
+    private func presentCamera() {
+        guard UIImagePickerController.isSourceTypeAvailable(.camera) else { return }
+        let picker = UIImagePickerController()
+        picker.sourceType = .camera
+        picker.delegate = self
+        present(picker, animated: true)
+    }
+
+    private func presentFilePicker() {
+        let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.data, .pdf, .text, .image])
+        picker.delegate = self
+        picker.allowsMultipleSelection = false
+        present(picker, animated: true)
     }
 
     private func presentImagePicker() {
@@ -325,5 +356,25 @@ extension ConversationViewController: PHPickerViewControllerDelegate {
             guard let image = object as? UIImage else { return }
             DispatchQueue.main.async { self?.handlePickedImage(image) }
         }
+    }
+}
+
+extension ConversationViewController: UINavigationControllerDelegate, UIImagePickerControllerDelegate {
+    func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
+        picker.dismiss(animated: true)
+        guard let image = info[.originalImage] as? UIImage,
+              let fullData = image.jpegData(compressionQuality: 0.8),
+              let thumbnail = Self.makeThumbnail(image)?.jpegData(compressionQuality: 0.7) else { return }
+        viewModel.sendImage(fullImageData: fullData, thumbnail: thumbnail)
+    }
+}
+
+extension ConversationViewController: UIDocumentPickerDelegate {
+    func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+        guard let url = urls.first else { return }
+        guard url.startAccessingSecurityScopedResource() else { return }
+        defer { url.stopAccessingSecurityScopedResource() }
+        guard let data = try? Data(contentsOf: url) else { return }
+        viewModel.sendFile(fileData: data, fileName: url.lastPathComponent)
     }
 }
