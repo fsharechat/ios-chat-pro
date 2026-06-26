@@ -95,8 +95,8 @@ public final class ConversationViewModel {
         case .message(let message):
             guard message.status == .sendFailure else { return }
             try? messageSending?.resend(localMessageId: message.localMessageId)
-        case .systemTip:
-            break // never retryable — there's nothing to resend
+        case .systemTip, .timeHeader:
+            break // never retryable
         }
     }
 

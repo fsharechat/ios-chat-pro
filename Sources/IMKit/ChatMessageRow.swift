@@ -84,11 +84,13 @@ public struct SystemTipRow: Equatable, Hashable {
 }
 
 /// A single row in the chat message list: a real, persisted message; an
-/// in-flight image upload placeholder; or a group system-notification tip.
+/// in-flight image upload placeholder; a group system-notification tip; or a
+/// synthetic time separator injected between messages with a gap ≥ 5 minutes.
 public enum ChatMessageRow: Equatable, Hashable {
     case message(StoredMessageRow)
     case pendingImage(PendingImageUpload)
     case systemTip(SystemTipRow)
+    case timeHeader(String)
 }
 
 extension ChatMessageRow {
@@ -96,19 +98,19 @@ extension ChatMessageRow {
     /// storage identity to compare against. Used by `ConversationViewModel`
     /// to detect which previously-live rows fell out of the sliding
     /// "latest pageSize" window and need migrating into `olderRows`.
-    var storageId: Int64? {
+    public var storageId: Int64? {
         switch self {
         case .message(let row): return row.storageId
         case .systemTip(let row): return row.storageId
-        case .pendingImage: return nil
+        case .pendingImage, .timeHeader: return nil
         }
     }
 
-    var timestamp: Int64? {
+    public var timestamp: Int64? {
         switch self {
         case .message(let row): return row.timestamp
         case .systemTip(let row): return row.timestamp
-        case .pendingImage: return nil
+        case .pendingImage, .timeHeader: return nil
         }
     }
 }

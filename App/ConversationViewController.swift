@@ -13,6 +13,7 @@ final class ConversationViewController: UIViewController {
     private let tableView = UITableView()
     private let inputBar = MessageInputBar()
     private var inputBarBottomConstraint: NSLayoutConstraint!
+    private var previousRawRows: [ChatMessageRow] = []
 
     var onGroupInfoTapped: (() -> Void)?
     var onContactInfoTapped: (() -> Void)?
@@ -74,6 +75,7 @@ final class ConversationViewController: UIViewController {
         tableView.register(TextMessageCell.self, forCellReuseIdentifier: TextMessageCell.reuseIdentifier)
         tableView.register(ImageMessageCell.self, forCellReuseIdentifier: ImageMessageCell.reuseIdentifier)
         tableView.register(SystemTipMessageCell.self, forCellReuseIdentifier: SystemTipMessageCell.reuseIdentifier)
+        tableView.register(TimeHeaderCell.self, forCellReuseIdentifier: TimeHeaderCell.reuseIdentifier)
         tableView.delegate = self
         tableView.backgroundColor = Theme.backgroundPrimary
         tableView.separatorStyle = .none
@@ -122,6 +124,10 @@ final class ConversationViewController: UIViewController {
                 let cell = tableView.dequeueReusableCell(withIdentifier: SystemTipMessageCell.reuseIdentifier, for: indexPath) as! SystemTipMessageCell
                 cell.configure(with: tip)
                 return cell
+            case .timeHeader(let text):
+                let cell = tableView.dequeueReusableCell(withIdentifier: TimeHeaderCell.reuseIdentifier, for: indexPath) as! TimeHeaderCell
+                cell.configure(with: text)
+                return cell
             }
         }
     }
@@ -142,14 +148,16 @@ final class ConversationViewController: UIViewController {
     /// flip on the last row (same message, new value) isn't mistaken for a
     /// new row being appended.
     private func applySnapshot(rows: [ChatMessageRow]) {
-        let oldRows = dataSource.snapshot().itemIdentifiers
+        let oldRows = previousRawRows
         let isPrepend = !oldRows.isEmpty && rows.count > oldRows.count && Array(rows.suffix(oldRows.count)) == oldRows
         let isAppend = Self.rowIdentity(rows.last) != Self.rowIdentity(oldRows.last)
+        previousRawRows = rows
         let previousContentHeight = tableView.contentSize.height
 
+        let displayRows = injectTimeHeaders(rows)
         var snapshot = NSDiffableDataSourceSnapshot<Int, ChatMessageRow>()
         snapshot.appendSections([0])
-        snapshot.appendItems(rows, toSection: 0)
+        snapshot.appendItems(displayRows, toSection: 0)
         dataSource.apply(snapshot, animatingDifferences: !isPrepend) { [weak self] in
             guard let self else { return }
             if isPrepend {
@@ -158,6 +166,66 @@ final class ConversationViewController: UIViewController {
             } else if isAppend {
                 self.scrollToBottom(animated: !oldRows.isEmpty)
             }
+        }
+    }
+
+    private func injectTimeHeaders(_ rows: [ChatMessageRow]) -> [ChatMessageRow] {
+        let threshold: Int64 = 5 * 60 * 1000
+        var result: [ChatMessageRow] = []
+        var lastTimestamp: Int64? = nil
+        for row in rows {
+            guard let ts = row.timestamp else {
+                result.append(row)
+                continue
+            }
+            if let last = lastTimestamp, ts - last < threshold {
+                result.append(row)
+            } else {
+                result.append(.timeHeader(Self.formatMessageTime(ts)))
+                result.append(row)
+            }
+            lastTimestamp = ts
+        }
+        return result
+    }
+
+    private static func formatMessageTime(_ timestamp: Int64) -> String {
+        let date = Date(timeIntervalSince1970: TimeInterval(timestamp) / 1000)
+        let calendar = Calendar.current
+        let now = Date()
+        let hour = calendar.component(.hour, from: date)
+        let period: String
+        switch hour {
+        case 0..<6:  period = "凌晨"
+        case 6..<12: period = "早上"
+        case 12:     period = "中午"
+        case 13..<18: period = "下午"
+        default:     period = "晚上"
+        }
+        let timeStr: String = {
+            let f = DateFormatter()
+            f.locale = Locale(identifier: "zh_CN")
+            f.dateFormat = "HH:mm"
+            return f.string(from: date)
+        }()
+        if calendar.isDateInToday(date) {
+            return "\(period) \(timeStr)"
+        } else if calendar.isDateInYesterday(date) {
+            return "昨天 \(period) \(timeStr)"
+        } else if let days = calendar.dateComponents([.day], from: calendar.startOfDay(for: date), to: calendar.startOfDay(for: now)).day, days < 7 {
+            let weekdays = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"]
+            let weekday = calendar.component(.weekday, from: date) - 1
+            return "\(weekdays[weekday]) \(period) \(timeStr)"
+        } else if calendar.component(.year, from: date) == calendar.component(.year, from: now) {
+            let f = DateFormatter()
+            f.locale = Locale(identifier: "zh_CN")
+            f.dateFormat = "M月d日"
+            return "\(f.string(from: date)) \(period) \(timeStr)"
+        } else {
+            let f = DateFormatter()
+            f.locale = Locale(identifier: "zh_CN")
+            f.dateFormat = "yyyy年M月d日"
+            return "\(f.string(from: date)) \(period) \(timeStr)"
         }
     }
 
@@ -172,6 +240,7 @@ final class ConversationViewController: UIViewController {
         case .message(let message): return "message-\(message.storageId)"
         case .pendingImage(let pending): return "pending-\(pending.id)"
         case .systemTip(let tip): return "systemTip-\(tip.storageId)"
+        case .timeHeader(let text): return "timeHeader-\(text)"
         case nil: return nil
         }
     }

@@ -234,7 +234,7 @@ final class ConversationViewModelTests: XCTestCase {
             switch row {
             case .message(let m): return m.text
             case .systemTip: return "<systemTip>"
-            case .pendingImage: return nil
+            case .pendingImage, .timeHeader: return nil
             }
         }, ["msg0", "<systemTip>", "msg2", "msg3", "msg4", "msg5"])
     }

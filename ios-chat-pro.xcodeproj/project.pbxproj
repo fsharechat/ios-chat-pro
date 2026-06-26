@@ -17,6 +17,7 @@
 		2B03B7D44659C520AEFC917E /* AvatarImageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5ACDCE0BC8F9E8EF7A77D603 /* AvatarImageView.swift */; };
 		2F6CCACDD9E93598CF9E204B /* WebRTC in Frameworks */ = {isa = PBXBuildFile; productRef = 245A8DCD66CF4BF518D7B079 /* WebRTC */; };
 		364E10AD59CD0F1727BB41EA /* SystemTipMessageCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CE3F018CE1845A6A279978F /* SystemTipMessageCell.swift */; };
+		A1B2C3D4E5F6A1B2C3D4E5F6 /* TimeHeaderCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1C2D3E4F5A6B1C2D3E4F5A6 /* TimeHeaderCell.swift */; };
 		3C61AE5D1A72B08EF5F3EC6D /* IMStorage in Frameworks */ = {isa = PBXBuildFile; productRef = 07ADF191AD7039FA6B899E7E /* IMStorage */; };
 		40533D31B36757999CD71E73 /* ConversationListViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3FE0167E8E8C013706DF83B /* ConversationListViewController.swift */; };
 		471B25795C53FC319DED0CCD /* MentionPickerViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CE65FB3E4BBBDBC011338C7 /* MentionPickerViewController.swift */; };
@@ -62,6 +63,7 @@
 		2B7725E347391300F698E8D6 /* ImagePreviewViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImagePreviewViewController.swift; sourceTree = "<group>"; };
 		38D6C28B7BC3F34AF2780264 /* LoginViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginViewController.swift; sourceTree = "<group>"; };
 		3CE3F018CE1845A6A279978F /* SystemTipMessageCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemTipMessageCell.swift; sourceTree = "<group>"; };
+		B1C2D3E4F5A6B1C2D3E4F5A6 /* TimeHeaderCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeHeaderCell.swift; sourceTree = "<group>"; };
 		433A3515C086B0178E667801 /* CallViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CallViewController.swift; sourceTree = "<group>"; };
 		4E848D7102A8E3E27251A49D /* ThemeViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemeViewController.swift; sourceTree = "<group>"; };
 		53A605ADEEFEFF8E5A5674D9 /* AboutViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutViewController.swift; sourceTree = "<group>"; };
@@ -170,6 +172,7 @@
 				648E9F022D0DE7CACE6E5C39 /* TextMessageCell.swift */,
 				E696B814AB99A34483A11EA8 /* Theme.swift */,
 				619515E59C475B7B0ECBF677 /* ThemeMode+UIKit.swift */,
+				B1C2D3E4F5A6B1C2D3E4F5A6 /* TimeHeaderCell.swift */,
 				4E848D7102A8E3E27251A49D /* ThemeViewController.swift */,
 			);
 			path = App;
@@ -291,6 +294,7 @@
 				925E32D89E4D590BFE89B808 /* TextMessageCell.swift in Sources */,
 				1A8F5F1C4845AC9F553E5CAE /* Theme.swift in Sources */,
 				8C63466A0D9B5726B7F5C6F0 /* ThemeMode+UIKit.swift in Sources */,
+				A1B2C3D4E5F6A1B2C3D4E5F6 /* TimeHeaderCell.swift in Sources */,
 				5DF857D59C206BEC63D76B76 /* ThemeViewController.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

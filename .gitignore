@@ -4,6 +4,7 @@
 # Xcode / Swift
 .build/
 .build-sim/
+build/
 *.xcodeproj/xcuserdata/
 *.xcworkspace/xcuserdata/
 **/*.xcworkspace/xcshareddata/IDEWorkspaceChecks.plist
