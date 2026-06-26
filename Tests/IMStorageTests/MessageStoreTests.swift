@@ -266,4 +266,17 @@ final class MessageStoreTests: XCTestCase {
 
         XCTAssertTrue(older.isEmpty)
     }
+
+    func test_updateContent_db_updatesRecalledContent() throws {
+        let inserted = try store.insert(makeMessage(localMessageId: 55, text: "original"))
+        let rowId = try XCTUnwrap(inserted.id)
+
+        try database.dbQueue.write { db in
+            try store.updateContent(id: rowId, content: .recalled(operatorId: "them"), db: db)
+        }
+
+        let updated = try store.message(localMessageId: 55)
+        XCTAssertEqual(updated?.content, .recalled(operatorId: "them"))
+        XCTAssertEqual(updated?.searchableContent, "[撤回消息]")
+    }
 }

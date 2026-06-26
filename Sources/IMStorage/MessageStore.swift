@@ -189,4 +189,13 @@ public final class MessageStore {
             try existing.update(db)
         }
     }
+
+    /// Same as `updateContent(id:content:)`, run against a caller-managed
+    /// transaction — used by `RecallNotifyMessageHandler` to batch the
+    /// content update and the conversation row touch in one write transaction.
+    public func updateContent(id: Int64, content: MessageContent, db: Database) throws {
+        guard var existing = try StoredMessage.fetchOne(db, key: id) else { return }
+        existing.setContent(content)
+        try existing.update(db)
+    }
 }

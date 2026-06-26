@@ -222,6 +222,13 @@ public final class ConversationViewModel {
         case .file(let name, let size, _, _):
             let sizeStr = size > 1024*1024 ? String(format: "%.1fMB", Double(size)/1024/1024) : "\(size/1024)KB"
             return .message(buildStoredMessageRow(message, text: "[文件] \(name) \(sizeStr)", imageThumbnail: nil, imageRemoteURL: nil))
+        case .recalled(let operatorId):
+            let displayName = resolveDisplayName(operatorId)
+            return .systemTip(SystemTipRow(
+                storageId: message.id ?? -1,
+                text: "\(displayName)撤回了一条消息",
+                timestamp: message.timestamp
+            ))
         }
     }
 
@@ -280,7 +287,7 @@ public final class ConversationViewModel {
             return "\(operatorName)修改群名为「\(value ?? "")」"
         case .changeGroupPortrait:
             return "\(operatorName)修改了群头像"
-        case .text, .image, .callStart, .voice, .file:
+        case .text, .image, .callStart, .voice, .file, .recalled:
             return "" // unreachable: makeRow only calls this for .groupNotification content
         }
     }

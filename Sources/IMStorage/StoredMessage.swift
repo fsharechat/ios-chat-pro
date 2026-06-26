@@ -31,6 +31,9 @@ public enum MessageContent: Equatable {
     /// Wire type 5. `size` is in bytes. `remoteURL`/`localPath` follow the
     /// same optional-presence convention as `.image`.
     case file(name: String, size: Int, remoteURL: String?, localPath: String?)
+    /// The original message was recalled by `operatorId`. Stored in-place:
+    /// `textContent` holds the operator uid; `searchableContent` is "[撤回消息]".
+    case recalled(operatorId: String)
 }
 
 public struct StoredMessage: Codable, Equatable, FetchableRecord, MutablePersistableRecord {
@@ -95,6 +98,8 @@ public struct StoredMessage: Codable, Equatable, FetchableRecord, MutablePersist
             return .voice(remoteURL: mediaRemoteURL, localPath: mediaLocalPath, duration: Int(textContent ?? "0") ?? 0)
         case .file:
             return .file(name: searchableContent ?? "", size: Int(textContent ?? "0") ?? 0, remoteURL: mediaRemoteURL, localPath: mediaLocalPath)
+        case .recalled:
+            return .recalled(operatorId: textContent ?? "")
         }
     }
 
@@ -255,6 +260,17 @@ public struct StoredMessage: Codable, Equatable, FetchableRecord, MutablePersist
             searchableContent = name
             mediaRemoteURL = remoteURL
             mediaLocalPath = localPath
+            mediaThumbnail = nil
+            groupNotificationOperator = nil
+            groupNotificationMembersRaw = nil
+            groupNotificationValue = nil
+            callId = nil; callTargetId = nil; callAudioOnly = false; callStatus = 0; callConnectTime = 0; callEndTime = 0
+        case .recalled(let operatorId):
+            contentType = .recalled
+            textContent = operatorId
+            searchableContent = "[撤回消息]"
+            mediaRemoteURL = nil
+            mediaLocalPath = nil
             mediaThumbnail = nil
             groupNotificationOperator = nil
             groupNotificationMembersRaw = nil

@@ -162,4 +162,52 @@ final class StoredMessageContentTests: XCTestCase {
             XCTAssertEqual(url, "https://cdn/f.pdf")
         } else { XCTFail() }
     }
+
+    func test_recalledMessage_initFlattensOperatorIdIntoTextContent() {
+        let message = StoredMessage(
+            localMessageId: 99,
+            conversationType: .single,
+            target: "them",
+            from: "them",
+            content: .recalled(operatorId: "them"),
+            timestamp: 2_000,
+            status: .unread,
+            direction: .receive
+        )
+
+        XCTAssertEqual(message.contentType, .recalled)
+        XCTAssertEqual(message.textContent, "them")
+        XCTAssertEqual(message.searchableContent, "[撤回消息]")
+        XCTAssertNil(message.mediaRemoteURL)
+        XCTAssertNil(message.mediaThumbnail)
+        XCTAssertNil(message.groupNotificationOperator)
+        XCTAssertNil(message.callId)
+        XCTAssertEqual(message.callAudioOnly, false)
+        XCTAssertEqual(message.callStatus, 0)
+    }
+
+    func test_recalledMessage_contentComputedPropertyRoundTrips() {
+        let message = StoredMessage(
+            localMessageId: 99, conversationType: .single, target: "them", from: "them",
+            content: .recalled(operatorId: "them"), timestamp: 2_000, status: .unread, direction: .receive
+        )
+        XCTAssertEqual(message.content, .recalled(operatorId: "them"))
+    }
+
+    func test_setContent_recalled_clearsAllOtherColumns() {
+        var message = StoredMessage(
+            localMessageId: 1, conversationType: .single, target: "them", from: "them",
+            content: .image(thumbnail: Data([0x01]), remoteURL: "https://example.com/a.jpg", localPath: nil),
+            timestamp: 1_000, status: .unread, direction: .receive
+        )
+        message.setContent(.recalled(operatorId: "op"))
+
+        XCTAssertEqual(message.contentType, .recalled)
+        XCTAssertEqual(message.textContent, "op")
+        XCTAssertEqual(message.searchableContent, "[撤回消息]")
+        XCTAssertNil(message.mediaRemoteURL)
+        XCTAssertNil(message.mediaThumbnail)
+        XCTAssertNil(message.callId)
+        XCTAssertNil(message.groupNotificationOperator)
+    }
 }

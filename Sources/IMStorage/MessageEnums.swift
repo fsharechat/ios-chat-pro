@@ -51,6 +51,9 @@ public enum MessageContentType: Int, Codable, Equatable {
     /// types (400-405) that persists/displays as a chat bubble; 401-404 are
     /// transient and never reach `IMStorage` (see `ReceiveMessageHandler`).
     case callStart = 400
+    /// Matches Android ContentType_Recall = 80. Stored in-place: the original
+    /// message row is updated to this type when a RMN recall notification arrives.
+    case recalled = 80
 }
 
 /// Matches `ProtoConstants.GroupType` (`chat-server-pro`'s
