@@ -86,6 +86,9 @@ public final class MessagingService {
     /// messages.
     public func pullMessagesSinceLastSync() {
         let localHead = (try? storage.syncState.get())?.msgHead ?? 0
+        if localHead == 0 {
+            receiveMessageHandler.suppressUnreadIncrement = true
+        }
         pullMessages(from: localHead, type: 0)
     }
 

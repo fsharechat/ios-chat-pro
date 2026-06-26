@@ -41,6 +41,11 @@ public final class ReceiveMessageHandler: MessageHandler {
     /// call signaling, don't persist it."
     public var onCallSignal: ((Im_Message) -> Void)?
 
+    /// Set to `true` before an initial-sync pull (localHead == 0) so that
+    /// historical messages don't generate unread badges on first login.
+    /// Automatically reset to `false` after the first batch is processed.
+    public var suppressUnreadIncrement = false
+
     public init(storage: IMStorage, myUserId: @escaping () -> String) {
         self.storage = storage
         self.myUserId = myUserId
@@ -61,11 +66,13 @@ public final class ReceiveMessageHandler: MessageHandler {
         // in ConversationListViewModel (visible as UI lag right after
         // login), plus a redundant UPUI re-fetch for any uid still
         // unresolved at that snapshot.
+        let shouldSuppressUnread = suppressUnreadIncrement
+        suppressUnreadIncrement = false
         var groupNotificationTargets: Set<String> = []
         var callStartMessages: [StoredMessage] = []
         try? storage.write { db in
             for wireMessage in result.message {
-                persist(wireMessage, db: db, groupNotificationTargets: &groupNotificationTargets, callStartMessages: &callStartMessages)
+                persist(wireMessage, db: db, suppressUnread: shouldSuppressUnread, groupNotificationTargets: &groupNotificationTargets, callStartMessages: &callStartMessages)
             }
             advanceSyncHead(to: result.head, db: db)
         }
@@ -95,7 +102,7 @@ public final class ReceiveMessageHandler: MessageHandler {
     /// conversation flow runs. Type 400 (CallStart) is the one call-related
     /// type that *does* persist — it's the call-record bubble — so it falls
     /// through to the same path as every other message type below.
-    private func persist(_ wireMessage: Im_Message, db: Database, groupNotificationTargets: inout Set<String>, callStartMessages: inout [StoredMessage]) {
+    private func persist(_ wireMessage: Im_Message, db: Database, suppressUnread: Bool, groupNotificationTargets: inout Set<String>, callStartMessages: inout [StoredMessage]) {
         guard wireMessage.messageID != 0 else { return }
         if (try? storage.messages.message(uid: wireMessage.messageID, db: db)) != nil {
             return // already have it via server uid — pull windows can overlap
@@ -163,8 +170,8 @@ public final class ReceiveMessageHandler: MessageHandler {
                 line: line,
                 messageUid: wireMessage.messageID,
                 timestamp: wireMessage.serverTimestamp,
-                incrementUnread: direction == .receive,
-                incrementMention: isMentioned,
+                incrementUnread: direction == .receive && !suppressUnread,
+                incrementMention: isMentioned && !suppressUnread,
                 db: db
             )
             if case .groupNotification = content {

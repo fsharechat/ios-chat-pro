@@ -102,13 +102,50 @@ final class ConversationListCell: UITableViewCell {
         }
     }
 
-    private static let formatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "HH:mm"
-        return formatter
+    private static let timeFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm"
+        return f
+    }()
+
+    private static let weekdayFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "zh_Hans_CN")
+        f.dateFormat = "EEEE"
+        return f
+    }()
+
+    private static let shortDateFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "zh_Hans_CN")
+        f.dateFormat = "M月d日"
+        return f
+    }()
+
+    private static let fullDateFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "zh_Hans_CN")
+        f.dateFormat = "yyyy/M/d"
+        return f
     }()
 
     private static func formattedTimestamp(_ millis: Int64) -> String {
-        formatter.string(from: Date(timeIntervalSince1970: TimeInterval(millis) / 1000))
+        guard millis > 0 else { return "" }
+        let date = Date(timeIntervalSince1970: TimeInterval(millis) / 1000)
+        let calendar = Calendar.current
+        let now = Date()
+        if calendar.isDateInToday(date) {
+            return timeFormatter.string(from: date)
+        } else if calendar.isDateInYesterday(date) {
+            return "昨天"
+        } else if let daysAgo = calendar.dateComponents([.day],
+            from: calendar.startOfDay(for: date),
+            to: calendar.startOfDay(for: now)).day, daysAgo < 7 {
+            return weekdayFormatter.string(from: date)
+        } else if calendar.component(.year, from: date) == calendar.component(.year, from: now) {
+            return shortDateFormatter.string(from: date)
+        } else {
+            return fullDateFormatter.string(from: date)
+        }
     }
 }
