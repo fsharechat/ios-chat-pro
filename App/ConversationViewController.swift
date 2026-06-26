@@ -15,6 +15,7 @@ final class ConversationViewController: UIViewController {
     private var inputBarBottomConstraint: NSLayoutConstraint!
 
     var onGroupInfoTapped: (() -> Void)?
+    var onContactInfoTapped: (() -> Void)?
     var onCallTapped: ((_ audioOnly: Bool) -> Void)?
 
     init(row: ConversationRow, viewModel: ConversationViewModel) {
@@ -22,6 +23,8 @@ final class ConversationViewController: UIViewController {
         self.viewModel = viewModel
         super.init(nibName: nil, bundle: nil)
         title = row.displayName
+        // Push as full-screen: hides the tab bar so the chat owns the whole screen.
+        hidesBottomBarWhenPushed = true
     }
 
     @available(*, unavailable)
@@ -36,23 +39,29 @@ final class ConversationViewController: UIViewController {
         bindInputBar()
         observeKeyboard()
 
-        if row.conversationType == .group {
-            let titleButton = UIButton(type: .system)
-            titleButton.setTitle(row.displayName, for: .normal)
-            titleButton.setTitleColor(Theme.textPrimary, for: .normal)
-            titleButton.titleLabel?.font = .systemFont(ofSize: 17, weight: .semibold)
-            titleButton.addTarget(self, action: #selector(groupTitleTapped), for: .touchUpInside)
-            navigationItem.titleView = titleButton
-        }
+        // Right-side info button (person icon for single, group icon for group)
+        let infoIconName = row.conversationType == .group ? "person.2.fill" : "person.fill"
+        let infoItem = UIBarButtonItem(
+            image: UIImage(systemName: infoIconName),
+            style: .plain, target: self, action: #selector(infoTapped)
+        )
 
         if row.conversationType == .single {
-            let videoCallItem = UIBarButtonItem(image: UIImage(systemName: "video.fill"), style: .plain, target: self, action: #selector(videoCallTapped))
-            let audioCallItem = UIBarButtonItem(image: UIImage(systemName: "phone.fill"), style: .plain, target: self, action: #selector(audioCallTapped))
-            navigationItem.rightBarButtonItems = [videoCallItem, audioCallItem]
+            let videoItem = UIBarButtonItem(image: UIImage(systemName: "video.fill"), style: .plain, target: self, action: #selector(videoCallTapped))
+            let audioItem = UIBarButtonItem(image: UIImage(systemName: "phone.fill"), style: .plain, target: self, action: #selector(audioCallTapped))
+            navigationItem.rightBarButtonItems = [infoItem, videoItem, audioItem]
+        } else {
+            navigationItem.rightBarButtonItems = [infoItem]
         }
     }
 
-    @objc private func groupTitleTapped() { onGroupInfoTapped?() }
+    @objc private func infoTapped() {
+        if row.conversationType == .group {
+            onGroupInfoTapped?()
+        } else {
+            onContactInfoTapped?()
+        }
+    }
     @objc private func videoCallTapped() { onCallTapped?(false) }
     @objc private func audioCallTapped() { onCallTapped?(true) }
 

@@ -26,13 +26,11 @@ final class ImageMessageCell: UITableViewCell {
     private let bubbleImageView = UIImageView()
     private let activityIndicator = UIActivityIndicatorView(style: .medium)
     private let retryButton = UIButton(type: .system)
+    private let senderNameLabel = UILabel()
+    private let senderAvatarImageView = AvatarImageView(loader: AvatarLoader())
     private let bubbleColumn = UIStackView()
     private let rowStack = UIStackView()
     private let spacer = UIView()
-    private let senderAvatarImageView = AvatarImageView(loader: AvatarLoader())
-    private let senderNameLabel = UILabel()
-    private var senderRowTopConstraint: NSLayoutConstraint!
-    private var senderAvatarHeightConstraint: NSLayoutConstraint!
 
     var onTapped: (() -> Void)?
     var onRetryTapped: (() -> Void)?
@@ -53,7 +51,6 @@ final class ImageMessageCell: UITableViewCell {
         onRetryTapped = nil
         bubbleImageView.image = nil
         activityIndicator.stopAnimating()
-        retryButton.isHidden = true
     }
 
     private func layoutViews() {
@@ -72,39 +69,32 @@ final class ImageMessageCell: UITableViewCell {
         retryButton.tintColor = .systemRed
         retryButton.addTarget(self, action: #selector(retryTapped), for: .touchUpInside)
 
+        senderNameLabel.font = .systemFont(ofSize: 12)
+        senderNameLabel.textColor = Theme.textPrimary.withAlphaComponent(0.6)
+
+        // bubbleColumn stacks sender name + image bubble vertically
         bubbleColumn.axis = .vertical
+        bubbleColumn.spacing = 2
+        bubbleColumn.addArrangedSubview(senderNameLabel)
         bubbleColumn.addArrangedSubview(bubbleImageView)
 
         rowStack.axis = .horizontal
         rowStack.alignment = .bottom
-        rowStack.spacing = 6
+        rowStack.spacing = 8
         rowStack.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(rowStack)
-
-        senderAvatarImageView.translatesAutoresizingMaskIntoConstraints = false
-        senderNameLabel.font = .systemFont(ofSize: 12)
-        senderNameLabel.textColor = Theme.textPrimary.withAlphaComponent(0.6)
-        senderNameLabel.translatesAutoresizingMaskIntoConstraints = false
-
-        contentView.addSubview(senderAvatarImageView)
-        contentView.addSubview(senderNameLabel)
-
-        senderAvatarHeightConstraint = senderAvatarImageView.heightAnchor.constraint(equalToConstant: 28)
-        senderRowTopConstraint = senderAvatarImageView.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 4)
+        // bubbleColumn must be in the view hierarchy before activating the
+        // width constraint that references contentView.
+        rowStack.addArrangedSubview(bubbleColumn)
 
         NSLayoutConstraint.activate([
-            senderAvatarHeightConstraint,
-            senderAvatarImageView.widthAnchor.constraint(equalToConstant: 28),
-            senderAvatarImageView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
-            senderRowTopConstraint,
+            senderAvatarImageView.widthAnchor.constraint(equalToConstant: 36),
+            senderAvatarImageView.heightAnchor.constraint(equalToConstant: 36),
 
-            senderNameLabel.leadingAnchor.constraint(equalTo: senderAvatarImageView.trailingAnchor, constant: 6),
-            senderNameLabel.centerYAnchor.constraint(equalTo: senderAvatarImageView.centerYAnchor),
-
-            rowStack.topAnchor.constraint(equalTo: senderAvatarImageView.bottomAnchor, constant: 2),
+            rowStack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 8),
+            rowStack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -8),
+            rowStack.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 4),
             rowStack.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -4),
-            rowStack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
-            rowStack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -16),
 
             bubbleImageView.widthAnchor.constraint(equalToConstant: 160),
             bubbleImageView.heightAnchor.constraint(equalToConstant: 160),
@@ -115,32 +105,35 @@ final class ImageMessageCell: UITableViewCell {
     }
 
     func configure(with data: ImageBubbleData) {
-        let showsSender = data.senderDisplayName != nil
-        senderAvatarImageView.isHidden = !showsSender
+        let showsSender = !data.isOutgoing && data.senderDisplayName != nil
+
         senderNameLabel.isHidden = !showsSender
-        senderRowTopConstraint.constant = showsSender ? 4 : 0
-        senderAvatarHeightConstraint.constant = showsSender ? 28 : 0
-        if showsSender {
-            senderNameLabel.text = data.senderDisplayName
-            senderAvatarImageView.setAvatar(urlString: data.senderAvatarURL, displayName: data.senderDisplayName ?? "")
-        }
+        senderNameLabel.text = showsSender ? data.senderDisplayName : nil
 
         bubbleImageView.image = data.thumbnail.flatMap { UIImage(data: $0) }
         activityIndicator.isHidden = !data.isUploading
         if data.isUploading { activityIndicator.startAnimating() } else { activityIndicator.stopAnimating() }
-        retryButton.isHidden = !data.isFailed
 
-        rowStack.arrangedSubviews.forEach { rowStack.removeArrangedSubview($0); $0.removeFromSuperview() }
+        // Reset rowStack: keep bubbleColumn in the hierarchy.
+        for view in rowStack.arrangedSubviews {
+            rowStack.removeArrangedSubview(view)
+            if view !== bubbleColumn { view.removeFromSuperview() }
+        }
         retryButton.removeFromSuperview()
+        senderAvatarImageView.removeFromSuperview()
 
         if data.isOutgoing {
             rowStack.addArrangedSubview(spacer)
-            if data.isFailed { rowStack.addArrangedSubview(retryButton) }
             rowStack.addArrangedSubview(bubbleColumn)
+            if data.isFailed { rowStack.addArrangedSubview(retryButton) }
         } else {
+            rowStack.addArrangedSubview(senderAvatarImageView)
             rowStack.addArrangedSubview(bubbleColumn)
-            if data.isFailed { rowStack.addArrangedSubview(retryButton) }
             rowStack.addArrangedSubview(spacer)
+            senderAvatarImageView.setAvatar(
+                urlString: data.senderAvatarURL,
+                displayName: data.senderDisplayName ?? ""
+            )
         }
     }
 
