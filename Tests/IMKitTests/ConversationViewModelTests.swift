@@ -359,6 +359,74 @@ final class ConversationViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.groupMemberCandidatesForMention().count, 0)
     }
 
+    func test_recalledBySelf_rendersAsSystemTipWithNin() throws {
+        try storage.messages.insert(StoredMessage(
+            localMessageId: 10, messageUid: 500,
+            conversationType: .single, target: "them", from: "me",
+            content: .recalled(operatorId: "me"),
+            timestamp: 5_000, status: .sent, direction: .send
+        ))
+        try storage.conversations.recordIncomingMessage(
+            conversationType: .single, target: "them", line: 0,
+            messageUid: 500, timestamp: 5_000, incrementUnread: false
+        )
+
+        waitForFirstNonEmptyRows()
+
+        let tipRows = viewModel.rows.compactMap { row -> SystemTipRow? in
+            if case .systemTip(let tip) = row { return tip }
+            return nil
+        }
+        XCTAssertTrue(tipRows.contains { $0.text == "您撤回了一条消息" }, "rows: \(viewModel.rows)")
+    }
+
+    func test_recalledByOther_rendersAsSystemTipWithDisplayName() throws {
+        try storage.users.upsertProfile(uid: "them", name: nil, displayName: "Alice", portrait: nil, mobile: nil, gender: 0, updateDt: 0)
+        try storage.messages.insert(StoredMessage(
+            localMessageId: 11, messageUid: 501,
+            conversationType: .single, target: "them", from: "them",
+            content: .recalled(operatorId: "them"),
+            timestamp: 5_001, status: .unread, direction: .receive
+        ))
+        try storage.conversations.recordIncomingMessage(
+            conversationType: .single, target: "them", line: 0,
+            messageUid: 501, timestamp: 5_001, incrementUnread: true
+        )
+
+        waitForFirstNonEmptyRows()
+
+        let tipRows = viewModel.rows.compactMap { row -> SystemTipRow? in
+            if case .systemTip(let tip) = row { return tip }
+            return nil
+        }
+        XCTAssertTrue(tipRows.contains { $0.text == "Alice撤回了一条消息" }, "rows: \(viewModel.rows)")
+    }
+
+    func test_recalledByOtherWithNoProfile_fallsBackToUid() throws {
+        try storage.messages.insert(StoredMessage(
+            localMessageId: 12, messageUid: 502,
+            conversationType: .single, target: "unknown-uid", from: "unknown-uid",
+            content: .recalled(operatorId: "unknown-uid"),
+            timestamp: 5_002, status: .unread, direction: .receive
+        ))
+        try storage.conversations.recordIncomingMessage(
+            conversationType: .single, target: "unknown-uid", line: 0,
+            messageUid: 502, timestamp: 5_002, incrementUnread: true
+        )
+
+        let unknownUidViewModel = ConversationViewModel(storage: storage, messageSending: sending, imageUploading: uploading, target: "unknown-uid", pageSize: 3, currentUserId: "me")
+        let expectation = expectation(description: "row appears for unknown-uid")
+        expectation.assertForOverFulfill = false
+        unknownUidViewModel.$rows.dropFirst().sink { rows in if !rows.isEmpty { expectation.fulfill() } }.store(in: &cancellables)
+        wait(for: [expectation], timeout: 2)
+
+        let tipRows = unknownUidViewModel.rows.compactMap { row -> SystemTipRow? in
+            if case .systemTip(let tip) = row { return tip }
+            return nil
+        }
+        XCTAssertTrue(tipRows.contains { $0.text == "unknown-uid撤回了一条消息" }, "rows: \(unknownUidViewModel.rows)")
+    }
+
     private func makeGroupViewModel(target: String) -> ConversationViewModel {
         ConversationViewModel(storage: storage, messageSending: nil, imageUploading: nil, target: target, conversationType: .group, currentUserId: "me")
     }
