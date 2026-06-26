@@ -64,6 +64,11 @@ final class TextMessageCell: UITableViewCell {
         rowStack.spacing = 6
         rowStack.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(rowStack)
+        // bubbleColumn must be in the view hierarchy before activating the width
+        // constraint that references contentView — they need a common ancestor.
+        // configure() uses removeArrangedSubview (not removeFromSuperview) on
+        // bubbleColumn so it stays in the hierarchy across reconfiguration.
+        rowStack.addArrangedSubview(bubbleColumn)
 
         senderAvatarImageView.translatesAutoresizingMaskIntoConstraints = false
         senderNameLabel.font = .systemFont(ofSize: 12)
@@ -118,7 +123,10 @@ final class TextMessageCell: UITableViewCell {
         default: statusLabel.text = nil
         }
 
-        rowStack.arrangedSubviews.forEach { rowStack.removeArrangedSubview($0); $0.removeFromSuperview() }
+        for view in rowStack.arrangedSubviews {
+            rowStack.removeArrangedSubview(view)
+            if view !== bubbleColumn { view.removeFromSuperview() }
+        }
         retryButton.removeFromSuperview()
 
         if isOutgoing {
