@@ -11,6 +11,8 @@ public final class ConversationViewModel {
     private let storage: IMStorage
     private let messageSending: MessageSending?
     private let imageUploading: ImageUploading?
+    private let voiceUploading: VoiceUploading?
+    private let fileUploading: FileUploading?
     private let target: String
     private let conversationType: ConversationType
     private let line: Int
@@ -32,6 +34,8 @@ public final class ConversationViewModel {
         storage: IMStorage,
         messageSending: MessageSending?,
         imageUploading: ImageUploading?,
+        voiceUploading: VoiceUploading? = nil,
+        fileUploading: FileUploading? = nil,
         target: String,
         conversationType: ConversationType = .single,
         line: Int = 0,
@@ -41,6 +45,8 @@ public final class ConversationViewModel {
         self.storage = storage
         self.messageSending = messageSending
         self.imageUploading = imageUploading
+        self.voiceUploading = voiceUploading
+        self.fileUploading = fileUploading
         self.target = target
         self.conversationType = conversationType
         self.line = line
@@ -65,6 +71,25 @@ public final class ConversationViewModel {
         pendingImages.append(pending)
         publishRows()
         startUpload(pending)
+    }
+
+    public func sendVoice(audioData: Data, duration: Int, fileName: String) {
+        voiceUploading?.uploadVoice(audioData, fileName: fileName) { [weak self] result in
+            guard let self else { return }
+            if case .success(let url) = result {
+                try? self.messageSending?.sendVoice(to: self.target, conversationType: self.conversationType, line: self.line, remoteURL: url, duration: duration)
+            }
+        }
+    }
+
+    public func sendFile(fileData: Data, fileName: String) {
+        let size = fileData.count
+        fileUploading?.uploadFile(fileData, fileName: fileName) { [weak self] result in
+            guard let self else { return }
+            if case .success(let url) = result {
+                try? self.messageSending?.sendFile(to: self.target, conversationType: self.conversationType, line: self.line, name: fileName, size: size, remoteURL: url)
+            }
+        }
     }
 
     /// Candidate members for the composer's "@" picker — empty for a
