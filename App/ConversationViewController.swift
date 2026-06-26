@@ -329,17 +329,28 @@ final class ConversationViewController: UIViewController {
     }
 
     private func handlePickedImage(_ image: UIImage) {
-        guard let thumbnail = Self.makeThumbnail(image)?.jpegData(compressionQuality: 0.7),
+        guard let thumbnail = Self.makeThumbnailData(image),
               let fullImageData = image.jpegData(compressionQuality: 0.9) else { return }
         viewModel.sendImage(fullImageData: fullImageData, thumbnail: thumbnail)
     }
 
-    private static func makeThumbnail(_ image: UIImage, maxDimension: CGFloat = 480) -> UIImage? {
+    /// Scales the image to at most 200px on its longest side, then iteratively
+    /// lowers JPEG quality until the output is under 60 KB — staying safely
+    /// inside the server's BLOB column limit of 64 KB.
+    private static func makeThumbnailData(_ image: UIImage, maxDimension: CGFloat = 200, sizeLimit: Int = 60 * 1024) -> Data? {
         let scale = min(maxDimension / image.size.width, maxDimension / image.size.height, 1)
-        guard scale < 1 else { return image }
         let newSize = CGSize(width: image.size.width * scale, height: image.size.height * scale)
         let renderer = UIGraphicsImageRenderer(size: newSize)
-        return renderer.image { _ in image.draw(in: CGRect(origin: .zero, size: newSize)) }
+        let scaled = renderer.image { _ in image.draw(in: CGRect(origin: .zero, size: newSize)) }
+
+        var quality: CGFloat = 0.7
+        while quality > 0.1 {
+            if let data = scaled.jpegData(compressionQuality: quality), data.count <= sizeLimit {
+                return data
+            }
+            quality -= 0.15
+        }
+        return scaled.jpegData(compressionQuality: 0.1)
     }
 
     private func presentImagePreview(thumbnail: Data?, remoteURL: String?) {
@@ -446,7 +457,7 @@ extension ConversationViewController: UINavigationControllerDelegate, UIImagePic
         picker.dismiss(animated: true)
         guard let image = info[.originalImage] as? UIImage,
               let fullData = image.jpegData(compressionQuality: 0.8),
-              let thumbnail = Self.makeThumbnail(image)?.jpegData(compressionQuality: 0.7) else { return }
+              let thumbnail = Self.makeThumbnailData(image) else { return }
         viewModel.sendImage(fullImageData: fullData, thumbnail: thumbnail)
     }
 }
