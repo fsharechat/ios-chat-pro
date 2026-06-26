@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		AA1234567890ABCDEF123456 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = BB1234567890ABCDEF123456 /* Assets.xcassets */; };
 		08504DA6B3F3A100FA1C2484 /* SearchUserViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 690D108BAFD2ED791E23C0A9 /* SearchUserViewController.swift */; };
 		10F0F91A0119D922D2F5C61A /* IMCall in Frameworks */ = {isa = PBXBuildFile; productRef = 9238D717B4E81FE77D740748 /* IMCall */; };
 		1A8F5F1C4845AC9F553E5CAE /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = E696B814AB99A34483A11EA8 /* Theme.swift */; };
@@ -56,6 +57,7 @@
 		1499CDEAF049F73974F200A4 /* NewFriendsEntryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewFriendsEntryView.swift; sourceTree = "<group>"; };
 		1A7AF95FBB4F8D27A5F4067D /* MessageInputBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageInputBar.swift; sourceTree = "<group>"; };
 		29D71A57B85DC64E3CCC00C7 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		BB1234567890ABCDEF123456 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		2A887447B146764C16A4E603 /* GroupInfoViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupInfoViewController.swift; sourceTree = "<group>"; };
 		2B7725E347391300F698E8D6 /* ImagePreviewViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImagePreviewViewController.swift; sourceTree = "<group>"; };
 		38D6C28B7BC3F34AF2780264 /* LoginViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginViewController.swift; sourceTree = "<group>"; };
@@ -134,6 +136,7 @@
 		AD5D90037D78D89263A214D1 /* App */ = {
 			isa = PBXGroup;
 			children = (
+				BB1234567890ABCDEF123456 /* Assets.xcassets */,
 				53A605ADEEFEFF8E5A5674D9 /* AboutViewController.swift */,
 				929AC72577A219C38775E51D /* AddGroupMemberViewController.swift */,
 				93FA326C9B762DCAB590F502 /* AppDelegate.swift */,
@@ -179,6 +182,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 07A3CF973249BDBD1EE86227 /* Build configuration list for PBXNativeTarget "App" */;
 			buildPhases = (
+				CC1234567890ABCDEF123456 /* Resources */,
 				71F950F238A7BB4F7FCE8DCB /* Sources */,
 				43E3D850756CF089735EB298 /* Frameworks */,
 			);
@@ -221,6 +225,7 @@
 			knownRegions = (
 				Base,
 				en,
+				"zh-Hans",
 			);
 			mainGroup = 3612026BF799781C1CCCCF20;
 			minimizedProjectReferenceProxies = 1;
@@ -237,6 +242,17 @@
 			);
 		};
 /* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		CC1234567890ABCDEF123456 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA1234567890ABCDEF123456 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		71F950F238A7BB4F7FCE8DCB /* Sources */ = {
@@ -348,7 +364,7 @@
 		8CF0F1C85421BE23A63277F1 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = "";
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = S9PWD6X38T;
@@ -357,7 +373,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "com.fshare.ios-chat-pro.App";
+				PRODUCT_BUNDLE_IDENTIFIER = "cn.comsince.fschat";
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
@@ -422,7 +438,7 @@
 		B5095F891A8BDA6015DC5B08 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = "";
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = S9PWD6X38T;
@@ -431,7 +447,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "com.fshare.ios-chat-pro.App";
+				PRODUCT_BUNDLE_IDENTIFIER = "cn.comsince.fschat";
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
