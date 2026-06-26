@@ -19,6 +19,7 @@ public final class MessagingService {
     private let idGenerator: LocalMessageIdGenerator
     private let nowMillis: () -> Int64
     private let receiveMessageHandler: ReceiveMessageHandler
+    private let recallNotifyHandler: RecallNotifyMessageHandler
 
     /// Forwards to the internal `ReceiveMessageHandler`'s own closure of the
     /// same name — see that type's doc comment. Exposed here because
@@ -45,6 +46,14 @@ public final class MessagingService {
         set { receiveMessageHandler.onCallSignal = newValue }
     }
 
+    /// Forwards to the internal `RecallNotifyMessageHandler`'s closure.
+    /// Wire this to any UI that needs to react when a message is recalled
+    /// (e.g. to scroll to the updated row or dismiss a reply composer).
+    public var onMessageRecalled: ((Int64) -> Void)? {
+        get { recallNotifyHandler.onRecalled }
+        set { recallNotifyHandler.onRecalled = newValue }
+    }
+
     public init(
         imClient: IMClient,
         storage: IMStorage,
@@ -62,9 +71,16 @@ public final class MessagingService {
         let receiveHandler = ReceiveMessageHandler(storage: storage, myUserId: { [weak imClient] in imClient?.userId ?? "" })
         receiveMessageHandler = receiveHandler
         imClient.register(receiveHandler)
+        // Initialise recallNotifyHandler before the first [weak self] closure
+        // below — Swift phase-1 init requires every stored property to be set
+        // before `self` is captured anywhere (even weakly).
+        let recallHandler = RecallNotifyMessageHandler(storage: storage)
+        recallNotifyHandler = recallHandler
+
         let notifyHandler = NotifyMessageHandler()
         notifyHandler.onNotify = { [weak self] head, type in self?.pullMessages(from: head, type: type) }
         imClient.register(notifyHandler)
+        imClient.register(recallHandler)
     }
 
     /// Call once after a successful login (wire this to
