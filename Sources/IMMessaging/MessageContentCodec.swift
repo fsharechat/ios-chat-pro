@@ -159,6 +159,9 @@ public enum MessageContentCodec {
             return .file(name: name, size: size, remoteURL: wire.hasRemoteMediaURL ? wire.remoteMediaURL : nil, localPath: nil)
         case 400:
             return decodeCallStart(wire: wire)
+        case 80:
+            // Android RecallMessageContent.decode() reads operatorId from payload.content.
+            return .recalled(operatorId: wire.hasContent ? wire.content : "")
         default:
             throw DecodeError.unsupportedContentType(wire.type)
         }

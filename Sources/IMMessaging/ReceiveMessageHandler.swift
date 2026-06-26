@@ -130,6 +130,12 @@ public final class ReceiveMessageHandler: MessageHandler {
         if case .groupNotification(let type, let operatorUid, let memberUids, let value) = content, operatorUid.isEmpty {
             content = .groupNotification(type: type, operatorUid: wireMessage.fromUser, memberUids: memberUids, value: value)
         }
+        // Recalled messages: Android puts operatorId in payload.content; fall
+        // back to fromUser (the original sender, identical to the operator in
+        // the self-recall case that covers 99% of recalls) when absent.
+        if case .recalled(let operatorId) = content, operatorId.isEmpty {
+            content = .recalled(operatorId: wireMessage.fromUser)
+        }
 
         let conversationType = ConversationType(rawValue: Int(wireMessage.conversation.type)) ?? .single
         // For single-chat, the server always sets conversation.target to the
