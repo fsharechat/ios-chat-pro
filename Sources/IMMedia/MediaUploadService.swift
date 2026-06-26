@@ -40,10 +40,30 @@ public final class MediaUploadService {
     /// remote URL string to embed in an outgoing image message's
     /// `remoteURL` field.
     public func uploadImage(_ data: Data, completion: @escaping (Result<String, MediaUploadError>) -> Void) {
-        let key = "1-\(imClient.userId)-\(nowMillis()).png"
+        upload(data, mediaType: 1, fileName: "\(nowMillis()).png", completion: completion)
+    }
+
+    /// Uploads voice audio data and returns the remote URL string.
+    public func uploadVoice(_ data: Data, fileName: String, completion: @escaping (Result<String, MediaUploadError>) -> Void) {
+        upload(data, mediaType: 2, fileName: fileName, completion: completion)
+    }
+
+    /// Uploads a file and returns the remote URL string.
+    /// Note: file upload uses mediaType=4; the wire message type for file messages is 5 (different).
+    public func uploadFile(_ data: Data, fileName: String, completion: @escaping (Result<String, MediaUploadError>) -> Void) {
+        upload(data, mediaType: 4, fileName: fileName, completion: completion)
+    }
+
+    private func upload(
+        _ data: Data,
+        mediaType: Int32,
+        fileName: String,
+        completion: @escaping (Result<String, MediaUploadError>) -> Void
+    ) {
+        let key = "\(mediaType)-\(imClient.userId)-\(nowMillis())-\(fileName)"
 
         var wireRequest = Im_GetMinioUploadUrlRequest()
-        wireRequest.type = 1
+        wireRequest.type = mediaType
         wireRequest.key = key
         guard let body = try? wireRequest.serializedData() else {
             completion(.failure(.requestEncodingFailed))
