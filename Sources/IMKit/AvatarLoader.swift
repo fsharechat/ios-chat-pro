@@ -21,6 +21,8 @@ public protocol AvatarLoading {
 /// for the actual usage pattern (a handful of avatar loads per screen, not
 /// a high-volume hot path).
 public final class AvatarLoader: AvatarLoading {
+    public static let shared = AvatarLoader()
+
     private let session: URLSession
     private let cache = NSCache<NSString, NSData>()
 

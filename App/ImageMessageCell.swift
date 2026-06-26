@@ -27,7 +27,7 @@ final class ImageMessageCell: UITableViewCell {
     private let activityIndicator = UIActivityIndicatorView(style: .medium)
     private let retryButton = UIButton(type: .system)
     private let senderNameLabel = UILabel()
-    private let senderAvatarImageView = AvatarImageView(loader: AvatarLoader())
+    private let senderAvatarImageView = AvatarImageView(loader: AvatarLoader.shared)
     private let bubbleColumn = UIStackView()
     private let rowStack = UIStackView()
     private let spacer = UIView()
