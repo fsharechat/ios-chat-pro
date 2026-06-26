@@ -123,7 +123,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     }
 
     private func makeConversationListNavigationController() -> UIViewController {
-        let viewModel = ConversationListViewModel(storage: environment.storage, contactSync: environment.contactSyncService, groupSync: environment.groupSyncService)
+        let viewModel = ConversationListViewModel(storage: environment.storage, contactSync: environment.contactSyncService, groupSync: environment.groupSyncService, currentUserId: environment.imClient?.userId ?? "")
         let listViewController = ConversationListViewController(viewModel: viewModel)
         listViewController.onConversationSelected = { [weak self, weak listViewController] row in
             guard let self else { return }

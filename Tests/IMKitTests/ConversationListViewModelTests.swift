@@ -216,6 +216,53 @@ final class ConversationListViewModelTests: XCTestCase {
         XCTAssertFalse(row.hasUnreadMention)
     }
 
+    func test_recalledBySelf_showsNiPreview() throws {
+        // Build a dedicated viewModel that knows the current user is "me" so
+        // the self-recall branch ("您撤回了一条消息") can fire.
+        let selfViewModel = ConversationListViewModel(storage: storage, contactSync: fetcher, groupSync: groupSyncer, currentUserId: "me")
+
+        try storage.messages.insert(StoredMessage(
+            localMessageId: 20, messageUid: 600,
+            conversationType: .single, target: "them", from: "me",
+            content: .recalled(operatorId: "me"),
+            timestamp: 6_000, status: .sent, direction: .send
+        ))
+        try storage.conversations.recordIncomingMessage(
+            conversationType: .single, target: "them", line: 0,
+            messageUid: 600, timestamp: 6_000, incrementUnread: false
+        )
+
+        let expectation = expectation(description: "row appears")
+        selfViewModel.$rows.dropFirst().sink { rows in
+            if !rows.isEmpty { expectation.fulfill() }
+        }.store(in: &cancellables)
+        wait(for: [expectation], timeout: 2)
+
+        XCTAssertEqual(selfViewModel.rows.first?.previewText, "您撤回了一条消息")
+    }
+
+    func test_recalledByOther_showsDisplayNamePreview() throws {
+        try storage.users.upsertProfile(uid: "them", name: nil, displayName: "Bob", portrait: nil, mobile: nil, gender: 0, updateDt: 0)
+        try storage.messages.insert(StoredMessage(
+            localMessageId: 21, messageUid: 601,
+            conversationType: .single, target: "them", from: "them",
+            content: .recalled(operatorId: "them"),
+            timestamp: 6_001, status: .unread, direction: .receive
+        ))
+        try storage.conversations.recordIncomingMessage(
+            conversationType: .single, target: "them", line: 0,
+            messageUid: 601, timestamp: 6_001, incrementUnread: true
+        )
+
+        let expectation = expectation(description: "row appears")
+        viewModel.$rows.dropFirst().sink { rows in
+            if !rows.isEmpty { expectation.fulfill() }
+        }.store(in: &cancellables)
+        wait(for: [expectation], timeout: 2)
+
+        XCTAssertEqual(viewModel.rows.first?.previewText, "Bob撤回了一条消息")
+    }
+
     private func waitForRow(target: String) throws -> ConversationRow {
         let expectation = expectation(description: "row for \(target) appears")
         expectation.assertForOverFulfill = false

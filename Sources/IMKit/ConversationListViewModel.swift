@@ -10,12 +10,14 @@ public final class ConversationListViewModel {
     private let storage: IMStorage
     private let contactSync: ContactInfoFetching?
     private let groupSync: GroupSyncing?
+    private let currentUserId: String
     private var cancellable: AnyCancellable?
 
-    public init(storage: IMStorage, contactSync: ContactInfoFetching?, groupSync: GroupSyncing? = nil) {
+    public init(storage: IMStorage, contactSync: ContactInfoFetching?, groupSync: GroupSyncing? = nil, currentUserId: String = "") {
         self.storage = storage
         self.contactSync = contactSync
         self.groupSync = groupSync
+        self.currentUserId = currentUserId
 
         // A row's displayName/avatarURL is derived from `UserStore`/
         // `GroupStore`, not just `StoredConversation` — and that profile
@@ -68,7 +70,7 @@ public final class ConversationListViewModel {
                 line: conversation.line,
                 displayName: user?.displayName ?? user?.name ?? conversation.target,
                 avatarURL: user?.portrait,
-                previewText: conversation.draft.map { "[草稿] \($0)" } ?? lastMessage?.searchableContent ?? "",
+                previewText: conversation.draft.map { "[草稿] \($0)" } ?? recalledPreviewText(for: lastMessage) ?? lastMessage?.searchableContent ?? "",
                 timestamp: conversation.timestamp,
                 unreadCount: conversation.unreadCount,
                 hasUnreadMention: conversation.unreadMentionCount > 0,
@@ -105,6 +107,8 @@ public final class ConversationListViewModel {
         let previewText: String
         if let draft = conversation.draft {
             previewText = "[草稿] \(draft)"
+        } else if let recalled = recalledPreviewText(for: lastMessage) {
+            previewText = recalled
         } else if let lastMessage {
             let sender = try? storage.users.user(uid: lastMessage.from)
             let senderName = sender?.displayName ?? sender?.name ?? lastMessage.from
@@ -126,5 +130,18 @@ public final class ConversationListViewModel {
             isMuted: conversation.isMuted,
             lastMessageStatus: lastMessage?.status
         )
+    }
+
+    /// Returns a recall notice string if `lastMessage` is a recalled message,
+    /// `nil` otherwise. Caller falls through to normal preview text on `nil`.
+    /// Uses "您" for the current user (matching Android's convention) and the
+    /// operator's resolved display name for anyone else.
+    private func recalledPreviewText(for lastMessage: StoredMessage?) -> String? {
+        guard let msg = lastMessage, msg.contentType == .recalled else { return nil }
+        let operatorId = msg.textContent ?? ""
+        if operatorId == currentUserId { return "您撤回了一条消息" }
+        let user = try? storage.users.user(uid: operatorId)
+        let name = user?.displayName ?? user?.name ?? operatorId
+        return "\(name)撤回了一条消息"
     }
 }
