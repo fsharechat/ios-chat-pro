@@ -50,6 +50,7 @@
 		DFE88FBF3B3A22EEF47634EB /* CallViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 433A3515C086B0178E667801 /* CallViewController.swift */; };
 		E2E627EE50345A115DB5B2ED /* GroupInfoViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A887447B146764C16A4E603 /* GroupInfoViewController.swift */; };
 		EEAD53A71EAD7C968380673B /* IMMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = E0AB875DDD2DC10A0CEAA624 /* IMMessaging */; };
+		F0CE58DD3C1FD435222D8B73 /* VoiceConverter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AEBA51F623B4448E035ED61 /* VoiceConverter.swift */; };
 		F0E0711134156FE1E30507ED /* MessageInputBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A7AF95FBB4F8D27A5F4067D /* MessageInputBar.swift */; };
 		F8875E643BF006517AB52361 /* FriendRequestCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4F8B269AD818644389D362C /* FriendRequestCell.swift */; };
 		FF900D32443A8166CEA8072A /* IMKit in Frameworks */ = {isa = PBXBuildFile; productRef = A21BC9F32CE4DC35DC8E2152 /* IMKit */; };
@@ -57,6 +58,7 @@
 
 /* Begin PBXFileReference section */
 		0832B3942D777D6A0D67E100 /* NewFriendsViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewFriendsViewController.swift; sourceTree = "<group>"; };
+		0AEBA51F623B4448E035ED61 /* VoiceConverter.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = VoiceConverter.swift; sourceTree = "<group>"; };
 		0CE65FB3E4BBBDBC011338C7 /* MentionPickerViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MentionPickerViewController.swift; sourceTree = "<group>"; };
 		0E4C429A89F749F13C87CB2D /* CreateGroupViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateGroupViewController.swift; sourceTree = "<group>"; };
 		1499CDEAF049F73974F200A4 /* NewFriendsEntryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewFriendsEntryView.swift; sourceTree = "<group>"; };
@@ -186,6 +188,7 @@
 				674AB766C4CF7403F999FF1C /* ExtPanelView.swift */,
 				D45125991923450129867F85 /* VoiceMessageCell.swift */,
 				B8D2DD734002D5F406357C08 /* FileMessageCell.swift */,
+				0AEBA51F623B4448E035ED61 /* VoiceConverter.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -312,6 +315,7 @@
 				9F43598F197A0D0711D38ACC /* ExtPanelView.swift in Sources */,
 				4A474DB4814BEB633584F04A /* VoiceMessageCell.swift in Sources */,
 				C51ACB731148C2E3D27F36D3 /* FileMessageCell.swift in Sources */,
+				F0CE58DD3C1FD435222D8B73 /* VoiceConverter.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

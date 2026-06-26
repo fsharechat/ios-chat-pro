@@ -2,6 +2,7 @@
 import UIKit
 import PhotosUI
 import UniformTypeIdentifiers
+import AVFoundation
 import Combine
 import IMKit
 
@@ -10,6 +11,14 @@ final class ConversationViewController: UIViewController {
     private let viewModel: ConversationViewModel
     private var cancellables = Set<AnyCancellable>()
     private var dataSource: UITableViewDiffableDataSource<Int, ChatMessageRow>!
+    private var audioPlayer: AVAudioPlayer?
+    private var voicePlayer: AVPlayer?
+    private var currentPlaybackTempURL: URL?
+    private weak var currentPlayingCell: VoiceMessageCell?
+    /// Maps filename stem (e.g. "voice-1234567890") → local M4A URL for
+    /// outgoing voice messages recorded this session. Lets iOS play back its
+    /// own recordings without needing to decode the uploaded AMR file.
+    private static var localVoiceM4ACache: [String: URL] = [:]
 
     private let tableView = UITableView()
     private let inputBar = MessageInputBar()
@@ -109,6 +118,7 @@ final class ConversationViewController: UIViewController {
             case .message(let message) where message.text?.hasPrefix("[语音]") == true:
                 let cell = tableView.dequeueReusableCell(withIdentifier: VoiceMessageCell.reuseIdentifier, for: indexPath) as! VoiceMessageCell
                 cell.configure(with: message)
+                cell.onTapped = { [weak self, weak cell] in self?.playVoice(urlString: message.imageRemoteURL, cell: cell) }
                 return cell
             case .message(let message) where message.text?.hasPrefix("[文件]") == true:
                 let cell = tableView.dequeueReusableCell(withIdentifier: FileMessageCell.reuseIdentifier, for: indexPath) as! FileMessageCell
@@ -273,7 +283,11 @@ final class ConversationViewController: UIViewController {
         inputBar.onPickImage = { [weak self] in self?.presentImagePicker() }
         inputBar.onCamera = { [weak self] in self?.presentCamera() }
         inputBar.onPickFile = { [weak self] in self?.presentFilePicker() }
-        inputBar.onSendVoice = { [weak self] audioData, duration, fileName in
+        inputBar.onSendVoice = { [weak self] audioData, duration, fileName, localM4AURL in
+            if let localM4AURL {
+                let stem = URL(fileURLWithPath: fileName).deletingPathExtension().lastPathComponent
+                Self.localVoiceM4ACache[stem] = localM4AURL
+            }
             self?.viewModel.sendVoice(audioData: audioData, duration: duration, fileName: fileName)
         }
         inputBar.onMentionTriggered = { [weak self] in self?.presentMentionPicker() }
@@ -332,6 +346,70 @@ final class ConversationViewController: UIViewController {
         present(ImagePreviewViewController(localThumbnail: thumbnail, remoteURL: remoteURL), animated: true)
     }
 
+    private func stopCurrentVoicePlayback() {
+        audioPlayer?.stop()
+        audioPlayer = nil
+        voicePlayer?.pause()
+        NotificationCenter.default.removeObserver(self, name: .AVPlayerItemDidPlayToEndTime, object: voicePlayer?.currentItem)
+        voicePlayer = nil
+        currentPlayingCell?.setPlaying(false)
+        currentPlayingCell = nil
+        if let old = currentPlaybackTempURL { try? FileManager.default.removeItem(at: old) }
+        currentPlaybackTempURL = nil
+    }
+
+    private func playVoice(urlString: String?, cell: VoiceMessageCell?) {
+        guard let urlString, let remoteURL = URL(string: urlString) else { return }
+        stopCurrentVoicePlayback()
+
+        // Outgoing messages recorded this session: play local M4A directly —
+        // iOS cannot decode the uploaded AMR via any public API.
+        let stem = remoteURL.deletingPathExtension().lastPathComponent
+        if let localURL = Self.localVoiceM4ACache[stem],
+           FileManager.default.fileExists(atPath: localURL.path) {
+            currentPlayingCell = cell
+            cell?.setPlaying(true)
+            try? AVAudioSession.sharedInstance().setCategory(.playback)
+            try? AVAudioSession.sharedInstance().setActive(true)
+            audioPlayer = try? AVAudioPlayer(contentsOf: localURL)
+            audioPlayer?.delegate = self
+            audioPlayer?.play()
+            return
+        }
+
+        URLSession.shared.dataTask(with: remoteURL) { [weak self] data, _, _ in
+            guard let data, let self else { return }
+            let ext = remoteURL.pathExtension.lowercased()
+            let fileExt = ext.isEmpty ? "amr" : ext
+            let tempURL = FileManager.default.temporaryDirectory
+                .appendingPathComponent(UUID().uuidString + "." + fileExt)
+            guard (try? data.write(to: tempURL)) != nil else { return }
+
+            DispatchQueue.main.async {
+                self.currentPlaybackTempURL = tempURL
+                self.currentPlayingCell = cell
+                cell?.setPlaying(true)
+
+                try? AVAudioSession.sharedInstance().setCategory(.playback)
+                try? AVAudioSession.sharedInstance().setActive(true)
+
+                // AVPlayer uses CoreMedia's full decoder pipeline which supports
+                // AMR-NB on device; AVAudioPlayer's format list excludes AMR on
+                // recent iOS versions.
+                let item = AVPlayerItem(url: tempURL)
+                NotificationCenter.default.addObserver(self,
+                    selector: #selector(self.voicePlaybackDidEnd),
+                    name: .AVPlayerItemDidPlayToEndTime, object: item)
+                self.voicePlayer = AVPlayer(playerItem: item)
+                self.voicePlayer?.play()
+            }
+        }.resume()
+    }
+
+    @objc private func voicePlaybackDidEnd() {
+        stopCurrentVoicePlayback()
+    }
+
     private func observeKeyboard() {
         NotificationCenter.default.addObserver(self, selector: #selector(keyboardWillChangeFrame), name: UIResponder.keyboardWillChangeFrameNotification, object: nil)
     }
@@ -373,6 +451,14 @@ extension ConversationViewController: UINavigationControllerDelegate, UIImagePic
     }
 }
 
+extension ConversationViewController: AVAudioPlayerDelegate {
+    func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+        currentPlayingCell?.setPlaying(false)
+        currentPlayingCell = nil
+        audioPlayer = nil
+    }
+}
+
 extension ConversationViewController: UIDocumentPickerDelegate {
     func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
         guard let url = urls.first else { return }
@@ -382,3 +468,4 @@ extension ConversationViewController: UIDocumentPickerDelegate {
         viewModel.sendFile(fileData: data, fileName: url.lastPathComponent)
     }
 }
+

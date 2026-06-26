@@ -4,6 +4,8 @@ import IMKit
 final class VoiceMessageCell: UITableViewCell {
     static let reuseIdentifier = "VoiceMessageCell"
 
+    var onTapped: (() -> Void)?
+
     private let bubbleView = UIView()
     private let iconView = UIImageView()
     private let durationLabel = UILabel()
@@ -17,7 +19,12 @@ final class VoiceMessageCell: UITableViewCell {
         backgroundColor = .clear
         selectionStyle = .none
         layoutViews()
+        let tap = UITapGestureRecognizer(target: self, action: #selector(bubbleTapped))
+        bubbleView.isUserInteractionEnabled = true
+        bubbleView.addGestureRecognizer(tap)
     }
+
+    @objc private func bubbleTapped() { onTapped?() }
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
 
@@ -63,6 +70,20 @@ final class VoiceMessageCell: UITableViewCell {
             rowStack.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -4),
             bubbleColumn.widthAnchor.constraint(lessThanOrEqualTo: contentView.widthAnchor, multiplier: 0.6),
         ])
+    }
+
+    func setPlaying(_ playing: Bool) {
+        if playing {
+            let anim = CABasicAnimation(keyPath: "opacity")
+            anim.fromValue = 1.0
+            anim.toValue = 0.15
+            anim.duration = 0.5
+            anim.autoreverses = true
+            anim.repeatCount = .infinity
+            iconView.layer.add(anim, forKey: "playing")
+        } else {
+            iconView.layer.removeAnimation(forKey: "playing")
+        }
     }
 
     func configure(with row: StoredMessageRow) {

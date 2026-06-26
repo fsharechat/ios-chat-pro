@@ -88,8 +88,10 @@ public enum MessageContentCodec {
         case .voice(let remoteURL, _, let duration):
             wire.type = 2
             wire.searchableContent = "[语音]"
-            if let data = try? JSONEncoder().encode(VoiceWireContent(duration: duration)) {
-                wire.data = data
+            // Android SoundMessageContent.encode() writes {"duration":X} JSON into content field.
+            if let json = try? JSONEncoder().encode(VoiceWireContent(duration: duration)),
+               let jsonStr = String(data: json, encoding: .utf8) {
+                wire.content = jsonStr
             }
             if let remoteURL { wire.remoteMediaURL = remoteURL }
         case .file(let name, let size, let remoteURL, _):
@@ -132,9 +134,18 @@ public enum MessageContentCodec {
         case 112:
             return decodeGroupNotification(type: .changeGroupPortrait, wire: wire)
         case 2:
-            let duration = wire.hasData
-                ? ((try? JSONDecoder().decode(VoiceWireContent.self, from: wire.data))?.duration ?? 0)
-                : 0
+            // Android SoundMessageContent.decode() reads {"duration":X} JSON from content field.
+            // Fall back to data JSON for any messages written by the old iOS codec.
+            let duration: Int
+            if wire.hasContent,
+               let contentData = wire.content.data(using: .utf8),
+               let decoded = try? JSONDecoder().decode(VoiceWireContent.self, from: contentData) {
+                duration = decoded.duration
+            } else if wire.hasData {
+                duration = (try? JSONDecoder().decode(VoiceWireContent.self, from: wire.data))?.duration ?? 0
+            } else {
+                duration = 0
+            }
             return .voice(remoteURL: wire.hasRemoteMediaURL ? wire.remoteMediaURL : nil, localPath: nil, duration: duration)
         case 5:
             let name = wire.hasSearchableContent ? wire.searchableContent : ""

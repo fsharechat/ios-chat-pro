@@ -8,7 +8,7 @@ final class MessageInputBar: UIView {
     var onPickImage: (() -> Void)?
     var onCamera: (() -> Void)?
     var onPickFile: (() -> Void)?
-    var onSendVoice: ((_ audioData: Data, _ duration: Int, _ fileName: String) -> Void)?
+    var onSendVoice: ((_ audioData: Data, _ duration: Int, _ fileName: String, _ localM4AURL: URL?) -> Void)?
     var onMentionTriggered: (() -> Void)?
 
     // MARK: - Mention state
@@ -37,7 +37,6 @@ final class MessageInputBar: UIView {
 
     // MARK: - Voice recording
     private var audioRecorder: AVAudioRecorder?
-    private var recordingStartTime: Date?
     private var recordingURL: URL?
 
     override init(frame: CGRect) {
@@ -240,13 +239,35 @@ final class MessageInputBar: UIView {
     }
 
     @objc private func recordTouchUp() {
-        guard let url = recordingURL, let start = recordingStartTime else { return }
+        guard let url = recordingURL else { return }
+        let duration = Int(audioRecorder?.currentTime ?? 0)
         stopRecording()
-        let duration = Int(Date().timeIntervalSince(start))
-        guard duration >= 1 else { resetRecordButton(); return }
-        guard let data = try? Data(contentsOf: url) else { resetRecordButton(); return }
-        onSendVoice?(data, duration, url.lastPathComponent)
         resetRecordButton()
+        guard duration >= 1 else { return }
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            // Save M4A to caches so local playback can bypass AMR decode.
+            let cacheDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+                .appendingPathComponent("VoiceMessages")
+            try? FileManager.default.createDirectory(at: cacheDir, withIntermediateDirectories: true)
+            let m4aCacheURL = cacheDir.appendingPathComponent(url.lastPathComponent)
+            try? FileManager.default.copyItem(at: url, to: m4aCacheURL)
+
+            let amrData = VoiceConverter.convertToAMR(from: url)
+            let data: Data
+            let fileName: String
+            // Require > 20 bytes to guard against empty AMR containers.
+            if let amrData, amrData.count > 20 {
+                data = amrData
+                fileName = url.deletingPathExtension().appendingPathExtension("amr").lastPathComponent
+            } else if let m4aData = try? Data(contentsOf: url) {
+                data = m4aData
+                fileName = url.lastPathComponent
+            } else {
+                return
+            }
+            DispatchQueue.main.async { self?.onSendVoice?(data, duration, fileName, m4aCacheURL) }
+        }
     }
 
     @objc private func recordTouchCancel() {
@@ -274,7 +295,6 @@ final class MessageInputBar: UIView {
                 ]
                 self.audioRecorder = try? AVAudioRecorder(url: url, settings: settings)
                 self.audioRecorder?.record()
-                self.recordingStartTime = Date()
             }
         }
     }
