@@ -356,6 +356,30 @@ final class ReceiveMessageHandlerTests: XCTestCase {
         XCTAssertEqual(try storage.messages.message(uid: 900)?.target, "SystemNotification")
     }
 
+    /// Regression: server sets conversation.target = recipient uid (current user)
+    /// for received single-chat messages. Before the fix, the conversation was
+    /// keyed by the current user's own uid instead of the sender's uid, causing
+    /// the logged-in user to appear as a conversation in the list.
+    func test_handle_receivedSingleMessage_withTargetEqualToSelf_usesFromUserAsConversationTarget() throws {
+        // Wire format reality: from = sender, conversation.target = me (recipient)
+        var message = makeWireMessage(uid: 999, from: "other", target: "me", text: "hi")
+        message.conversation.target = "me" // server sets target = current user uid
+        let frame = try makePullResultFrame(messages: [message], head: 999)
+
+        handler.handle(frame: frame)
+
+        // Must create conversation keyed by the *sender*, not the current user
+        let correctConversation = try storage.conversations.conversation(conversationType: .single, target: "other")
+        XCTAssertNotNil(correctConversation, "conversation should be keyed by sender uid 'other'")
+        XCTAssertEqual(correctConversation?.unreadCount, 1)
+
+        let selfConversation = try storage.conversations.conversation(conversationType: .single, target: "me")
+        XCTAssertNil(selfConversation, "must not create a conversation keyed by the current user's own uid")
+
+        let storedMessage = try storage.messages.message(uid: 999)
+        XCTAssertEqual(storedMessage?.target, "other")
+    }
+
     func test_handle_callSignal_stillAdvancesSyncHead() throws {
         var message = Im_Message()
         message.messageID = 503

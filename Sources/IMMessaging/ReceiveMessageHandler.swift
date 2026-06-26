@@ -132,17 +132,19 @@ public final class ReceiveMessageHandler: MessageHandler {
         }
 
         let conversationType = ConversationType(rawValue: Int(wireMessage.conversation.type)) ?? .single
-        // System-notification pushes (`chat-server-pro`'s `ImOpenApiController`,
-        // `fromUser` always `"SystemNotification"`) deliberately send
-        // `conversation.target = ""` and rely on the receiver treating the
-        // sender as the conversation party — there's no "other side" to
-        // name for a server-originated broadcast. A single-chat
-        // conversation literally keyed by `""` can never resolve a display
-        // name/avatar (no user has uid `""`), so the sender fills in here
-        // whenever the wire payload leaves the target blank.
-        let target = (conversationType == .single && direction == .receive && wireMessage.conversation.target.isEmpty)
-            ? wireMessage.fromUser
-            : wireMessage.conversation.target
+        // For single-chat, the server always sets conversation.target to the
+        // *recipient* uid (i.e. the current user when receiving). The correct
+        // conversation key is the *other* party — fromUser when receiving,
+        // conversation.target when sending. This mirrors Android's
+        // convertProtoMessage logic (AbstractProtoService.java lines 739-747).
+        // System-notification pushes set fromUser = "SystemNotification" and
+        // target = ""; the receiving branch below handles that correctly too.
+        let target: String
+        if conversationType == .single && direction == .receive {
+            target = wireMessage.fromUser
+        } else {
+            target = wireMessage.conversation.target
+        }
         let line = Int(wireMessage.conversation.line)
         let mentionedType = Int(wireMessage.content.mentionedType)
         let mentionedTargets = wireMessage.content.mentionedTarget
