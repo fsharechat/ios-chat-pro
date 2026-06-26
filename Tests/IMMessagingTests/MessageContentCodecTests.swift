@@ -232,4 +232,93 @@ final class MessageContentCodecTests: XCTestCase {
         let original = MessageContent.callRecord(callId: "call-2", targetId: "u3", audioOnly: true, status: 1, connectTime: 1_000, endTime: 0)
         XCTAssertEqual(try MessageContentCodec.decode(MessageContentCodec.encode(original)), original)
     }
+
+    // MARK: - Voice (type=2)
+
+    func test_encodeVoice_setsTypeSearchableContentDataAndRemoteURL() throws {
+        let wire = MessageContentCodec.encode(.voice(remoteURL: "https://cdn/a.m4a", localPath: nil, duration: 12))
+
+        XCTAssertEqual(wire.type, 2)
+        XCTAssertEqual(wire.searchableContent, "[语音]")
+        XCTAssertTrue(wire.hasData)
+        XCTAssertEqual(wire.remoteMediaURL, "https://cdn/a.m4a")
+        let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: wire.data) as? [String: Any])
+        XCTAssertEqual(json["duration"] as? Int, 12)
+    }
+
+    func test_encodeVoice_noRemoteURL_doesNotSetRemoteMediaURL() {
+        let wire = MessageContentCodec.encode(.voice(remoteURL: nil, localPath: nil, duration: 5))
+
+        XCTAssertFalse(wire.hasRemoteMediaURL)
+    }
+
+    func test_decodeVoice_parsesRemoteURLAndDuration() throws {
+        var wire = Im_MessageContent()
+        wire.type = 2
+        wire.searchableContent = "[语音]"
+        wire.remoteMediaURL = "https://cdn/a.m4a"
+        wire.data = Data(#"{"duration":12}"#.utf8)
+
+        let content = try MessageContentCodec.decode(wire)
+
+        XCTAssertEqual(content, .voice(remoteURL: "https://cdn/a.m4a", localPath: nil, duration: 12))
+    }
+
+    func test_decodeVoice_missingData_defaultsDurationToZero() throws {
+        var wire = Im_MessageContent()
+        wire.type = 2
+
+        let content = try MessageContentCodec.decode(wire)
+
+        XCTAssertEqual(content, .voice(remoteURL: nil, localPath: nil, duration: 0))
+    }
+
+    func test_encodeDecodeVoice_roundTrips() throws {
+        let original = MessageContent.voice(remoteURL: "https://cdn/a.m4a", localPath: nil, duration: 12)
+        XCTAssertEqual(try MessageContentCodec.decode(MessageContentCodec.encode(original)), original)
+    }
+
+    // MARK: - File (type=5)
+
+    func test_encodeFile_setsTypeSearchableContentSizeAndRemoteURL() {
+        let wire = MessageContentCodec.encode(.file(name: "report.pdf", size: 204800, remoteURL: "https://cdn/f.pdf", localPath: nil))
+
+        XCTAssertEqual(wire.type, 5)
+        XCTAssertEqual(wire.searchableContent, "report.pdf")
+        XCTAssertEqual(wire.content, "204800")
+        XCTAssertEqual(wire.remoteMediaURL, "https://cdn/f.pdf")
+    }
+
+    func test_encodeFile_noRemoteURL_doesNotSetRemoteMediaURL() {
+        let wire = MessageContentCodec.encode(.file(name: "doc.txt", size: 1024, remoteURL: nil, localPath: nil))
+
+        XCTAssertFalse(wire.hasRemoteMediaURL)
+    }
+
+    func test_decodeFile_parsesNameSizeAndRemoteURL() throws {
+        var wire = Im_MessageContent()
+        wire.type = 5
+        wire.searchableContent = "report.pdf"
+        wire.content = "204800"
+        wire.remoteMediaURL = "https://cdn/f.pdf"
+
+        let content = try MessageContentCodec.decode(wire)
+
+        XCTAssertEqual(content, .file(name: "report.pdf", size: 204800, remoteURL: "https://cdn/f.pdf", localPath: nil))
+    }
+
+    func test_decodeFile_missingContentField_defaultsSizeToZero() throws {
+        var wire = Im_MessageContent()
+        wire.type = 5
+        wire.searchableContent = "doc.txt"
+
+        let content = try MessageContentCodec.decode(wire)
+
+        XCTAssertEqual(content, .file(name: "doc.txt", size: 0, remoteURL: nil, localPath: nil))
+    }
+
+    func test_encodeDecodeFile_roundTrips() throws {
+        let original = MessageContent.file(name: "report.pdf", size: 204800, remoteURL: "https://cdn/f.pdf", localPath: nil)
+        XCTAssertEqual(try MessageContentCodec.decode(MessageContentCodec.encode(original)), original)
+    }
 }

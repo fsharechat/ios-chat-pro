@@ -46,6 +46,11 @@ public enum MessageContentCodec {
         let s: Int?
     }
 
+    /// Wire shape for type 2 (voice)'s `data` field.
+    private struct VoiceWireContent: Codable {
+        let duration: Int
+    }
+
     public static func encode(_ content: MessageContent, mentionedType: Int32 = 0, mentionedTargets: [String] = []) -> Im_MessageContent {
         var wire = Im_MessageContent()
         switch content {
@@ -80,6 +85,18 @@ public enum MessageContentCodec {
             if let data = try? JSONEncoder().encode(payload) {
                 wire.data = data
             }
+        case .voice(let remoteURL, _, let duration):
+            wire.type = 2
+            wire.searchableContent = "[语音]"
+            if let data = try? JSONEncoder().encode(VoiceWireContent(duration: duration)) {
+                wire.data = data
+            }
+            if let remoteURL { wire.remoteMediaURL = remoteURL }
+        case .file(let name, let size, let remoteURL, _):
+            wire.type = 5
+            wire.searchableContent = name
+            wire.content = "\(size)"
+            if let remoteURL { wire.remoteMediaURL = remoteURL }
         }
         if mentionedType != 0 {
             wire.mentionedType = mentionedType
@@ -114,6 +131,15 @@ public enum MessageContentCodec {
             return decodeGroupNotification(type: .changeGroupName, wire: wire)
         case 112:
             return decodeGroupNotification(type: .changeGroupPortrait, wire: wire)
+        case 2:
+            let duration = wire.hasData
+                ? ((try? JSONDecoder().decode(VoiceWireContent.self, from: wire.data))?.duration ?? 0)
+                : 0
+            return .voice(remoteURL: wire.hasRemoteMediaURL ? wire.remoteMediaURL : nil, localPath: nil, duration: duration)
+        case 5:
+            let name = wire.hasSearchableContent ? wire.searchableContent : ""
+            let size = Int(wire.hasContent ? wire.content : "0") ?? 0
+            return .file(name: name, size: size, remoteURL: wire.hasRemoteMediaURL ? wire.remoteMediaURL : nil, localPath: nil)
         case 400:
             return decodeCallStart(wire: wire)
         default:
@@ -143,7 +169,7 @@ public enum MessageContentCodec {
             return .groupNotification(type: type, operatorUid: parsed.o ?? "", memberUids: [], value: parsed.n)
         case .dismissGroup, .changeGroupPortrait:
             return .groupNotification(type: type, operatorUid: parsed.o ?? "", memberUids: [], value: nil)
-        case .text, .image, .quitGroup, .callStart:
+        case .text, .image, .quitGroup, .callStart, .voice, .file:
             return .groupNotification(type: type, operatorUid: parsed.o ?? "", memberUids: [], value: nil) // unreachable
         }
     }
