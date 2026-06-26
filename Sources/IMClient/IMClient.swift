@@ -203,7 +203,7 @@ public final class IMClient {
 
     private func handleReceivedData(_ data: Data) {
         for frame in frameDecoder.feed(data) {
-            print("[DEBUG-FP] recv signal=\(frame.header.signal) subSignal=\(frame.header.subSignal) bodyLength=\(frame.header.bodyLength) messageId=\(frame.header.messageId)")
+            print("[DEBUG-FP][\({ let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"; return f.string(from: Date()) }())] recv signal=\(frame.header.signal) subSignal=\(frame.header.subSignal) bodyLength=\(frame.header.bodyLength) messageId=\(frame.header.messageId)")
             if frame.header.signal == .connectAck {
                 handleConnectAck()
             }

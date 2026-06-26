@@ -19,7 +19,7 @@ public final class ContactListViewModel {
         cancellable = storage.users.friendsPublisher()
             .replaceError(with: [])
             .sink { [weak self] users in
-                print("[DEBUG-FP] friendsPublisher emitted \(users.count) rows")
+                print("[DEBUG-FP][\({ let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"; return f.string(from: Date()) }())] friendsPublisher emitted \(users.count) rows")
                 self?.handleFriendsUpdate(users)
             }
         friendRequestCountCancellable = storage.friendRequests.unreadIncomingCountPublisher()

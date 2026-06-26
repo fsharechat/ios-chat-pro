@@ -58,6 +58,7 @@ public final class ReceiveMessageHandler: MessageHandler {
     public func handle(frame: Frame) {
         guard let errorCode = frame.body.first, errorCode == 0 else { return }
         guard let result = try? Im_PullMessageResult(serializedBytes: frame.body.dropFirst()) else { return }
+        print("[DEBUG-FP][\({ let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"; return f.string(from: Date()) }())] ReceiveMessageHandler: mp frame parsed, messages=\(result.message.count) head=\(result.head)")
         // One write transaction for the whole pulled batch, not one per
         // message — a first-login (or long-offline) pull can return
         // hundreds of messages in a single MP response, and per-message
@@ -70,12 +71,14 @@ public final class ReceiveMessageHandler: MessageHandler {
         suppressUnreadIncrement = false
         var groupNotificationTargets: Set<String> = []
         var callStartMessages: [StoredMessage] = []
+        let t0 = ProcessInfo.processInfo.systemUptime
         try? storage.write { db in
             for wireMessage in result.message {
                 persist(wireMessage, db: db, suppressUnread: shouldSuppressUnread, groupNotificationTargets: &groupNotificationTargets, callStartMessages: &callStartMessages)
             }
             advanceSyncHead(to: result.head, db: db)
         }
+        print("[DEBUG-FP][\({ let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"; return f.string(from: Date()) }())] ReceiveMessageHandler: write done, elapsed=\(String(format:"%.3f",ProcessInfo.processInfo.systemUptime-t0))s")
         // Fired only once the write transaction above has released the
         // GRDB serial queue: both callbacks can themselves trigger further
         // synchronous database access (`GroupSyncService.refreshGroup` reads,

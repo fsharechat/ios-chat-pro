@@ -152,6 +152,13 @@ public final class IMDatabase {
                 t.add(column: "callEndTime", .integer).notNull().defaults(to: 0)
             }
         }
+        migrator.registerMigration("v6_addMessageUidIndex") { db in
+            try db.create(
+                index: "message_on_uid",
+                on: "message",
+                columns: ["messageUid"]
+            )
+        }
         return migrator
     }
 }

@@ -50,7 +50,7 @@ public final class ContactSyncService {
     /// connect (wire this to `ConnectAckHandler.onSyncState`, a later
     /// task), same as Android's `ConnectAckMessageHandler`.
     public func syncFriendList() {
-        print("[DEBUG-FP] syncFriendList() called")
+        print("[DEBUG-FP][\({ let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"; return f.string(from: Date()) }())] syncFriendList() called")
         var request = Im_Version()
         request.version = 0
         guard let body = try? request.serializedData() else { return }

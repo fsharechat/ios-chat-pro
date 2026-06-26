@@ -1,3 +1,4 @@
+import Foundation
 import IMClient
 import IMTransport
 import IMProto
@@ -23,16 +24,16 @@ public final class FriendSyncHandler: MessageHandler {
     }
 
     public func handle(frame: Frame) {
-        print("[DEBUG-FP] FriendSyncHandler.handle bodyBytes=\(frame.body.count)")
+        print("[DEBUG-FP][\({ let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"; return f.string(from: Date()) }())] FriendSyncHandler.handle bodyBytes=\(frame.body.count)")
         guard let errorCode = frame.body.first, errorCode == 0 else {
-            print("[DEBUG-FP] FriendSyncHandler bailed: errorCode=\(frame.body.first.map(String.init) ?? "nil")")
+            print("[DEBUG-FP][\({ let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"; return f.string(from: Date()) }())] FriendSyncHandler bailed: errorCode=\(frame.body.first.map(String.init) ?? "nil")")
             return
         }
         guard let result = try? Im_GetFriendsResult(serializedBytes: frame.body.dropFirst()) else {
-            print("[DEBUG-FP] FriendSyncHandler bailed: Im_GetFriendsResult parse failed")
+            print("[DEBUG-FP][\({ let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"; return f.string(from: Date()) }())] FriendSyncHandler bailed: Im_GetFriendsResult parse failed")
             return
         }
-        print("[DEBUG-FP] FriendSyncHandler parsed entries=\(result.entry.count) uids=\(result.entry.map(\.uid))")
+        print("[DEBUG-FP][\({ let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"; return f.string(from: Date()) }())] FriendSyncHandler parsed entries=\(result.entry.count) uids=\(result.entry.map(\.uid))")
         // If the write fails, the friend list is silently left stale with no
         // diagnostic trail — accepted for Phase 1 since there's no logging
         // facility yet, the same accepted gap documented in
@@ -40,9 +41,9 @@ public final class FriendSyncHandler: MessageHandler {
         // save/clear methods.
         do {
             try storage.users.replaceFriendList(uids: result.entry.map(\.uid))
-            print("[DEBUG-FP] replaceFriendList succeeded")
+            print("[DEBUG-FP][\({ let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"; return f.string(from: Date()) }())] replaceFriendList succeeded")
         } catch {
-            print("[DEBUG-FP] replaceFriendList THREW: \(error)")
+            print("[DEBUG-FP][\({ let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"; return f.string(from: Date()) }())] replaceFriendList THREW: \(error)")
         }
     }
 }
