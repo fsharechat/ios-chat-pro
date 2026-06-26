@@ -87,6 +87,19 @@ public final class ConversationStore {
         try conversation.save(db)
     }
 
+    /// Re-saves the existing conversation row without changing `timestamp`,
+    /// `lastMessageUid`, or `unreadCount`. Used by recall to trigger
+    /// `conversationsPublisher` without corrupting list ordering.
+    /// No-op when the conversation row does not yet exist.
+    public func touchConversation(conversationType: ConversationType, target: String, line: Int = 0, db: Database) throws {
+        guard let conversation = try StoredConversation
+            .filter(Column("conversationType") == conversationType.rawValue)
+            .filter(Column("target") == target)
+            .filter(Column("line") == line)
+            .fetchOne(db) else { return }
+        try conversation.save(db)
+    }
+
     public func clearUnread(conversationType: ConversationType, target: String, line: Int = 0) throws {
         try dbQueue.write { db in
             try db.execute(

@@ -81,6 +81,38 @@ final class RecallNotifyMessageHandlerTests: XCTestCase {
         XCTAssertNil(firedUid)
     }
 
+    /// Recalling a non-latest message must NOT regress the conversation's
+    /// timestamp or lastMessageUid, and must NOT increment unread count.
+    func test_handle_doesNotChangeConversationTimestampOrUnread() throws {
+        // Insert older message (the one that will be recalled)
+        try storage.messages.insert(StoredMessage(
+            localMessageId: 10, messageUid: 300,
+            conversationType: .single, target: "them", from: "them",
+            content: .text("older"), timestamp: 1_000, status: .unread, direction: .receive
+        ))
+        // Insert newer message (should remain the lastMessageUid)
+        try storage.messages.insert(StoredMessage(
+            localMessageId: 11, messageUid: 301,
+            conversationType: .single, target: "them", from: "them",
+            content: .text("newer"), timestamp: 2_000, status: .unread, direction: .receive
+        ))
+        // Record conversation with the newer message (timestamp = 2_000, lastMessageUid = 301)
+        try storage.conversations.recordIncomingMessage(
+            conversationType: .single, target: "them", line: 0,
+            messageUid: 301, timestamp: 2_000, incrementUnread: true
+        )
+
+        // Recall the OLDER message
+        let frame = try makeRecallFrame(messageUid: 300, fromUser: "them")
+        handler.handle(frame: frame)
+
+        // Conversation ordering and pointer must be unchanged
+        let conv = try storage.conversations.conversation(conversationType: .single, target: "them", line: 0)
+        XCTAssertEqual(conv?.timestamp, 2_000, "timestamp must not regress to recalled message's timestamp")
+        XCTAssertEqual(conv?.lastMessageUid, 301, "lastMessageUid must not be overwritten by recalled message uid")
+        XCTAssertEqual(conv?.unreadCount, 1, "recall must not increment unread count")
+    }
+
     func test_handle_malformedBody_doesNotCrash() {
         handler.handle(frame: Frame(
             header: Header(signal: .publish, subSignal: .rmn, bodyLength: 2, messageId: 1),

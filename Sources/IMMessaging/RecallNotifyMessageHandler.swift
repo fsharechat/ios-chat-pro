@@ -9,9 +9,10 @@ import IMStorage
 /// On receipt the handler:
 /// 1. Updates the message row's content to `.recalled(operatorId:)` inside
 ///    a single write transaction.
-/// 2. Touches the conversation row via `recordIncomingMessage(incrementUnread:
-///    false)` so `conversationsPublisher` fires and any list/chat UI observing
-///    it re-renders the recalled bubble automatically.
+/// 2. Touches the conversation row via `touchConversation` so
+///    `conversationsPublisher` fires and any list/chat UI observing it
+///    re-renders the recalled bubble. The touch does NOT mutate
+///    `timestamp`/`lastMessageUid` — recall does not change ordering.
 /// 3. Fires `onRecalled` with the `messageUid` — but only when the message
 ///    was found locally (i.e. `didUpdate == true`). Recalls for messages
 ///    outside the local sync window are silently ignored.
@@ -47,13 +48,10 @@ public final class RecallNotifyMessageHandler: MessageHandler {
             guard let existing = try storage.messages.message(uid: messageUid, db: db),
                   let rowId = existing.id else { return }
             try storage.messages.updateContent(id: rowId, content: .recalled(operatorId: operatorId), db: db)
-            try storage.conversations.recordIncomingMessage(
+            try storage.conversations.touchConversation(
                 conversationType: existing.conversationType,
                 target: existing.target,
                 line: existing.line,
-                messageUid: existing.messageUid,
-                timestamp: existing.timestamp,
-                incrementUnread: false,
                 db: db
             )
             didUpdate = true
