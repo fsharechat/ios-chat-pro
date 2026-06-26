@@ -116,6 +116,8 @@ final class TextMessageCell: UITableViewCell {
             rowStack.addArrangedSubview(spacer)
             rowStack.addArrangedSubview(bubbleColumn)
             if row.status == .sendFailure { rowStack.addArrangedSubview(retryButton) }
+            rowStack.addArrangedSubview(senderAvatarImageView)
+            senderAvatarImageView.setAvatar(urlString: row.senderAvatarURL, displayName: "我")
         } else {
             rowStack.addArrangedSubview(senderAvatarImageView)
             rowStack.addArrangedSubview(bubbleColumn)

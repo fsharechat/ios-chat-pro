@@ -193,11 +193,13 @@ public final class ConversationViewModel {
 
     private func buildStoredMessageRow(_ message: StoredMessage, text: String?, imageThumbnail: Data?, imageRemoteURL: String?) -> StoredMessageRow {
         var senderDisplayName: String?
-        var senderAvatarURL: String?
+        // Always resolve the avatar — own portrait for outgoing, sender's for incoming.
+        let avatarUid = message.direction == .send ? currentUserId : message.from
+        let user = try? storage.users.user(uid: avatarUid)
+        let senderAvatarURL = user?.portrait
+        // Sender name only appears in group incoming bubbles.
         if conversationType == .group, message.direction == .receive {
-            let user = try? storage.users.user(uid: message.from)
             senderDisplayName = user?.displayName ?? user?.name ?? message.from
-            senderAvatarURL = user?.portrait
         }
         return StoredMessageRow(
             storageId: message.id ?? -1,
