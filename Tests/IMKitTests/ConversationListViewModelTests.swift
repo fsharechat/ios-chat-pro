@@ -216,7 +216,7 @@ final class ConversationListViewModelTests: XCTestCase {
         XCTAssertFalse(row.hasUnreadMention)
     }
 
-    func test_recalledBySelf_showsNiPreview() throws {
+    func test_recalledBySelf_showsSelfRecallPreview() throws {
         // Build a dedicated viewModel that knows the current user is "me" so
         // the self-recall branch ("您撤回了一条消息") can fire.
         let selfViewModel = ConversationListViewModel(storage: storage, contactSync: fetcher, groupSync: groupSyncer, currentUserId: "me")
