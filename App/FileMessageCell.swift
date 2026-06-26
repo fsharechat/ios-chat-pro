@@ -1,0 +1,105 @@
+import UIKit
+import IMKit
+
+final class FileMessageCell: UITableViewCell {
+    static let reuseIdentifier = "FileMessageCell"
+
+    private let bubbleView = UIView()
+    private let iconView = UIImageView()
+    private let nameLabel = UILabel()
+    private let sizeLabel = UILabel()
+    private let avatarView = AvatarImageView(loader: AvatarLoader.shared)
+    private let bubbleColumn = UIStackView()
+    private let rowStack = UIStackView()
+    private let spacer = UIView()
+
+    override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
+        super.init(style: style, reuseIdentifier: reuseIdentifier)
+        backgroundColor = .clear
+        selectionStyle = .none
+        layoutViews()
+    }
+
+    @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+
+    private func layoutViews() {
+        bubbleView.layer.cornerRadius = 16
+        iconView.image = UIImage(systemName: "doc.fill")
+        iconView.contentMode = .scaleAspectFit
+
+        nameLabel.font = .systemFont(ofSize: 14, weight: .medium)
+        nameLabel.numberOfLines = 2
+
+        sizeLabel.font = .systemFont(ofSize: 12)
+        sizeLabel.textColor = .secondaryLabel
+
+        let textStack = UIStackView(arrangedSubviews: [nameLabel, sizeLabel])
+        textStack.axis = .vertical
+        textStack.spacing = 2
+
+        let hStack = UIStackView(arrangedSubviews: [iconView, textStack])
+        hStack.axis = .horizontal
+        hStack.spacing = 10
+        hStack.alignment = .center
+        hStack.translatesAutoresizingMaskIntoConstraints = false
+        bubbleView.addSubview(hStack)
+
+        NSLayoutConstraint.activate([
+            iconView.widthAnchor.constraint(equalToConstant: 36),
+            iconView.heightAnchor.constraint(equalToConstant: 36),
+            hStack.topAnchor.constraint(equalTo: bubbleView.topAnchor, constant: 12),
+            hStack.bottomAnchor.constraint(equalTo: bubbleView.bottomAnchor, constant: -12),
+            hStack.leadingAnchor.constraint(equalTo: bubbleView.leadingAnchor, constant: 14),
+            hStack.trailingAnchor.constraint(equalTo: bubbleView.trailingAnchor, constant: -14),
+            bubbleView.widthAnchor.constraint(lessThanOrEqualToConstant: 240),
+        ])
+
+        bubbleColumn.axis = .vertical
+        bubbleColumn.addArrangedSubview(bubbleView)
+
+        rowStack.axis = .horizontal
+        rowStack.alignment = .center
+        rowStack.spacing = 8
+        rowStack.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(rowStack)
+        rowStack.addArrangedSubview(bubbleColumn)
+
+        NSLayoutConstraint.activate([
+            avatarView.widthAnchor.constraint(equalToConstant: 36),
+            avatarView.heightAnchor.constraint(equalToConstant: 36),
+            rowStack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 8),
+            rowStack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -8),
+            rowStack.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 4),
+            rowStack.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -4),
+        ])
+    }
+
+    func configure(with row: StoredMessageRow) {
+        let isOutgoing = row.isOutgoing
+        bubbleView.backgroundColor = isOutgoing ? Theme.accent : Theme.incomingBubble
+        iconView.tintColor = isOutgoing ? .white : Theme.accent
+        nameLabel.textColor = isOutgoing ? .white : .label
+
+        let parts = (row.text ?? "").components(separatedBy: " ")
+        nameLabel.text = parts.count > 1 ? parts[1] : ""
+        sizeLabel.text = parts.count > 2 ? parts[2] : ""
+
+        for view in rowStack.arrangedSubviews {
+            rowStack.removeArrangedSubview(view)
+            if view !== bubbleColumn { view.removeFromSuperview() }
+        }
+        avatarView.removeFromSuperview()
+
+        if isOutgoing {
+            rowStack.addArrangedSubview(spacer)
+            rowStack.addArrangedSubview(bubbleColumn)
+            rowStack.addArrangedSubview(avatarView)
+            avatarView.setAvatar(urlString: row.senderAvatarURL, displayName: "我")
+        } else {
+            rowStack.addArrangedSubview(avatarView)
+            rowStack.addArrangedSubview(bubbleColumn)
+            rowStack.addArrangedSubview(spacer)
+            avatarView.setAvatar(urlString: row.senderAvatarURL, displayName: row.senderDisplayName ?? "")
+        }
+    }
+}
