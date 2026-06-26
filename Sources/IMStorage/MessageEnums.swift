@@ -36,7 +36,9 @@ public enum MessageStatus: Int, Codable, Equatable, Hashable {
 /// `CHANGE_GROUP_NAME`(110)/`CHANGE_GROUP_PORTRAIT`(112).
 public enum MessageContentType: Int, Codable, Equatable {
     case text = 1
+    case voice = 2
     case image = 3
+    case file = 5
     case createGroup = 104
     case addGroupMember = 105
     case kickoffGroupMember = 106

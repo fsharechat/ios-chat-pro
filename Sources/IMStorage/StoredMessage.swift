@@ -24,6 +24,13 @@ public enum MessageContent: Equatable {
     /// as the call progresses, it is never re-sent over the wire after the
     /// initial invite.
     case callRecord(callId: String, targetId: String, audioOnly: Bool, status: Int, connectTime: Int64, endTime: Int64)
+    /// Wire type 2. `duration` is in seconds. `remoteURL`/`localPath` follow
+    /// the same optional-presence convention as `.image` — remote is nil until
+    /// uploaded, local is nil until downloaded.
+    case voice(remoteURL: String?, localPath: String?, duration: Int)
+    /// Wire type 5. `size` is in bytes. `remoteURL`/`localPath` follow the
+    /// same optional-presence convention as `.image`.
+    case file(name: String, size: Int, remoteURL: String?, localPath: String?)
 }
 
 public struct StoredMessage: Codable, Equatable, FetchableRecord, MutablePersistableRecord {
@@ -84,6 +91,10 @@ public struct StoredMessage: Codable, Equatable, FetchableRecord, MutablePersist
                 connectTime: callConnectTime,
                 endTime: callEndTime
             )
+        case .voice:
+            return .voice(remoteURL: mediaRemoteURL, localPath: mediaLocalPath, duration: Int(textContent ?? "0") ?? 0)
+        case .file:
+            return .file(name: searchableContent ?? "", size: Int(textContent ?? "0") ?? 0, remoteURL: mediaRemoteURL, localPath: mediaLocalPath)
         }
     }
 
@@ -227,6 +238,28 @@ public struct StoredMessage: Codable, Equatable, FetchableRecord, MutablePersist
             self.callStatus = status
             self.callConnectTime = connectTime
             self.callEndTime = endTime
+        case .voice(let remoteURL, let localPath, let duration):
+            contentType = .voice
+            textContent = "\(duration)"
+            searchableContent = "[语音]"
+            mediaRemoteURL = remoteURL
+            mediaLocalPath = localPath
+            mediaThumbnail = nil
+            groupNotificationOperator = nil
+            groupNotificationMembersRaw = nil
+            groupNotificationValue = nil
+            callId = nil; callTargetId = nil; callAudioOnly = false; callStatus = 0; callConnectTime = 0; callEndTime = 0
+        case .file(let name, let size, let remoteURL, let localPath):
+            contentType = .file
+            textContent = "\(size)"
+            searchableContent = name
+            mediaRemoteURL = remoteURL
+            mediaLocalPath = localPath
+            mediaThumbnail = nil
+            groupNotificationOperator = nil
+            groupNotificationMembersRaw = nil
+            groupNotificationValue = nil
+            callId = nil; callTargetId = nil; callAudioOnly = false; callStatus = 0; callConnectTime = 0; callEndTime = 0
         }
     }
 }

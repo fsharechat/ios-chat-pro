@@ -192,6 +192,11 @@ public final class ConversationViewModel {
             ))
         case .callRecord(_, _, let audioOnly, let status, let connectTime, let endTime):
             return .message(buildStoredMessageRow(message, text: renderCallRecordText(isOutgoing: message.direction == .send, audioOnly: audioOnly, status: status, connectTime: connectTime, endTime: endTime), imageThumbnail: nil, imageRemoteURL: nil))
+        case .voice(_, _, let duration):
+            return .message(buildStoredMessageRow(message, text: "[语音] \(duration)秒", imageThumbnail: nil, imageRemoteURL: nil))
+        case .file(let name, let size, _, _):
+            let sizeStr = size > 1024*1024 ? String(format: "%.1fMB", Double(size)/1024/1024) : "\(size/1024)KB"
+            return .message(buildStoredMessageRow(message, text: "[文件] \(name) \(sizeStr)", imageThumbnail: nil, imageRemoteURL: nil))
         }
     }
 
@@ -250,7 +255,7 @@ public final class ConversationViewModel {
             return "\(operatorName)修改群名为「\(value ?? "")」"
         case .changeGroupPortrait:
             return "\(operatorName)修改了群头像"
-        case .text, .image, .callStart:
+        case .text, .image, .callStart, .voice, .file:
             return "" // unreachable: makeRow only calls this for .groupNotification content
         }
     }

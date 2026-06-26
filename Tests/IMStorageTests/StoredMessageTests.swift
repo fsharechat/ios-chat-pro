@@ -134,4 +134,32 @@ final class StoredMessageContentTests: XCTestCase {
         XCTAssertEqual(message.callAudioOnly, false)
         XCTAssertEqual(message.callStatus, 0)
     }
+
+    func test_voiceRoundtrip() {
+        var msg = StoredMessage(localMessageId: 1, conversationType: .single, target: "u2", from: "u1",
+                                content: .voice(remoteURL: "https://cdn/a.m4a", localPath: nil, duration: 12),
+                                timestamp: 0, status: .sent, direction: .send)
+        XCTAssertEqual(msg.contentType, .voice)
+        XCTAssertEqual(msg.textContent, "12")
+        XCTAssertEqual(msg.searchableContent, "[语音]")
+        XCTAssertEqual(msg.mediaRemoteURL, "https://cdn/a.m4a")
+        if case .voice(let url, _, let d) = msg.content {
+            XCTAssertEqual(url, "https://cdn/a.m4a")
+            XCTAssertEqual(d, 12)
+        } else { XCTFail() }
+    }
+
+    func test_fileRoundtrip() {
+        var msg = StoredMessage(localMessageId: 2, conversationType: .single, target: "u2", from: "u1",
+                                content: .file(name: "report.pdf", size: 204800, remoteURL: "https://cdn/f.pdf", localPath: nil),
+                                timestamp: 0, status: .sent, direction: .send)
+        XCTAssertEqual(msg.contentType, .file)
+        XCTAssertEqual(msg.textContent, "204800")
+        XCTAssertEqual(msg.searchableContent, "report.pdf")
+        if case .file(let name, let size, let url, _) = msg.content {
+            XCTAssertEqual(name, "report.pdf")
+            XCTAssertEqual(size, 204800)
+            XCTAssertEqual(url, "https://cdn/f.pdf")
+        } else { XCTFail() }
+    }
 }
