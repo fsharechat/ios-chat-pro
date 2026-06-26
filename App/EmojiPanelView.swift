@@ -51,14 +51,21 @@ final class EmojiPanelView: UIView {
         pageControl.numberOfPages = pageCount
         collectionView.translatesAutoresizingMaskIntoConstraints = false
         pageControl.translatesAutoresizingMaskIntoConstraints = false
+        // These internal constraints must yield to panelContainer.height=0 (required).
+        // Priority 999 lets the parent collapse to 0 without unsatisfiable-constraint warnings.
+        let cvTop = collectionView.topAnchor.constraint(equalTo: topAnchor, constant: 8)
+        let cvBottom = collectionView.bottomAnchor.constraint(equalTo: pageControl.topAnchor, constant: -4)
+        let pcBottom = pageControl.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -4)
+        let pcHeight = pageControl.heightAnchor.constraint(equalToConstant: 20)
+        for c in [cvTop, cvBottom, pcBottom, pcHeight] { c.priority = UILayoutPriority(999) }
         NSLayoutConstraint.activate([
-            collectionView.topAnchor.constraint(equalTo: topAnchor, constant: 8),
+            cvTop,
             collectionView.leadingAnchor.constraint(equalTo: leadingAnchor),
             collectionView.trailingAnchor.constraint(equalTo: trailingAnchor),
-            collectionView.bottomAnchor.constraint(equalTo: pageControl.topAnchor, constant: -4),
+            cvBottom,
             pageControl.centerXAnchor.constraint(equalTo: centerXAnchor),
-            pageControl.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -4),
-            pageControl.heightAnchor.constraint(equalToConstant: 20),
+            pcBottom,
+            pcHeight,
         ])
     }
 

@@ -145,6 +145,7 @@ final class ConversationViewController: UIViewController {
 
     private func bindViewModel() {
         viewModel.$rows
+            .receive(on: DispatchQueue.main)
             .sink { [weak self] rows in self?.applySnapshot(rows: rows) }
             .store(in: &cancellables)
     }
