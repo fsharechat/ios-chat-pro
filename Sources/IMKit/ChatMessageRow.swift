@@ -90,7 +90,10 @@ public enum ChatMessageRow: Equatable, Hashable {
     case message(StoredMessageRow)
     case pendingImage(PendingImageUpload)
     case systemTip(SystemTipRow)
-    case timeHeader(String)
+    /// text: formatted display string; anchorId: storageId of the immediately
+    /// following message, making each header globally unique even when two
+    /// gaps produce the same formatted time string.
+    case timeHeader(String, Int64)
 }
 
 extension ChatMessageRow {

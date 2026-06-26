@@ -135,7 +135,7 @@ final class ConversationViewController: UIViewController {
                 let cell = tableView.dequeueReusableCell(withIdentifier: SystemTipMessageCell.reuseIdentifier, for: indexPath) as! SystemTipMessageCell
                 cell.configure(with: tip)
                 return cell
-            case .timeHeader(let text):
+            case .timeHeader(let text, _):
                 let cell = tableView.dequeueReusableCell(withIdentifier: TimeHeaderCell.reuseIdentifier, for: indexPath) as! TimeHeaderCell
                 cell.configure(with: text)
                 return cell
@@ -192,7 +192,10 @@ final class ConversationViewController: UIViewController {
             if let last = lastTimestamp, ts - last < threshold {
                 result.append(row)
             } else {
-                result.append(.timeHeader(Self.formatMessageTime(ts)))
+                // anchorId makes the header globally unique even when two gaps
+                // produce identical formatted time strings.
+                let anchorId = row.storageId ?? ts
+                result.append(.timeHeader(Self.formatMessageTime(ts), anchorId))
                 result.append(row)
             }
             lastTimestamp = ts
@@ -251,7 +254,7 @@ final class ConversationViewController: UIViewController {
         case .message(let message): return "message-\(message.storageId)"
         case .pendingImage(let pending): return "pending-\(pending.id)"
         case .systemTip(let tip): return "systemTip-\(tip.storageId)"
-        case .timeHeader(let text): return "timeHeader-\(text)"
+        case .timeHeader(let text, let anchorId): return "timeHeader-\(anchorId)-\(text)"
         case nil: return nil
         }
     }

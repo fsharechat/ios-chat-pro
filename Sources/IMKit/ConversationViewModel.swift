@@ -121,7 +121,7 @@ public final class ConversationViewModel {
             guard message.status == .sendFailure else { return }
             try? messageSending?.resend(localMessageId: message.localMessageId)
         case .systemTip, .timeHeader:
-            break // never retryable
+            break
         }
     }
 
