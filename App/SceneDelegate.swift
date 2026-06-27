@@ -209,7 +209,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
                     groupSyncing: self.environment.groupSyncService
                 )
                 let addVC = AddGroupMemberViewController(viewModel: addVM)
-                addVC.onMembersAdded = { addVC.dismiss(animated: true) }
+                addVC.onMembersAdded = { [weak addVC] in addVC?.dismiss(animated: true) }
                 groupInfoViewController?.present(UINavigationController(rootViewController: addVC), animated: true)
             }
 
