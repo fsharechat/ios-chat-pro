@@ -306,6 +306,43 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
                 animated: true
             )
         }
+        listViewController.onGroupEntryTapped = { [weak self, weak listViewController] in
+            guard let self else { return }
+            let favGroupVC = FavGroupListViewController(storage: self.environment.storage)
+            favGroupVC.onGroupTapped = { [weak self, weak listViewController] groupId in
+                guard let self else { return }
+                let conversationViewModel = ConversationViewModel(
+                    storage: self.environment.storage,
+                    messageSending: self.environment.messagingService,
+                    imageUploading: self.environment.mediaUploadService,
+                    voiceUploading: self.environment.mediaUploadService,
+                    fileUploading: self.environment.mediaUploadService,
+                    target: groupId,
+                    conversationType: .group,
+                    line: 0,
+                    currentUserId: self.environment.imClient?.userId ?? ""
+                )
+                let group = try? self.environment.storage.groups.group(groupId: groupId)
+                let conversationRow = ConversationRow(
+                    conversationType: .group,
+                    target: groupId,
+                    line: 0,
+                    displayName: group?.name ?? groupId,
+                    avatarURL: group?.portrait,
+                    previewText: "",
+                    timestamp: 0,
+                    unreadCount: 0,
+                    hasUnreadMention: false,
+                    isTop: false,
+                    isMuted: false,
+                    lastMessageStatus: nil
+                )
+                let conversationVC = ConversationViewController(row: conversationRow, viewModel: conversationViewModel)
+                self.wireGroupInfoNavigation(on: conversationVC, groupId: groupId)
+                listViewController?.navigationController?.pushViewController(conversationVC, animated: true)
+            }
+            listViewController?.navigationController?.pushViewController(favGroupVC, animated: true)
+        }
         listViewController.onNewFriendsEntryTapped = { [weak self, weak listViewController] in
             guard let self else { return }
             let newFriendsViewModel = NewFriendsViewModel(

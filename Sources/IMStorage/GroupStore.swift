@@ -63,6 +63,13 @@ public final class GroupStore {
             .eraseToAnyPublisher()
     }
 
+    public func favGroupsPublisher() -> AnyPublisher<[StoredGroup], Error> {
+        ValueObservation
+            .tracking { db in try StoredGroup.filter(Column("isFav") == true).fetchAll(db) }
+            .publisher(in: dbQueue, scheduling: .immediate)
+            .eraseToAnyPublisher()
+    }
+
     public func setFav(_ isFav: Bool, groupId: String) throws {
         try dbQueue.write { db in
             try db.execute(

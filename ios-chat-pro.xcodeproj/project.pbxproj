@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		2DE8EE87CF5E4EA2B6B1B756 /* FavGroupListViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 087A6BD1AB074B3CBC7D1A95 /* FavGroupListViewController.swift */; };
+		2DB79A00363146849B3BB71E /* GroupEntryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F919EECA5BBB41AA9DBE69B0 /* GroupEntryView.swift */; };
 		08504DA6B3F3A100FA1C2484 /* SearchUserViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 690D108BAFD2ED791E23C0A9 /* SearchUserViewController.swift */; };
 		10F0F91A0119D922D2F5C61A /* IMCall in Frameworks */ = {isa = PBXBuildFile; productRef = 9238D717B4E81FE77D740748 /* IMCall */; };
 		1A8F5F1C4845AC9F553E5CAE /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = E696B814AB99A34483A11EA8 /* Theme.swift */; };
@@ -64,6 +66,8 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		087A6BD1AB074B3CBC7D1A95 /* FavGroupListViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FavGroupListViewController.swift; sourceTree = "<group>"; };
+		F919EECA5BBB41AA9DBE69B0 /* GroupEntryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupEntryView.swift; sourceTree = "<group>"; };
 		0832B3942D777D6A0D67E100 /* NewFriendsViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewFriendsViewController.swift; sourceTree = "<group>"; };
 		0AEBA51F623B4448E035ED61 /* VoiceConverter.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = VoiceConverter.swift; sourceTree = "<group>"; };
 		0CE65FB3E4BBBDBC011338C7 /* MentionPickerViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MentionPickerViewController.swift; sourceTree = "<group>"; };
@@ -195,6 +199,8 @@
 				FED7AD303D48EFB2741ED7BD /* MyProfileViewController.swift */,
 				FCCFBE9437171B403CF11393 /* MyQRCodeViewController.swift */,
 				1499CDEAF049F73974F200A4 /* NewFriendsEntryView.swift */,
+				087A6BD1AB074B3CBC7D1A95 /* FavGroupListViewController.swift */,
+				F919EECA5BBB41AA9DBE69B0 /* GroupEntryView.swift */,
 				0832B3942D777D6A0D67E100 /* NewFriendsViewController.swift */,
 				A0E388EB556B39D1EFCF7DEA /* SceneDelegate.swift */,
 				690D108BAFD2ED791E23C0A9 /* SearchUserViewController.swift */,
@@ -329,6 +335,8 @@
 				890FAE1EC814F14A52439526 /* MyProfileViewController.swift in Sources */,
 				9D5257C3863A7F98DACD6D8B /* MyQRCodeViewController.swift in Sources */,
 				5419EAD85D7C9132AB94FBA6 /* NewFriendsEntryView.swift in Sources */,
+				2DE8EE87CF5E4EA2B6B1B756 /* FavGroupListViewController.swift in Sources */,
+				2DB79A00363146849B3BB71E /* GroupEntryView.swift in Sources */,
 				D91AD4CA3FBFB2F6A396A9DE /* NewFriendsViewController.swift in Sources */,
 				25D0AC4139A0950DB0CD2B4B /* SceneDelegate.swift in Sources */,
 				08504DA6B3F3A100FA1C2484 /* SearchUserViewController.swift in Sources */,

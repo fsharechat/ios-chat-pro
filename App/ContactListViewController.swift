@@ -29,12 +29,17 @@ final class ContactListViewController: UIViewController {
 
     private let tableView = UITableView()
     private let newFriendsEntryView = NewFriendsEntryView()
+    private let groupEntryView = GroupEntryView()
+    private let headerContainerView = UIView()
 
     /// Set by `SceneDelegate` — pushes the chat screen for the tapped contact.
     var onContactSelected: ((ContactRow) -> Void)?
 
     /// Set by `SceneDelegate` — pushes `NewFriendsViewController`.
     var onNewFriendsEntryTapped: (() -> Void)?
+
+    /// Set by `SceneDelegate` — pushes `FavGroupListViewController`.
+    var onGroupEntryTapped: (() -> Void)?
 
     init(viewModel: ContactListViewModel) {
         self.viewModel = viewModel
@@ -52,13 +57,42 @@ final class ContactListViewController: UIViewController {
         configureDataSource()
         bindViewModel()
         newFriendsEntryView.onTapped = { [weak self] in self?.onNewFriendsEntryTapped?() }
+        groupEntryView.onTapped = { [weak self] in self?.onGroupEntryTapped?() }
+
+        let separator = UIView()
+        separator.backgroundColor = Theme.backgroundTertiary
+        separator.translatesAutoresizingMaskIntoConstraints = false
+
+        newFriendsEntryView.translatesAutoresizingMaskIntoConstraints = false
+        groupEntryView.translatesAutoresizingMaskIntoConstraints = false
+        headerContainerView.addSubview(newFriendsEntryView)
+        headerContainerView.addSubview(separator)
+        headerContainerView.addSubview(groupEntryView)
+        NSLayoutConstraint.activate([
+            newFriendsEntryView.topAnchor.constraint(equalTo: headerContainerView.topAnchor),
+            newFriendsEntryView.leadingAnchor.constraint(equalTo: headerContainerView.leadingAnchor),
+            newFriendsEntryView.trailingAnchor.constraint(equalTo: headerContainerView.trailingAnchor),
+            newFriendsEntryView.heightAnchor.constraint(equalToConstant: 56),
+
+            separator.topAnchor.constraint(equalTo: newFriendsEntryView.bottomAnchor),
+            separator.leadingAnchor.constraint(equalTo: headerContainerView.leadingAnchor, constant: 60),
+            separator.trailingAnchor.constraint(equalTo: headerContainerView.trailingAnchor),
+            separator.heightAnchor.constraint(equalToConstant: 0.5),
+
+            groupEntryView.topAnchor.constraint(equalTo: separator.bottomAnchor),
+            groupEntryView.leadingAnchor.constraint(equalTo: headerContainerView.leadingAnchor),
+            groupEntryView.trailingAnchor.constraint(equalTo: headerContainerView.trailingAnchor),
+            groupEntryView.heightAnchor.constraint(equalToConstant: 56),
+
+            headerContainerView.bottomAnchor.constraint(equalTo: groupEntryView.bottomAnchor),
+        ])
     }
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
-        guard newFriendsEntryView.frame.width != tableView.bounds.width else { return }
-        newFriendsEntryView.frame = CGRect(x: 0, y: 0, width: tableView.bounds.width, height: 56)
-        tableView.tableHeaderView = newFriendsEntryView
+        guard headerContainerView.frame.width != tableView.bounds.width else { return }
+        headerContainerView.frame = CGRect(x: 0, y: 0, width: tableView.bounds.width, height: 112)
+        tableView.tableHeaderView = headerContainerView
     }
 
     private func layoutTableView() {
