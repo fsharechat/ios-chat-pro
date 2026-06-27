@@ -10,7 +10,13 @@ public final class GroupStore {
     }
 
     public func upsertGroup(_ group: StoredGroup) throws {
-        try dbQueue.write { db in try group.save(db) }
+        try dbQueue.write { db in
+            var updated = group
+            if let existing = try StoredGroup.fetchOne(db, key: group.groupId) {
+                updated.isFav = existing.isFav
+            }
+            try updated.save(db)
+        }
     }
 
     public func group(groupId: String) throws -> StoredGroup? {
