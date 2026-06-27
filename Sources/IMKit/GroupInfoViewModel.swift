@@ -3,11 +3,9 @@ import Foundation
 import Combine
 import IMStorage
 
-/// Drives the group-info screen: member list, and the 4 permission-gated
-/// actions (add/kick/modify-info/dismiss) plus quit (always allowed). The
-/// permission matrix below is verified against the real server-side
-/// `Handler`/`MemoryMessagesStore` permission-check code (see the design
-/// doc §4) — not guessed:
+/// Drives the group-info screen: member list, group info, conversation settings,
+/// and message operations. The permission matrix is verified against real
+/// server-side permission-check code (see design doc §4):
 ///
 /// |              | Restricted   | Normal      | Free       |
 /// |--------------|--------------|-------------|------------|
@@ -17,8 +15,7 @@ import IMStorage
 /// | dismiss      | owner only   | owner only  | nobody     |
 /// | quit         | any member   | any member  | any member |
 ///
-/// **Threading contract:** like the rest of this codebase, this has no
-/// internal locking and must be called from a single consistent queue.
+/// **Threading contract:** no internal locking, call from a single consistent queue.
 public final class GroupInfoViewModel {
     public struct MemberRow: Equatable, Hashable {
         public let uid: String
@@ -27,12 +24,20 @@ public final class GroupInfoViewModel {
         public let isOwner: Bool
     }
 
+    // Group info
     @Published public private(set) var group: StoredGroup?
     @Published public private(set) var members: [MemberRow] = []
+
+    // Permissions
     @Published public private(set) var canAddMembers: Bool = false
     @Published public private(set) var canKickMembers: Bool = false
     @Published public private(set) var canModifyInfo: Bool = false
     @Published public private(set) var canDismiss: Bool = false
+
+    // Conversation settings (initialized from storage, updated optimistically)
+    @Published public private(set) var isTop: Bool = false
+    @Published public private(set) var isMuted: Bool = false
+    @Published public private(set) var isFav: Bool = false
 
     private let groupId: String
     private let groupActing: GroupActing?
@@ -49,18 +54,28 @@ public final class GroupInfoViewModel {
         self.storage = storage
         self.currentUserId = currentUserId
 
+        // Load initial conversation settings (isTop, isMuted) from stored conversation
+        if let conversation = try? storage.conversations.conversation(conversationType: .group, target: groupId) {
+            self.isTop = conversation.isTop
+            self.isMuted = conversation.isMuted
+        }
+
         groupCancellable = storage.groups.groupPublisher(groupId: groupId)
             .replaceError(with: nil)
-            .sink { [weak self] group in self?.handleGroupUpdate(group) }
+            .sink { [weak self] group in
+                self?.handleGroupUpdate(group)
+                self?.isFav = group?.isFav ?? false
+            }
         membersCancellable = storage.groups.membersPublisher(groupId: groupId)
             .replaceError(with: [])
             .sink { [weak self] members in self?.handleMembersUpdate(members) }
     }
 
-    /// Call when the page appears: pulls fresh group info + member list.
     public func refresh() {
         groupSyncing?.refreshGroup(targetId: groupId)
     }
+
+    // MARK: - Member Actions
 
     public func addMembers(_ uids: [String], completion: @escaping (Result<Void, Error>) -> Void) {
         groupActing?.addMembers(groupId: groupId, memberIds: uids) { [weak self] result in
@@ -98,8 +113,43 @@ public final class GroupInfoViewModel {
         groupActing?.dismissGroup(groupId: groupId, completion: completion)
     }
 
+    // MARK: - Conversation Settings
+
+    public func setTop(_ value: Bool) {
+        isTop = value
+        try? storage.conversations.setTop(value, conversationType: .group, target: groupId)
+    }
+
+    public func setMuted(_ value: Bool) {
+        isMuted = value
+        try? storage.conversations.setMuted(value, conversationType: .group, target: groupId)
+    }
+
+    public func setFav(_ value: Bool) {
+        isFav = value
+        try? storage.groups.setFav(value, groupId: groupId)
+    }
+
+    // MARK: - Message Operations
+
+    public func clearMessages(completion: @escaping (Result<Void, Error>) -> Void) {
+        do {
+            try storage.messages.clearMessages(conversationType: .group, target: groupId)
+            completion(.success(()))
+        } catch {
+            completion(.failure(error))
+        }
+    }
+
+    public func searchMessages(keyword: String) -> [StoredMessage] {
+        (try? storage.messages.searchMessages(conversationType: .group, target: groupId, keyword: keyword)) ?? []
+    }
+
+    // MARK: - Private
+
     private func handleGroupUpdate(_ group: StoredGroup?) {
         self.group = group
+        self.isFav = group?.isFav ?? false
         recomputePermissions()
     }
 
@@ -117,29 +167,21 @@ public final class GroupInfoViewModel {
 
     private func recomputePermissions() {
         guard let group else {
-            canAddMembers = false
-            canKickMembers = false
-            canModifyInfo = false
-            canDismiss = false
+            canAddMembers = false; canKickMembers = false
+            canModifyInfo = false; canDismiss = false
             return
         }
         let isOwner = group.owner == currentUserId
         switch group.groupType {
         case .restricted:
-            canAddMembers = isOwner
-            canKickMembers = isOwner
-            canModifyInfo = isOwner
-            canDismiss = isOwner
+            canAddMembers = isOwner; canKickMembers = isOwner
+            canModifyInfo = isOwner; canDismiss = isOwner
         case .normal:
-            canAddMembers = true
-            canKickMembers = isOwner
-            canModifyInfo = true
-            canDismiss = isOwner
+            canAddMembers = true; canKickMembers = isOwner
+            canModifyInfo = true; canDismiss = isOwner
         case .free:
-            canAddMembers = true
-            canKickMembers = false
-            canModifyInfo = true
-            canDismiss = false
+            canAddMembers = true; canKickMembers = false
+            canModifyInfo = true; canDismiss = false
         }
     }
 }
