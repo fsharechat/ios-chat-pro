@@ -107,6 +107,27 @@ public final class MessageStore {
             .eraseToAnyPublisher()
     }
 
+    public func clearMessages(conversationType: ConversationType, target: String, line: Int = 0) throws {
+        try dbQueue.write { db in
+            try db.execute(
+                sql: "DELETE FROM message WHERE conversationType = ? AND target = ? AND line = ?",
+                arguments: [conversationType.rawValue, target, line]
+            )
+        }
+    }
+
+    public func searchMessages(conversationType: ConversationType, target: String, keyword: String) throws -> [StoredMessage] {
+        try dbQueue.read { db in
+            try StoredMessage
+                .filter(Column("conversationType") == conversationType.rawValue)
+                .filter(Column("target") == target)
+                .filter(Column("searchableContent").like("%\(keyword)%"))
+                .order(Column("timestamp").desc)
+                .limit(100)
+                .fetchAll(db)
+        }
+    }
+
     /// One-shot (non-reactive) page of history strictly before
     /// `(beforeTimestamp, beforeId)` — `id` (GRDB's autoincrement primary
     /// key) breaks ties when multiple messages share the same millisecond

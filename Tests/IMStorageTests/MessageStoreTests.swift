@@ -279,4 +279,34 @@ final class MessageStoreTests: XCTestCase {
         XCTAssertEqual(updated?.content, .recalled(operatorId: "them"))
         XCTAssertEqual(updated?.searchableContent, "[撤回消息]")
     }
+
+    func test_clearMessages_deletesAllMessagesForConversation() throws {
+        try store.insert(makeMessage(localMessageId: 1, target: "g1", text: "hello"))
+        try store.insert(makeMessage(localMessageId: 2, target: "g1", text: "world"))
+        try store.insert(makeMessage(localMessageId: 3, target: "u2", text: "other"))
+
+        try store.clearMessages(conversationType: .single, target: "g1")
+
+        XCTAssertTrue(try store.messages(conversationType: .single, target: "g1").isEmpty)
+        XCTAssertEqual(try store.messages(conversationType: .single, target: "u2").count, 1)
+    }
+
+    func test_searchMessages_returnsMatchingMessages() throws {
+        try store.insert(makeMessage(localMessageId: 1, target: "g1", text: "hello world"))
+        try store.insert(makeMessage(localMessageId: 2, target: "g1", text: "goodbye"))
+        try store.insert(makeMessage(localMessageId: 3, target: "g1", text: "hello again"))
+
+        let results = try store.searchMessages(conversationType: .single, target: "g1", keyword: "hello")
+
+        XCTAssertEqual(results.count, 2)
+        XCTAssertTrue(results.allSatisfy { ($0.searchableContent ?? "").contains("hello") })
+    }
+
+    func test_searchMessages_returnsEmptyWhenNoMatch() throws {
+        try store.insert(makeMessage(localMessageId: 1, target: "g1", text: "hello"))
+
+        let results = try store.searchMessages(conversationType: .single, target: "g1", keyword: "xyz")
+
+        XCTAssertTrue(results.isEmpty)
+    }
 }
