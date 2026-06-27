@@ -5,6 +5,7 @@ final class GroupNoticeViewController: UIViewController {
     private let initialNotice: String?
     private let canEdit: Bool
     private let textView = UITextView()
+    private var isShowingPlaceholder: Bool = false
 
     init(notice: String?, canEdit: Bool) {
         self.initialNotice = notice
@@ -22,6 +23,7 @@ final class GroupNoticeViewController: UIViewController {
         textView.font = .systemFont(ofSize: 16)
         textView.text = initialNotice?.isEmpty == false ? initialNotice : "暂无公告"
         textView.textColor = initialNotice?.isEmpty == false ? .label : .secondaryLabel
+        isShowingPlaceholder = !(initialNotice?.isEmpty == false)
         textView.isEditable = false
         textView.isSelectable = true
         textView.textContainerInset = UIEdgeInsets(top: 16, left: 12, bottom: 16, right: 12)
@@ -44,9 +46,10 @@ final class GroupNoticeViewController: UIViewController {
             textView.resignFirstResponder()
             navigationItem.rightBarButtonItem?.title = "编辑"
         } else {
-            if textView.textColor == .secondaryLabel {
+            if isShowingPlaceholder {
                 textView.text = ""
                 textView.textColor = .label
+                isShowingPlaceholder = false
             }
             textView.isEditable = true
             textView.becomeFirstResponder()
