@@ -198,20 +198,61 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
                 currentUserId: self.environment.imClient?.userId ?? ""
             )
             let groupInfoViewController = GroupInfoViewController(viewModel: groupInfoViewModel)
+
+            // 添加成员
             groupInfoViewController.onAddMembersTapped = { [weak self, weak groupInfoViewController] in
                 guard let self else { return }
-                let addGroupMemberViewModel = AddGroupMemberViewModel(
+                let addVM = AddGroupMemberViewModel(
                     groupId: groupId,
                     storage: self.environment.storage,
                     groupActing: self.environment.groupSyncService,
                     groupSyncing: self.environment.groupSyncService
                 )
-                let addGroupMemberViewController = AddGroupMemberViewController(viewModel: addGroupMemberViewModel)
-                addGroupMemberViewController.onMembersAdded = { [weak addGroupMemberViewController] in
-                    addGroupMemberViewController?.dismiss(animated: true)
-                }
-                groupInfoViewController?.present(UINavigationController(rootViewController: addGroupMemberViewController), animated: true)
+                let addVC = AddGroupMemberViewController(viewModel: addVM)
+                addVC.onMembersAdded = { addVC.dismiss(animated: true) }
+                groupInfoViewController?.present(UINavigationController(rootViewController: addVC), animated: true)
             }
+
+            // 移除成员（跳转到 AddGroupMemberViewController 的移除模式，暂用同一 VC）
+            groupInfoViewController.onRemoveMembersTapped = { [weak groupInfoViewController] in
+                let alert = UIAlertController(title: "移除成员", message: "请在成员列表中左滑移除", preferredStyle: .alert)
+                alert.addAction(UIAlertAction(title: "好", style: .default))
+                groupInfoViewController?.present(alert, animated: true)
+            }
+
+            // 查看成员资料
+            groupInfoViewController.onMemberTapped = { [weak groupInfoViewController] _ in
+                // TODO: 跳转成员详情页（后续实现）
+                _ = groupInfoViewController
+            }
+
+            // 群二维码
+            groupInfoViewController.onQRCodeTapped = { [weak self, weak groupInfoViewController] in
+                guard let self else { return }
+                let group = try? self.environment.storage.groups.group(groupId: groupId)
+                let qrVC = GroupQRCodeViewController(
+                    groupId: groupId,
+                    groupName: group?.name ?? groupId,
+                    portraitURL: group?.portrait
+                )
+                groupInfoViewController?.navigationController?.pushViewController(qrVC, animated: true)
+            }
+
+            // 群公告
+            groupInfoViewController.onGroupNoticeTapped = { [weak self, weak groupInfoViewController] in
+                guard let self else { return }
+                let group = try? self.environment.storage.groups.group(groupId: groupId)
+                let canEdit = group?.owner == self.environment.imClient?.userId
+                let noticeVC = GroupNoticeViewController(notice: nil, canEdit: canEdit)
+                groupInfoViewController?.navigationController?.pushViewController(noticeVC, animated: true)
+            }
+
+            // 查找聊天记录
+            groupInfoViewController.onSearchMessagesTapped = { [weak groupInfoViewController] in
+                let searchVC = SearchMessageViewController(viewModel: groupInfoViewModel)
+                groupInfoViewController?.navigationController?.pushViewController(searchVC, animated: true)
+            }
+
             conversationViewController?.navigationController?.pushViewController(groupInfoViewController, animated: true)
         }
     }
