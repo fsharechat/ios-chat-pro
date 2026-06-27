@@ -1,6 +1,7 @@
 // App/GroupQRCodeViewController.swift
 import UIKit
 import CoreImage.CIFilterBuiltins
+import IMKit
 
 final class GroupQRCodeViewController: UIViewController {
     private let groupId: String

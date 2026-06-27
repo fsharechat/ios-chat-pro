@@ -15,6 +15,12 @@
 		25D0AC4139A0950DB0CD2B4B /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0E388EB556B39D1EFCF7DEA /* SceneDelegate.swift */; };
 		2B03B7D44659C520AEFC917E /* AvatarImageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5ACDCE0BC8F9E8EF7A77D603 /* AvatarImageView.swift */; };
 		8C308F25A8844BA788956EC4 /* GroupMemberGridView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BF619C8FAD54B4B949FBBF9 /* GroupMemberGridView.swift */; };
+		E3AF120A3D004B1F8A4F7CCB /* ToggleSwitchCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98B89E15A9CD431D911E6B10 /* ToggleSwitchCell.swift */; };
+		E6CEC179953B4AD3B0BA8C08 /* NavigationRowCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D8383C6A46B4C838525A23C /* NavigationRowCell.swift */; };
+		FD526B9A6F55420C86178089 /* TextValueRowCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = E01097F3160F4DE789E7BAA4 /* TextValueRowCell.swift */; };
+		63512D032B8C4E6CBDEA1FA8 /* GroupQRCodeViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4202432D07684AE5A8B29747 /* GroupQRCodeViewController.swift */; };
+		CB30B6B542DC4C78BDA7838B /* GroupNoticeViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED42FB8D4BB34A1BBDA37359 /* GroupNoticeViewController.swift */; };
+		B776B6CEABA84368B7857826 /* SearchMessageViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55367295C4DD4F048BEAA448 /* SearchMessageViewController.swift */; };
 		2F6CCACDD9E93598CF9E204B /* WebRTC in Frameworks */ = {isa = PBXBuildFile; productRef = 245A8DCD66CF4BF518D7B079 /* WebRTC */; };
 		2FDDFC98177AB188696AAB56 /* EmojiPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BABABAD39A8A2ECFC98AF4D2 /* EmojiPanelView.swift */; };
 		364E10AD59CD0F1727BB41EA /* SystemTipMessageCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CE3F018CE1845A6A279978F /* SystemTipMessageCell.swift */; };
@@ -67,6 +73,12 @@
 		29D71A57B85DC64E3CCC00C7 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		2A887447B146764C16A4E603 /* GroupInfoViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupInfoViewController.swift; sourceTree = "<group>"; };
 		9BF619C8FAD54B4B949FBBF9 /* GroupMemberGridView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupMemberGridView.swift; sourceTree = "<group>"; };
+		98B89E15A9CD431D911E6B10 /* ToggleSwitchCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToggleSwitchCell.swift; sourceTree = "<group>"; };
+		7D8383C6A46B4C838525A23C /* NavigationRowCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavigationRowCell.swift; sourceTree = "<group>"; };
+		E01097F3160F4DE789E7BAA4 /* TextValueRowCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextValueRowCell.swift; sourceTree = "<group>"; };
+		4202432D07684AE5A8B29747 /* GroupQRCodeViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupQRCodeViewController.swift; sourceTree = "<group>"; };
+		ED42FB8D4BB34A1BBDA37359 /* GroupNoticeViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupNoticeViewController.swift; sourceTree = "<group>"; };
+		55367295C4DD4F048BEAA448 /* SearchMessageViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchMessageViewController.swift; sourceTree = "<group>"; };
 		2B7725E347391300F698E8D6 /* ImagePreviewViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImagePreviewViewController.swift; sourceTree = "<group>"; };
 		38D6C28B7BC3F34AF2780264 /* LoginViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginViewController.swift; sourceTree = "<group>"; };
 		3CE3F018CE1845A6A279978F /* SystemTipMessageCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemTipMessageCell.swift; sourceTree = "<group>"; };
@@ -167,6 +179,12 @@
 				E4F8B269AD818644389D362C /* FriendRequestCell.swift */,
 				2A887447B146764C16A4E603 /* GroupInfoViewController.swift */,
 				9BF619C8FAD54B4B949FBBF9 /* GroupMemberGridView.swift */,
+				4202432D07684AE5A8B29747 /* GroupQRCodeViewController.swift */,
+				ED42FB8D4BB34A1BBDA37359 /* GroupNoticeViewController.swift */,
+				7D8383C6A46B4C838525A23C /* NavigationRowCell.swift */,
+				55367295C4DD4F048BEAA448 /* SearchMessageViewController.swift */,
+				98B89E15A9CD431D911E6B10 /* ToggleSwitchCell.swift */,
+				E01097F3160F4DE789E7BAA4 /* TextValueRowCell.swift */,
 				57813ACEB21053B529B765B0 /* ImageMessageCell.swift */,
 				2B7725E347391300F698E8D6 /* ImagePreviewViewController.swift */,
 				29D71A57B85DC64E3CCC00C7 /* Info.plist */,
@@ -296,6 +314,12 @@
 				F8875E643BF006517AB52361 /* FriendRequestCell.swift in Sources */,
 				E2E627EE50345A115DB5B2ED /* GroupInfoViewController.swift in Sources */,
 				8C308F25A8844BA788956EC4 /* GroupMemberGridView.swift in Sources */,
+				63512D032B8C4E6CBDEA1FA8 /* GroupQRCodeViewController.swift in Sources */,
+				CB30B6B542DC4C78BDA7838B /* GroupNoticeViewController.swift in Sources */,
+				E6CEC179953B4AD3B0BA8C08 /* NavigationRowCell.swift in Sources */,
+				B776B6CEABA84368B7857826 /* SearchMessageViewController.swift in Sources */,
+				E3AF120A3D004B1F8A4F7CCB /* ToggleSwitchCell.swift in Sources */,
+				FD526B9A6F55420C86178089 /* TextValueRowCell.swift in Sources */,
 				9D341582713FAD5C8A889E68 /* ImageMessageCell.swift in Sources */,
 				DD3207003DBDA1B1CC3ED7CE /* ImagePreviewViewController.swift in Sources */,
 				8671C543D4A6428B08FE1E74 /* LoginViewController.swift in Sources */,

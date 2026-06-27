@@ -2,253 +2,367 @@
 import UIKit
 import Combine
 import IMKit
+import IMStorage
 
 final class GroupInfoViewController: UIViewController {
+
+    // MARK: - Navigation Callbacks (wired from SceneDelegate)
+    var onAddMembersTapped: (() -> Void)?
+    var onRemoveMembersTapped: (() -> Void)?
+    var onMemberTapped: ((String) -> Void)?
+    var onQRCodeTapped: (() -> Void)?
+    var onGroupNoticeTapped: (() -> Void)?
+    var onSearchMessagesTapped: (() -> Void)?
+
+    // MARK: - Section / Row Model
+
+    private enum Section: Int, CaseIterable {
+        case groupInfo
+        case messageActions
+        case conversationSettings
+        case personalSettings
+        case dangerZone
+    }
+
+    private enum Row: Hashable {
+        case groupName(String)
+        case qrCode
+        case groupNotice
+        case searchMessages
+        case mute(Bool)
+        case stickTop(Bool)
+        case saveToContacts(Bool)
+        case myNickname
+        case showMemberNicknames(Bool)
+        case clearMessages
+    }
+
+    // MARK: - Properties
+
     private let viewModel: GroupInfoViewModel
     private var cancellables = Set<AnyCancellable>()
-    private var dataSource: UITableViewDiffableDataSource<Int, GroupInfoViewModel.MemberRow>!
+    private var dataSource: UITableViewDiffableDataSource<Section, Row>!
+    private var showMemberNicknames: Bool {
+        get { UserDefaults.standard.bool(forKey: showMemberNicknamesKey) }
+        set { UserDefaults.standard.set(newValue, forKey: showMemberNicknamesKey) }
+    }
+    private var showMemberNicknamesKey: String { "showMemberNicknames_\(viewModel.group?.groupId ?? "")" }
 
-    private let tableView = UITableView()
-    private let quitButton = UIButton(type: .system)
-    private let dismissButton = UIButton(type: .system)
-    private lazy var addMembersButton = UIBarButtonItem(barButtonSystemItem: .add, target: self, action: #selector(addMembersTapped))
-    private let headerView = UIView()
-    private let groupAvatarImageView = AvatarImageView(loader: AvatarLoader())
-    private let groupNameLabel = UILabel()
-    private let changePortraitButton = UIButton(type: .system)
+    private let tableView = UITableView(frame: .zero, style: .plain)
+    private let memberGridView = GroupMemberGridView()
+    private let bottomButton = UIButton(type: .system)
 
-    /// Fired when the user taps the add-members bar button. The actual
-    /// `AddGroupMemberViewModel`/`AddGroupMemberViewController` construction
-    /// happens in `SceneDelegate` (this view controller only holds a
-    /// `GroupInfoViewModel`, which doesn't expose the storage/acting/syncing
-    /// dependencies needed to build them) — matching the established
-    /// "closure wired from SceneDelegate" cross-screen navigation pattern
-    /// used elsewhere in this codebase.
-    var onAddMembersTapped: (() -> Void)?
+    // MARK: - Init
 
     init(viewModel: GroupInfoViewModel) {
         self.viewModel = viewModel
         super.init(nibName: nil, bundle: nil)
-        title = "群信息"
+        title = "会话详情"
     }
 
     @available(*, unavailable)
-    required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
+    required init?(coder: NSCoder) { fatalError() }
+
+    // MARK: - Lifecycle
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = Theme.backgroundPrimary
+        view.backgroundColor = .systemGroupedBackground
         layoutViews()
         configureDataSource()
         bindViewModel()
         viewModel.refresh()
     }
 
+    // MARK: - Layout
+
     private func layoutViews() {
-        tableView.register(ContactListCell.self, forCellReuseIdentifier: ContactListCell.reuseIdentifier)
+        // Member grid as table header
+        memberGridView.onAddTapped = { [weak self] in self?.onAddMembersTapped?() }
+        memberGridView.onRemoveTapped = { [weak self] in self?.onRemoveMembersTapped?() }
+        memberGridView.onMemberTapped = { [weak self] uid in self?.onMemberTapped?(uid) }
+
+        // Table view
+        tableView.register(ToggleSwitchCell.self, forCellReuseIdentifier: ToggleSwitchCell.reuseIdentifier)
+        tableView.register(NavigationRowCell.self, forCellReuseIdentifier: NavigationRowCell.reuseIdentifier)
+        tableView.register(TextValueRowCell.self, forCellReuseIdentifier: TextValueRowCell.reuseIdentifier)
         tableView.delegate = self
-        tableView.backgroundColor = Theme.backgroundPrimary
+        tableView.backgroundColor = .systemGroupedBackground
+        tableView.separatorInset = UIEdgeInsets(top: 0, left: 15, bottom: 0, right: 0)
         tableView.translatesAutoresizingMaskIntoConstraints = false
 
-        quitButton.setTitle("退出该群", for: .normal)
-        quitButton.setTitleColor(.systemRed, for: .normal)
-        quitButton.addTarget(self, action: #selector(quitTapped), for: .touchUpInside)
-        quitButton.translatesAutoresizingMaskIntoConstraints = false
-
-        dismissButton.setTitle("解散该群", for: .normal)
-        dismissButton.setTitleColor(.systemRed, for: .normal)
-        dismissButton.addTarget(self, action: #selector(dismissTapped), for: .touchUpInside)
-        dismissButton.translatesAutoresizingMaskIntoConstraints = false
-
-        groupAvatarImageView.translatesAutoresizingMaskIntoConstraints = false
-
-        groupNameLabel.font = .systemFont(ofSize: 16, weight: .semibold)
-        groupNameLabel.textColor = Theme.textPrimary
-        groupNameLabel.translatesAutoresizingMaskIntoConstraints = false
-
-        changePortraitButton.setTitle("更换头像", for: .normal)
-        changePortraitButton.addTarget(self, action: #selector(changePortraitTapped), for: .touchUpInside)
-        changePortraitButton.translatesAutoresizingMaskIntoConstraints = false
-
-        headerView.translatesAutoresizingMaskIntoConstraints = false
-        headerView.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(renameGroupTapped)))
-        headerView.addSubview(groupAvatarImageView)
-        headerView.addSubview(groupNameLabel)
-        headerView.addSubview(changePortraitButton)
-        view.addSubview(headerView)
+        // Bottom button
+        bottomButton.setTitle("退出群组", for: .normal)
+        bottomButton.setTitleColor(.white, for: .normal)
+        bottomButton.backgroundColor = .systemRed
+        bottomButton.layer.cornerRadius = 4
+        bottomButton.titleLabel?.font = .systemFont(ofSize: 16)
+        bottomButton.addTarget(self, action: #selector(bottomButtonTapped), for: .touchUpInside)
+        bottomButton.translatesAutoresizingMaskIntoConstraints = false
 
         view.addSubview(tableView)
-        view.addSubview(quitButton)
-        view.addSubview(dismissButton)
+        view.addSubview(bottomButton)
 
         NSLayoutConstraint.activate([
-            headerView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
-            headerView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            headerView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            headerView.heightAnchor.constraint(equalToConstant: 64),
-
-            groupAvatarImageView.leadingAnchor.constraint(equalTo: headerView.leadingAnchor, constant: 16),
-            groupAvatarImageView.centerYAnchor.constraint(equalTo: headerView.centerYAnchor),
-            groupAvatarImageView.widthAnchor.constraint(equalToConstant: 48),
-            groupAvatarImageView.heightAnchor.constraint(equalToConstant: 48),
-
-            groupNameLabel.leadingAnchor.constraint(equalTo: groupAvatarImageView.trailingAnchor, constant: 12),
-            groupNameLabel.centerYAnchor.constraint(equalTo: headerView.centerYAnchor),
-
-            changePortraitButton.trailingAnchor.constraint(equalTo: headerView.trailingAnchor, constant: -16),
-            changePortraitButton.centerYAnchor.constraint(equalTo: headerView.centerYAnchor),
-
-            tableView.topAnchor.constraint(equalTo: headerView.bottomAnchor),
+            tableView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
             tableView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             tableView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            tableView.bottomAnchor.constraint(equalTo: quitButton.topAnchor, constant: -8),
+            tableView.bottomAnchor.constraint(equalTo: bottomButton.topAnchor, constant: -8),
 
-            quitButton.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
-            quitButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
-            quitButton.heightAnchor.constraint(equalToConstant: 44),
-
-            dismissButton.topAnchor.constraint(equalTo: quitButton.bottomAnchor, constant: 4),
-            dismissButton.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
-            dismissButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
-            dismissButton.heightAnchor.constraint(equalToConstant: 44),
-            dismissButton.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -8),
+            bottomButton.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
+            bottomButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
+            bottomButton.heightAnchor.constraint(equalToConstant: 44),
+            bottomButton.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -20),
         ])
     }
 
+    // MARK: - DataSource
+
     private func configureDataSource() {
-        dataSource = UITableViewDiffableDataSource<Int, GroupInfoViewModel.MemberRow>(tableView: tableView) { tableView, indexPath, row in
-            let cell = tableView.dequeueReusableCell(withIdentifier: ContactListCell.reuseIdentifier, for: indexPath) as! ContactListCell
-            cell.configure(with: ContactRow(uid: row.uid, displayName: row.isOwner ? "👑 \(row.displayName)" : row.displayName, avatarURL: row.avatarURL, sectionLetter: ""))
+        dataSource = UITableViewDiffableDataSource(tableView: tableView) { [weak self] tableView, indexPath, row in
+            self?.cell(for: row, at: indexPath, in: tableView)
+        }
+    }
+
+    private func cell(for row: Row, at indexPath: IndexPath, in tableView: UITableView) -> UITableViewCell {
+        switch row {
+        case .groupName(let name):
+            let cell = tableView.dequeueReusableCell(withIdentifier: NavigationRowCell.reuseIdentifier, for: indexPath) as! NavigationRowCell
+            cell.configure(title: "群聊名称", detail: name)
+            return cell
+
+        case .qrCode:
+            let cell = tableView.dequeueReusableCell(withIdentifier: NavigationRowCell.reuseIdentifier, for: indexPath) as! NavigationRowCell
+            let qrIcon = UIImageView(image: UIImage(systemName: "qrcode"))
+            qrIcon.tintColor = .label
+            cell.configure(title: "二维码", detail: nil, rightView: qrIcon)
+            return cell
+
+        case .groupNotice:
+            let cell = tableView.dequeueReusableCell(withIdentifier: NavigationRowCell.reuseIdentifier, for: indexPath) as! NavigationRowCell
+            cell.configure(title: "群公告", detail: nil)
+            return cell
+
+        case .searchMessages:
+            let cell = tableView.dequeueReusableCell(withIdentifier: NavigationRowCell.reuseIdentifier, for: indexPath) as! NavigationRowCell
+            cell.configure(title: "查找聊天记录", detail: nil)
+            return cell
+
+        case .mute(let isOn):
+            let cell = tableView.dequeueReusableCell(withIdentifier: ToggleSwitchCell.reuseIdentifier, for: indexPath) as! ToggleSwitchCell
+            cell.configure(title: "消息免打扰", isOn: isOn)
+            cell.onToggle = { [weak self] value in self?.viewModel.setMuted(value) }
+            return cell
+
+        case .stickTop(let isOn):
+            let cell = tableView.dequeueReusableCell(withIdentifier: ToggleSwitchCell.reuseIdentifier, for: indexPath) as! ToggleSwitchCell
+            cell.configure(title: "置顶聊天", isOn: isOn)
+            cell.onToggle = { [weak self] value in self?.viewModel.setTop(value) }
+            return cell
+
+        case .saveToContacts(let isOn):
+            let cell = tableView.dequeueReusableCell(withIdentifier: ToggleSwitchCell.reuseIdentifier, for: indexPath) as! ToggleSwitchCell
+            cell.configure(title: "保存到通讯录", isOn: isOn)
+            cell.onToggle = { [weak self] value in self?.viewModel.setFav(value) }
+            return cell
+
+        case .myNickname:
+            let cell = tableView.dequeueReusableCell(withIdentifier: TextValueRowCell.reuseIdentifier, for: indexPath) as! TextValueRowCell
+            cell.configure(title: "我在本群的昵称", value: nil)
+            return cell
+
+        case .showMemberNicknames(let isOn):
+            let cell = tableView.dequeueReusableCell(withIdentifier: ToggleSwitchCell.reuseIdentifier, for: indexPath) as! ToggleSwitchCell
+            cell.configure(title: "显示群成员昵称", isOn: isOn)
+            cell.onToggle = { [weak self] value in
+                self?.showMemberNicknames = value
+                self?.applySnapshot()
+            }
+            return cell
+
+        case .clearMessages:
+            let cell = tableView.dequeueReusableCell(withIdentifier: NavigationRowCell.reuseIdentifier, for: indexPath) as! NavigationRowCell
+            cell.configure(title: "清空聊天记录", detail: nil)
             return cell
         }
     }
 
-    private func bindViewModel() {
-        viewModel.$members
-            .sink { [weak self] members in
-                guard let self else { return }
-                var snapshot = NSDiffableDataSourceSnapshot<Int, GroupInfoViewModel.MemberRow>()
-                snapshot.appendSections([0])
-                snapshot.appendItems(members, toSection: 0)
-                self.dataSource.apply(snapshot, animatingDifferences: true)
-            }
-            .store(in: &cancellables)
+    // MARK: - Snapshot
 
-        viewModel.$group
-            .sink { [weak self] group in
+    private func applySnapshot() {
+        var snapshot = NSDiffableDataSourceSnapshot<Section, Row>()
+        snapshot.appendSections(Section.allCases)
+
+        snapshot.appendItems([
+            .groupName(viewModel.group?.name ?? ""),
+            .qrCode,
+            .groupNotice,
+        ], toSection: .groupInfo)
+
+        snapshot.appendItems([.searchMessages], toSection: .messageActions)
+
+        snapshot.appendItems([
+            .mute(viewModel.isMuted),
+            .stickTop(viewModel.isTop),
+            .saveToContacts(viewModel.isFav),
+        ], toSection: .conversationSettings)
+
+        snapshot.appendItems([
+            .myNickname,
+            .showMemberNicknames(showMemberNicknames),
+        ], toSection: .personalSettings)
+
+        snapshot.appendItems([.clearMessages], toSection: .dangerZone)
+
+        dataSource.apply(snapshot, animatingDifferences: false)
+    }
+
+    // MARK: - Binding
+
+    private func bindViewModel() {
+        Publishers.MergeMany(
+            viewModel.$group.map { _ in () }.eraseToAnyPublisher(),
+            viewModel.$isTop.map { _ in () }.eraseToAnyPublisher(),
+            viewModel.$isMuted.map { _ in () }.eraseToAnyPublisher(),
+            viewModel.$isFav.map { _ in () }.eraseToAnyPublisher()
+        )
+        .receive(on: DispatchQueue.main)
+        .sink { [weak self] in self?.applySnapshot() }
+        .store(in: &cancellables)
+
+        viewModel.$members
+            .combineLatest(viewModel.$canAddMembers, viewModel.$canKickMembers)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] members, canAdd, canRemove in
                 guard let self else { return }
-                self.title = group?.name ?? "群信息"
-                self.groupNameLabel.text = group?.name ?? "群信息"
-                self.groupAvatarImageView.setAvatar(urlString: group?.portrait, displayName: group?.name ?? "群")
+                self.memberGridView.update(members: members, canAdd: canAdd, canRemove: canRemove)
+                self.updateGridHeader()
             }
             .store(in: &cancellables)
 
         viewModel.$canDismiss
-            .sink { [weak self] canDismiss in self?.dismissButton.isHidden = !canDismiss }
-            .store(in: &cancellables)
-
-        viewModel.$canAddMembers
-            .sink { [weak self] canAddMembers in
-                guard let self else { return }
-                self.navigationItem.rightBarButtonItem = canAddMembers ? self.addMembersButton : nil
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] canDismiss in
+                self?.bottomButton.setTitle(canDismiss ? "解散群组" : "退出群组", for: .normal)
             }
             .store(in: &cancellables)
+    }
 
-        viewModel.$canModifyInfo
-            .sink { [weak self] canModifyInfo in
-                self?.headerView.isUserInteractionEnabled = canModifyInfo
-                self?.changePortraitButton.isHidden = !canModifyInfo
+    private func updateGridHeader() {
+        memberGridView.invalidateIntrinsicContentSize()
+        let size = memberGridView.intrinsicContentSize
+        memberGridView.frame = CGRect(x: 0, y: 0, width: tableView.bounds.width, height: size.height)
+        tableView.tableHeaderView = memberGridView
+    }
+
+    // MARK: - Actions
+
+    @objc private func bottomButtonTapped() {
+        if viewModel.canDismiss {
+            confirmAction(title: "解散群组", message: "解散后群组将不可恢复，请谨慎操作。") { [weak self] in
+                self?.viewModel.dismissGroup { result in
+                    DispatchQueue.main.async {
+                        if case .failure = result {
+                            self?.showAlert(title: "解散失败", message: "请稍后重试")
+                        } else {
+                            self?.navigationController?.popViewController(animated: true)
+                        }
+                    }
+                }
             }
-            .store(in: &cancellables)
-
-        // Quit is always allowed per the design doc's permission matrix
-        // (every `GroupType` permits self-removal) — `quitButton` has no
-        // corresponding `@Published` gate to hide it.
-    }
-
-    @objc private func addMembersTapped() {
-        onAddMembersTapped?()
-    }
-
-    @objc private func quitTapped() {
-        viewModel.quitGroup { [weak self] result in
-            switch result {
-            case .success:
-                self?.navigationController?.popViewController(animated: true)
-            case .failure:
-                self?.presentResultAlert(title: "退出失败", message: "请稍后重试")
+        } else {
+            confirmAction(title: "退出群组", message: "确认退出此群组？") { [weak self] in
+                self?.viewModel.quitGroup { result in
+                    DispatchQueue.main.async {
+                        if case .failure = result {
+                            self?.showAlert(title: "退出失败", message: "请稍后重试")
+                        } else {
+                            self?.navigationController?.popViewController(animated: true)
+                        }
+                    }
+                }
             }
         }
     }
 
-    @objc private func dismissTapped() {
-        viewModel.dismissGroup { [weak self] result in
-            switch result {
-            case .success:
-                self?.navigationController?.popViewController(animated: true)
-            case .failure:
-                self?.presentResultAlert(title: "解散失败", message: "请稍后重试")
-            }
-        }
-    }
-
-    @objc private func renameGroupTapped() {
+    private func handleGroupNameTapped() {
+        guard viewModel.canModifyInfo else { return }
         let alert = UIAlertController(title: "修改群名", message: nil, preferredStyle: .alert)
-        alert.addTextField { [weak self] textField in
-            textField.text = self?.viewModel.group?.name
-            textField.placeholder = "群聊名称"
+        alert.addTextField { [weak self] tf in
+            tf.text = self?.viewModel.group?.name
+            tf.placeholder = "群聊名称"
         }
         alert.addAction(UIAlertAction(title: "取消", style: .cancel))
         alert.addAction(UIAlertAction(title: "保存", style: .default) { [weak self, weak alert] _ in
             guard let name = alert?.textFields?.first?.text?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty else { return }
             self?.viewModel.renameGroup(name) { result in
-                if case .failure = result {
-                    self?.presentResultAlert(title: "修改失败", message: "请稍后重试")
+                DispatchQueue.main.async {
+                    if case .failure = result { self?.showAlert(title: "修改失败", message: "请稍后重试") }
                 }
             }
         })
         present(alert, animated: true)
     }
 
-    @objc private func changePortraitTapped() {
-        viewModel.updatePortrait(url: Self.placeholderGroupAvatarURL) { [weak self] result in
-            if case .failure = result {
-                self?.presentResultAlert(title: "修改失败", message: "请稍后重试")
+    private func handleMyNicknameTapped() {
+        let alert = UIAlertController(title: "我在本群的昵称", message: nil, preferredStyle: .alert)
+        alert.addTextField { tf in tf.placeholder = "输入昵称（仅本地展示）" }
+        alert.addAction(UIAlertAction(title: "取消", style: .cancel))
+        alert.addAction(UIAlertAction(title: "确定", style: .default))
+        present(alert, animated: true)
+    }
+
+    private func handleClearMessagesTapped() {
+        confirmAction(title: "清空聊天记录", message: "清空后不可恢复，确认操作？") { [weak self] in
+            self?.viewModel.clearMessages { result in
+                DispatchQueue.main.async {
+                    if case .failure = result { self?.showAlert(title: "清空失败", message: "请稍后重试") }
+                }
             }
         }
     }
 
-    // A static placeholder, not a real upload pipeline — per this project's
-    // design doc, group avatars intentionally use a uniform placeholder
-    // rather than letting each client generate/upload its own. Uses
-    // example.com (RFC 2606 reserved, intentionally non-resolving) rather
-    // than a live third-party service, consistent with every other
-    // placeholder URL in this codebase — this button exists to exercise
-    // the wire/permission path, not to test real avatar rendering.
-    private static let placeholderGroupAvatarURL = "https://example.com/group-avatar-placeholder.png"
+    private func confirmAction(title: String, message: String, onConfirm: @escaping () -> Void) {
+        let alert = UIAlertController(title: title, message: message, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "取消", style: .cancel))
+        alert.addAction(UIAlertAction(title: "确认", style: .destructive) { _ in onConfirm() })
+        present(alert, animated: true)
+    }
 
-    private func presentResultAlert(title: String, message: String) {
+    private func showAlert(title: String, message: String) {
         let alert = UIAlertController(title: title, message: message, preferredStyle: .alert)
         alert.addAction(UIAlertAction(title: "好", style: .default))
         present(alert, animated: true)
     }
 }
 
+// MARK: - UITableViewDelegate
+
 extension GroupInfoViewController: UITableViewDelegate {
-    func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
-        tableView.deselectRow(at: indexPath, animated: true)
+
+    func tableView(_ tableView: UITableView, heightForRowAt indexPath: IndexPath) -> CGFloat { 50 }
+
+    func tableView(_ tableView: UITableView, viewForHeaderInSection section: Int) -> UIView? {
+        let spacer = UIView()
+        spacer.backgroundColor = .systemGroupedBackground
+        return spacer
     }
 
-    func tableView(_ tableView: UITableView, trailingSwipeActionsConfigurationForRowAt indexPath: IndexPath) -> UISwipeActionsConfiguration? {
-        guard viewModel.canKickMembers, let row = dataSource.itemIdentifier(for: indexPath), !row.isOwner else { return nil }
-        let kick = UIContextualAction(style: .destructive, title: "移出") { [weak self] _, _, completion in
-            self?.viewModel.kickMember(row.uid) { result in
-                if case .failure = result {
-                    self?.presentResultAlert(title: "移出失败", message: "请稍后重试")
-                }
-                completion(true)
-            }
+    func tableView(_ tableView: UITableView, heightForHeaderInSection section: Int) -> CGFloat {
+        section == 0 ? 0 : 10
+    }
+
+    func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+        tableView.deselectRow(at: indexPath, animated: true)
+        guard let row = dataSource.itemIdentifier(for: indexPath) else { return }
+        switch row {
+        case .groupName: handleGroupNameTapped()
+        case .qrCode: onQRCodeTapped?()
+        case .groupNotice: onGroupNoticeTapped?()
+        case .searchMessages: onSearchMessagesTapped?()
+        case .myNickname: handleMyNicknameTapped()
+        case .clearMessages: handleClearMessagesTapped()
+        default: break
         }
-        return UISwipeActionsConfiguration(actions: [kick])
     }
 }
