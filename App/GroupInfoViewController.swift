@@ -43,7 +43,7 @@ final class GroupInfoViewController: UIViewController {
     private var cancellables = Set<AnyCancellable>()
     private var dataSource: UITableViewDiffableDataSource<Section, Row>!
     private var showMemberNicknames: Bool {
-        get { UserDefaults.standard.bool(forKey: showMemberNicknamesKey) }
+        get { UserDefaults.standard.object(forKey: showMemberNicknamesKey) as? Bool ?? true }
         set { UserDefaults.standard.set(newValue, forKey: showMemberNicknamesKey) }
     }
     private var showMemberNicknamesKey: String { "showMemberNicknames_\(viewModel.group?.groupId ?? "")" }

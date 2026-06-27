@@ -44,6 +44,7 @@ final class ConversationViewController: UIViewController {
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         viewModel.clearUnread()
+        viewModel.reprocessMessages()
     }
 
     override func viewDidLoad() {

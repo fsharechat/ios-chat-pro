@@ -93,6 +93,7 @@ final class ConversationListCell: UITableViewCell {
             previewLabel.text = mentionPrefix + row.previewText
         }
 
+        backgroundColor = row.isTop ? Theme.backgroundTertiary : Theme.backgroundSecondary
         muteIcon.isHidden = !row.isMuted
         if row.unreadCount > 0 {
             unreadBadge.text = " \(row.unreadCount) "

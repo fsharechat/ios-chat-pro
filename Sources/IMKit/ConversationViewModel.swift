@@ -28,6 +28,7 @@ public final class ConversationViewModel {
     private var olderRows: [ChatMessageRow] = []
     private var liveRows: [ChatMessageRow] = []
     private var pendingImages: [PendingImageUpload] = []
+    private var lastMessages: [StoredMessage] = []
     private var cancellable: AnyCancellable?
 
     public init(
@@ -161,7 +162,12 @@ public final class ConversationViewModel {
         }
     }
 
+    public func reprocessMessages() {
+        handleMessagesUpdate(lastMessages)
+    }
+
     private func handleMessagesUpdate(_ messages: [StoredMessage]) {
+        lastMessages = messages
         // `messagesPublisher` always reports the full current "latest
         // pageSize" window (already ascending), so it wholesale-replaces
         // `liveRows` rather than merging — see `liveRows`'s doc comment.
@@ -238,9 +244,13 @@ public final class ConversationViewModel {
         let avatarUid = message.direction == .send ? currentUserId : message.from
         let user = try? storage.users.user(uid: avatarUid)
         let senderAvatarURL = user?.portrait
-        // Sender name only appears in group incoming bubbles.
+        // Sender name only appears in group incoming bubbles, and only when the user hasn't turned off the setting.
         if conversationType == .group, message.direction == .receive {
-            senderDisplayName = user?.displayName ?? user?.name ?? message.from
+            let key = "showMemberNicknames_\(target)"
+            let showNicknames = UserDefaults.standard.object(forKey: key) as? Bool ?? true
+            if showNicknames {
+                senderDisplayName = user?.displayName ?? user?.name ?? message.from
+            }
         }
         return StoredMessageRow(
             storageId: message.id ?? -1,
