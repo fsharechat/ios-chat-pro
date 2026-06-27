@@ -138,20 +138,27 @@ private final class MemberCell: UICollectionViewCell {
 }
 
 private final class ActionCell: UICollectionViewCell {
+    private let iconContainer = UIView()
     private let imageView = UIImageView()
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        contentView.layer.cornerRadius = 24
-        contentView.layer.borderWidth = 1
-        contentView.layer.borderColor = UIColor.separator.cgColor
+        iconContainer.layer.cornerRadius = 24
+        iconContainer.layer.borderWidth = 1
+        iconContainer.layer.borderColor = UIColor.separator.cgColor
+        iconContainer.translatesAutoresizingMaskIntoConstraints = false
         imageView.tintColor = .label
         imageView.contentMode = .scaleAspectFit
         imageView.translatesAutoresizingMaskIntoConstraints = false
-        contentView.addSubview(imageView)
+        contentView.addSubview(iconContainer)
+        iconContainer.addSubview(imageView)
         NSLayoutConstraint.activate([
-            imageView.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
-            imageView.centerYAnchor.constraint(equalTo: contentView.centerYAnchor),
+            iconContainer.topAnchor.constraint(equalTo: contentView.topAnchor),
+            iconContainer.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
+            iconContainer.widthAnchor.constraint(equalToConstant: 48),
+            iconContainer.heightAnchor.constraint(equalToConstant: 48),
+            imageView.centerXAnchor.constraint(equalTo: iconContainer.centerXAnchor),
+            imageView.centerYAnchor.constraint(equalTo: iconContainer.centerYAnchor),
             imageView.widthAnchor.constraint(equalToConstant: 20),
             imageView.heightAnchor.constraint(equalToConstant: 20),
         ])
