@@ -126,4 +126,13 @@ public final class ConversationStore {
             )
         }
     }
+
+    public func setMuted(_ isMuted: Bool, conversationType: ConversationType, target: String, line: Int = 0) throws {
+        try dbQueue.write { db in
+            try db.execute(
+                sql: "UPDATE conversation SET isMuted = ? WHERE conversationType = ? AND target = ? AND line = ?",
+                arguments: [isMuted, conversationType.rawValue, target, line]
+            )
+        }
+    }
 }

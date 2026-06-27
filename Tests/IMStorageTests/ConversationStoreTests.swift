@@ -113,4 +113,21 @@ final class ConversationStoreTests: XCTestCase {
 
         XCTAssertEqual(try store.conversation(conversationType: .group, target: "g1")?.unreadMentionCount, 0)
     }
+
+    func test_setMuted_true_storesMutedFlag() throws {
+        try store.recordIncomingMessage(conversationType: .group, target: "g1", line: 0, messageUid: 1, timestamp: 1_000, incrementUnread: false)
+
+        try store.setMuted(true, conversationType: .group, target: "g1", line: 0)
+
+        XCTAssertEqual(try store.conversation(conversationType: .group, target: "g1")?.isMuted, true)
+    }
+
+    func test_setMuted_false_clearsMutedFlag() throws {
+        try store.recordIncomingMessage(conversationType: .group, target: "g1", line: 0, messageUid: 1, timestamp: 1_000, incrementUnread: false)
+        try store.setMuted(true, conversationType: .group, target: "g1", line: 0)
+
+        try store.setMuted(false, conversationType: .group, target: "g1", line: 0)
+
+        XCTAssertEqual(try store.conversation(conversationType: .group, target: "g1")?.isMuted, false)
+    }
 }
