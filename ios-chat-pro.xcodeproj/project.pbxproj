@@ -14,6 +14,7 @@
 		20975C9275A5F1A2D28AB36B /* SettingsViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85923E6E0B056A0DFB4951CC /* SettingsViewController.swift */; };
 		25D0AC4139A0950DB0CD2B4B /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0E388EB556B39D1EFCF7DEA /* SceneDelegate.swift */; };
 		2B03B7D44659C520AEFC917E /* AvatarImageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5ACDCE0BC8F9E8EF7A77D603 /* AvatarImageView.swift */; };
+		8C308F25A8844BA788956EC4 /* GroupMemberGridView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BF619C8FAD54B4B949FBBF9 /* GroupMemberGridView.swift */; };
 		2F6CCACDD9E93598CF9E204B /* WebRTC in Frameworks */ = {isa = PBXBuildFile; productRef = 245A8DCD66CF4BF518D7B079 /* WebRTC */; };
 		2FDDFC98177AB188696AAB56 /* EmojiPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BABABAD39A8A2ECFC98AF4D2 /* EmojiPanelView.swift */; };
 		364E10AD59CD0F1727BB41EA /* SystemTipMessageCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CE3F018CE1845A6A279978F /* SystemTipMessageCell.swift */; };
@@ -65,6 +66,7 @@
 		1A7AF95FBB4F8D27A5F4067D /* MessageInputBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageInputBar.swift; sourceTree = "<group>"; };
 		29D71A57B85DC64E3CCC00C7 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		2A887447B146764C16A4E603 /* GroupInfoViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupInfoViewController.swift; sourceTree = "<group>"; };
+		9BF619C8FAD54B4B949FBBF9 /* GroupMemberGridView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupMemberGridView.swift; sourceTree = "<group>"; };
 		2B7725E347391300F698E8D6 /* ImagePreviewViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImagePreviewViewController.swift; sourceTree = "<group>"; };
 		38D6C28B7BC3F34AF2780264 /* LoginViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginViewController.swift; sourceTree = "<group>"; };
 		3CE3F018CE1845A6A279978F /* SystemTipMessageCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemTipMessageCell.swift; sourceTree = "<group>"; };
@@ -164,6 +166,7 @@
 				0E4C429A89F749F13C87CB2D /* CreateGroupViewController.swift */,
 				E4F8B269AD818644389D362C /* FriendRequestCell.swift */,
 				2A887447B146764C16A4E603 /* GroupInfoViewController.swift */,
+				9BF619C8FAD54B4B949FBBF9 /* GroupMemberGridView.swift */,
 				57813ACEB21053B529B765B0 /* ImageMessageCell.swift */,
 				2B7725E347391300F698E8D6 /* ImagePreviewViewController.swift */,
 				29D71A57B85DC64E3CCC00C7 /* Info.plist */,
@@ -292,6 +295,7 @@
 				1D98913CD1F3FB5C84C16D69 /* CreateGroupViewController.swift in Sources */,
 				F8875E643BF006517AB52361 /* FriendRequestCell.swift in Sources */,
 				E2E627EE50345A115DB5B2ED /* GroupInfoViewController.swift in Sources */,
+				8C308F25A8844BA788956EC4 /* GroupMemberGridView.swift in Sources */,
 				9D341582713FAD5C8A889E68 /* ImageMessageCell.swift in Sources */,
 				DD3207003DBDA1B1CC3ED7CE /* ImagePreviewViewController.swift in Sources */,
 				8671C543D4A6428B08FE1E74 /* LoginViewController.swift in Sources */,
