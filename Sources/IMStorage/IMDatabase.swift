@@ -159,6 +159,11 @@ public final class IMDatabase {
                 columns: ["messageUid"]
             )
         }
+        migrator.registerMigration("v7_addGroupIsFav") { db in
+            try db.alter(table: "groupInfo") { t in
+                t.add(column: "isFav", .boolean).notNull().defaults(to: false)
+            }
+        }
         return migrator
     }
 }

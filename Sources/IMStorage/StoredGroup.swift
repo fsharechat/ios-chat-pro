@@ -15,6 +15,7 @@ public struct StoredGroup: Codable, Equatable, FetchableRecord, PersistableRecor
     public var memberCount: Int
     public var updateDt: Int64
     public var memberUpdateDt: Int64
+    public var isFav: Bool
 
     public init(
         groupId: String,
@@ -24,7 +25,8 @@ public struct StoredGroup: Codable, Equatable, FetchableRecord, PersistableRecor
         groupType: GroupType,
         memberCount: Int,
         updateDt: Int64,
-        memberUpdateDt: Int64
+        memberUpdateDt: Int64,
+        isFav: Bool = false
     ) {
         self.groupId = groupId
         self.name = name
@@ -34,6 +36,7 @@ public struct StoredGroup: Codable, Equatable, FetchableRecord, PersistableRecor
         self.memberCount = memberCount
         self.updateDt = updateDt
         self.memberUpdateDt = memberUpdateDt
+        self.isFav = isFav
     }
 }
 

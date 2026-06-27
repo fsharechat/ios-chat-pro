@@ -87,4 +87,26 @@ final class GroupStoreTests: XCTestCase {
         wait(for: [expectation], timeout: 2)
         XCTAssertEqual(receivedCounts, [0, 1])
     }
+
+    func test_setFav_true_storesFlag() throws {
+        try store.upsertGroup(StoredGroup(groupId: "g1", name: "G1", portrait: nil, owner: "u1", groupType: .normal, memberCount: 1, updateDt: 0, memberUpdateDt: 0, isFav: false))
+
+        try store.setFav(true, groupId: "g1")
+
+        XCTAssertEqual(try store.group(groupId: "g1")?.isFav, true)
+    }
+
+    func test_setFav_false_clearsFlag() throws {
+        try store.upsertGroup(StoredGroup(groupId: "g1", name: "G1", portrait: nil, owner: "u1", groupType: .normal, memberCount: 1, updateDt: 0, memberUpdateDt: 0, isFav: true))
+
+        try store.setFav(false, groupId: "g1")
+
+        XCTAssertEqual(try store.group(groupId: "g1")?.isFav, false)
+    }
+
+    func test_upsertGroup_isFav_defaultsFalse() throws {
+        try store.upsertGroup(StoredGroup(groupId: "g2", name: "G2", portrait: nil, owner: "u1", groupType: .normal, memberCount: 1, updateDt: 0, memberUpdateDt: 0, isFav: false))
+
+        XCTAssertEqual(try store.group(groupId: "g2")?.isFav, false)
+    }
 }

@@ -56,4 +56,13 @@ public final class GroupStore {
             .publisher(in: dbQueue, scheduling: .immediate)
             .eraseToAnyPublisher()
     }
+
+    public func setFav(_ isFav: Bool, groupId: String) throws {
+        try dbQueue.write { db in
+            try db.execute(
+                sql: "UPDATE groupInfo SET isFav = ? WHERE groupId = ?",
+                arguments: [isFav, groupId]
+            )
+        }
+    }
 }
