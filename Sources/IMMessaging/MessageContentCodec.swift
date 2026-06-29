@@ -51,6 +51,12 @@ public enum MessageContentCodec {
         let duration: Int
     }
 
+    /// Wire shape for type 4 (video)'s `content` field — mirrors voice's
+    /// duration JSON convention.
+    private struct VideoDurationPayload: Codable {
+        let duration: Int
+    }
+
     public static func encode(_ content: MessageContent, mentionedType: Int32 = 0, mentionedTargets: [String] = []) -> Im_MessageContent {
         var wire = Im_MessageContent()
         switch content {
@@ -102,9 +108,12 @@ public enum MessageContentCodec {
         case .video(let thumbnail, let remoteURL, _, let duration):
             wire.type = 4
             wire.searchableContent = "[视频]"
-            wire.content = "\(duration)"
             if let thumbnail { wire.data = thumbnail }
             if let remoteURL { wire.remoteMediaURL = remoteURL }
+            if let json = try? JSONEncoder().encode(VideoDurationPayload(duration: duration)),
+               let str = String(data: json, encoding: .utf8) {
+                wire.content = str
+            }
         case .recalled:
             // A recalled message is never re-sent over the wire — the client
             // only stores it locally after receiving a recall notification.
@@ -168,6 +177,21 @@ public enum MessageContentCodec {
         case 80:
             // Android RecallMessageContent.decode() reads operatorId from payload.content.
             return .recalled(operatorId: wire.hasContent ? wire.content : "")
+        case 4:
+            let duration: Int
+            if wire.hasContent,
+               let data = wire.content.data(using: .utf8),
+               let payload = try? JSONDecoder().decode(VideoDurationPayload.self, from: data) {
+                duration = payload.duration
+            } else {
+                duration = 0
+            }
+            return .video(
+                thumbnail: wire.hasData ? wire.data : nil,
+                remoteURL: wire.hasRemoteMediaURL ? wire.remoteMediaURL : nil,
+                localPath: nil,
+                duration: duration
+            )
         default:
             throw DecodeError.unsupportedContentType(wire.type)
         }

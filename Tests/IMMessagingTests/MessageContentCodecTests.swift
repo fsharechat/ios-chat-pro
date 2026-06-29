@@ -321,4 +321,44 @@ final class MessageContentCodecTests: XCTestCase {
         let original = MessageContent.file(name: "report.pdf", size: 204800, remoteURL: "https://cdn/f.pdf", localPath: nil)
         XCTAssertEqual(try MessageContentCodec.decode(MessageContentCodec.encode(original)), original)
     }
+
+    // MARK: - Video (type=4)
+
+    func test_encodeVideo_setsTypeSearchableThumbnailRemoteURLAndDurationJSON() throws {
+        let thumbnail = Data([0xCC, 0xDD])
+        let wire = MessageContentCodec.encode(
+            .video(thumbnail: thumbnail, remoteURL: "https://example.com/v.mp4", localPath: nil, duration: 42)
+        )
+        XCTAssertEqual(wire.type, 4)
+        XCTAssertEqual(wire.searchableContent, "[视频]")
+        XCTAssertEqual(wire.data, thumbnail)
+        XCTAssertEqual(wire.remoteMediaURL, "https://example.com/v.mp4")
+        XCTAssertTrue(wire.hasContent)
+        let parsed = try JSONDecoder().decode([String: Int].self, from: Data(wire.content.utf8))
+        XCTAssertEqual(parsed["duration"], 42)
+    }
+
+    func test_decodeVideo_readsThumbnailRemoteURLAndDuration() throws {
+        var wire = Im_MessageContent()
+        wire.type = 4
+        wire.data = Data([0xCC, 0xDD])
+        wire.remoteMediaURL = "https://example.com/v.mp4"
+        wire.content = "{\"duration\":42}"
+        let content = try MessageContentCodec.decode(wire)
+        XCTAssertEqual(content, .video(thumbnail: Data([0xCC, 0xDD]), remoteURL: "https://example.com/v.mp4", localPath: nil, duration: 42))
+    }
+
+    func test_decodeVideo_missingDurationField_defaultsToZero() throws {
+        var wire = Im_MessageContent()
+        wire.type = 4
+        wire.remoteMediaURL = "https://example.com/v.mp4"
+        let content = try MessageContentCodec.decode(wire)
+        XCTAssertEqual(content, .video(thumbnail: nil, remoteURL: "https://example.com/v.mp4", localPath: nil, duration: 0))
+    }
+
+    func test_videoRoundTrip() throws {
+        let original = MessageContent.video(thumbnail: Data([0xEE]), remoteURL: "https://example.com/v.mp4", localPath: nil, duration: 15)
+        let roundTripped = try MessageContentCodec.decode(MessageContentCodec.encode(original))
+        XCTAssertEqual(roundTripped, original)
+    }
 }

@@ -128,6 +128,12 @@ public final class MessagingService {
                  mentionedType: 0, mentionedTargets: [])
     }
 
+    public func sendVideo(to target: String, conversationType: ConversationType = .single, line: Int = 0, thumbnail: Data?, remoteURL: String, duration: Int) throws {
+        try send(to: target, conversationType: conversationType, line: line,
+                 content: .video(thumbnail: thumbnail, remoteURL: remoteURL, localPath: nil, duration: duration),
+                 mentionedType: 0, mentionedTargets: [])
+    }
+
     /// Sends a CallStart (wire type 400) and persists it as a local call-
     /// record bubble, exactly like `sendText`/`sendImage` persist their
     /// content — this is the one call-signaling type that's a real chat
