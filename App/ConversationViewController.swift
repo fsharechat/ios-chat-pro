@@ -3,6 +3,7 @@ import UIKit
 import PhotosUI
 import UniformTypeIdentifiers
 import AVFoundation
+import AVKit
 import Combine
 import IMKit
 
@@ -135,6 +136,7 @@ final class ConversationViewController: UIViewController {
                 let cell = tableView.dequeueReusableCell(withIdentifier: VideoMessageCell.reuseIdentifier, for: indexPath) as! VideoMessageCell
                 cell.configure(with: VideoBubbleData(thumbnail: message.imageThumbnail, duration: message.videoDuration ?? 0, isOutgoing: message.isOutgoing, isUploading: message.status == .sending, isFailed: message.status == .sendFailure, senderDisplayName: message.senderDisplayName, senderAvatarURL: message.senderAvatarURL))
                 cell.onRetryTapped = { [weak self] in self?.viewModel.retry(row: row) }
+                cell.onTapped = { [weak self] in self?.presentVideoPlayer(urlString: message.imageRemoteURL) }
                 return cell
             case .message(let message):
                 let cell = tableView.dequeueReusableCell(withIdentifier: ImageMessageCell.reuseIdentifier, for: indexPath) as! ImageMessageCell
@@ -334,7 +336,7 @@ final class ConversationViewController: UIViewController {
 
     private func presentImagePicker() {
         var configuration = PHPickerConfiguration(photoLibrary: .shared())
-        configuration.filter = .images
+        configuration.filter = .any(of: [.images, .videos])
         configuration.selectionLimit = 1
         let picker = PHPickerViewController(configuration: configuration)
         picker.delegate = self
@@ -345,6 +347,26 @@ final class ConversationViewController: UIViewController {
         guard let thumbnail = Self.makeThumbnailData(image),
               let fullImageData = image.jpegData(compressionQuality: 0.9) else { return }
         viewModel.sendImage(fullImageData: fullImageData, thumbnail: thumbnail)
+    }
+
+    private func handlePickedVideo(at url: URL) {
+        let asset = AVAsset(url: url)
+        let durationSeconds = Int(CMTimeGetSeconds(asset.duration).rounded())
+
+        let thumbnailData: Data?
+        let generator = AVAssetImageGenerator(asset: asset)
+        generator.appliesPreferredTrackTransform = true
+        if let cgImage = try? generator.copyCGImage(at: .zero, actualTime: nil) {
+            let uiImage = UIImage(cgImage: cgImage)
+            thumbnailData = Self.makeThumbnailData(uiImage)
+        } else {
+            thumbnailData = nil
+        }
+
+        guard let videoData = try? Data(contentsOf: url) else { return }
+        try? FileManager.default.removeItem(at: url)
+
+        viewModel.sendVideo(videoData: videoData, thumbnail: thumbnailData ?? Data(), duration: durationSeconds)
     }
 
     /// Scales the image to at most 200px on its longest side, then iteratively
@@ -368,6 +390,14 @@ final class ConversationViewController: UIViewController {
 
     private func presentImagePreview(thumbnail: Data?, remoteURL: String?) {
         present(ImagePreviewViewController(localThumbnail: thumbnail, remoteURL: remoteURL), animated: true)
+    }
+
+    private func presentVideoPlayer(urlString: String?) {
+        guard let urlString, let url = URL(string: urlString) else { return }
+        let player = AVPlayer(url: url)
+        let playerVC = AVPlayerViewController()
+        playerVC.player = player
+        present(playerVC, animated: true) { player.play() }
     }
 
     private func stopCurrentVoicePlayback() {
@@ -457,10 +487,24 @@ extension ConversationViewController: UITableViewDelegate {
 extension ConversationViewController: PHPickerViewControllerDelegate {
     func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
         picker.dismiss(animated: true)
-        guard let provider = results.first?.itemProvider, provider.canLoadObject(ofClass: UIImage.self) else { return }
-        provider.loadObject(ofClass: UIImage.self) { [weak self] object, _ in
-            guard let image = object as? UIImage else { return }
-            DispatchQueue.main.async { self?.handlePickedImage(image) }
+        guard let provider = results.first?.itemProvider else { return }
+
+        if provider.canLoadObject(ofClass: UIImage.self) {
+            provider.loadObject(ofClass: UIImage.self) { [weak self] object, _ in
+                guard let image = object as? UIImage else { return }
+                DispatchQueue.main.async { self?.handlePickedImage(image) }
+            }
+        } else if provider.hasItemConformingToTypeIdentifier(UTType.movie.identifier) {
+            provider.loadFileRepresentation(forTypeIdentifier: UTType.movie.identifier) { [weak self] url, _ in
+                guard let url else { return }
+                // Copy to a stable temp path — the provided URL is only valid
+                // during this completion handler.
+                let ext = url.pathExtension.lowercased().isEmpty ? "mp4" : url.pathExtension.lowercased()
+                let tempURL = FileManager.default.temporaryDirectory
+                    .appendingPathComponent(UUID().uuidString + "." + ext)
+                guard (try? FileManager.default.copyItem(at: url, to: tempURL)) != nil else { return }
+                DispatchQueue.main.async { self?.handlePickedVideo(at: tempURL) }
+            }
         }
     }
 }

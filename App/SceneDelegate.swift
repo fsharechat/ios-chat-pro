@@ -133,6 +133,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
                 imageUploading: self.environment.mediaUploadService,
                 voiceUploading: self.environment.mediaUploadService,
                 fileUploading: self.environment.mediaUploadService,
+                videoUploading: self.environment.mediaUploadService,
                 target: row.target,
                 conversationType: row.conversationType,
                 line: row.line,
@@ -161,6 +162,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
                     imageUploading: self.environment.mediaUploadService,
                     voiceUploading: self.environment.mediaUploadService,
                     fileUploading: self.environment.mediaUploadService,
+                    videoUploading: self.environment.mediaUploadService,
                     target: groupId,
                     conversationType: .group,
                     currentUserId: self.environment.imClient?.userId ?? ""
@@ -279,6 +281,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
                 imageUploading: self.environment.mediaUploadService,
                 voiceUploading: self.environment.mediaUploadService,
                 fileUploading: self.environment.mediaUploadService,
+                videoUploading: self.environment.mediaUploadService,
                 target: row.uid,
                 conversationType: .single,
                 currentUserId: self.environment.imClient?.userId ?? ""
@@ -317,6 +320,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
                     imageUploading: self.environment.mediaUploadService,
                     voiceUploading: self.environment.mediaUploadService,
                     fileUploading: self.environment.mediaUploadService,
+                    videoUploading: self.environment.mediaUploadService,
                     target: groupId,
                     conversationType: .group,
                     line: 0,
