@@ -106,7 +106,7 @@ public enum MessageContentCodec {
             wire.content = "\(size)"
             if let remoteURL { wire.remoteMediaURL = remoteURL }
         case .video(let thumbnail, let remoteURL, _, let duration):
-            wire.type = 4
+            wire.type = 6
             wire.searchableContent = "[视频]"
             if let thumbnail { wire.data = thumbnail }
             if let remoteURL { wire.remoteMediaURL = remoteURL }
@@ -177,7 +177,7 @@ public enum MessageContentCodec {
         case 80:
             // Android RecallMessageContent.decode() reads operatorId from payload.content.
             return .recalled(operatorId: wire.hasContent ? wire.content : "")
-        case 4:
+        case 6:
             let duration: Int
             if wire.hasContent,
                let data = wire.content.data(using: .utf8),
@@ -219,7 +219,7 @@ public enum MessageContentCodec {
             return .groupNotification(type: type, operatorUid: parsed.o ?? "", memberUids: [], value: parsed.n)
         case .dismissGroup, .changeGroupPortrait:
             return .groupNotification(type: type, operatorUid: parsed.o ?? "", memberUids: [], value: nil)
-        case .text, .image, .video, .quitGroup, .callStart, .voice, .file, .recalled:
+        case .text, .image, .video, .quitGroup, .callStart, .voice, .file, .recalled, .location:
             return .groupNotification(type: type, operatorUid: parsed.o ?? "", memberUids: [], value: nil) // unreachable
         }
     }

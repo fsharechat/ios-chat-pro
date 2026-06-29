@@ -38,8 +38,10 @@ public enum MessageContentType: Int, Codable, Equatable {
     case text = 1
     case voice = 2
     case image = 3
-    case video = 4
+    // type 4 = LocationMessageContent (WildFireChat standard), kept for DB compat
+    case location = 4
     case file = 5
+    case video = 6
     case createGroup = 104
     case addGroupMember = 105
     case kickoffGroupMember = 106

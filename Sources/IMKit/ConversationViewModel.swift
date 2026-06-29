@@ -336,7 +336,7 @@ public final class ConversationViewModel {
             return "\(operatorName)修改群名为「\(value ?? "")」"
         case .changeGroupPortrait:
             return "\(operatorName)修改了群头像"
-        case .text, .image, .video, .callStart, .voice, .file, .recalled:
+        case .text, .image, .video, .callStart, .voice, .file, .recalled, .location:
             return "" // unreachable: makeRow only calls this for .groupNotification content
         }
     }

@@ -204,7 +204,7 @@ final class MessageContentCodecTests: XCTestCase {
 
     func test_decodeCallRecord_parsesAllFields() throws {
         var wire = Im_MessageContent()
-        wire.type = 400
+        wire.type = 600
         wire.searchableContent = "call-1"
         wire.data = Data("""
         {"t":"u2","a":1,"c":5000,"e":65000,"s":2}
@@ -217,7 +217,7 @@ final class MessageContentCodecTests: XCTestCase {
 
     func test_decodeCallRecord_missingOptionalFields_defaultToZero() throws {
         var wire = Im_MessageContent()
-        wire.type = 400
+        wire.type = 600
         wire.searchableContent = "call-1"
         wire.data = Data("""
         {"t":"u2","a":0}
@@ -340,7 +340,7 @@ final class MessageContentCodecTests: XCTestCase {
 
     func test_decodeVideo_readsThumbnailRemoteURLAndDuration() throws {
         var wire = Im_MessageContent()
-        wire.type = 4
+        wire.type = 6
         wire.data = Data([0xCC, 0xDD])
         wire.remoteMediaURL = "https://example.com/v.mp4"
         wire.content = "{\"duration\":42}"
@@ -350,7 +350,7 @@ final class MessageContentCodecTests: XCTestCase {
 
     func test_decodeVideo_missingDurationField_defaultsToZero() throws {
         var wire = Im_MessageContent()
-        wire.type = 4
+        wire.type = 6
         wire.remoteMediaURL = "https://example.com/v.mp4"
         let content = try MessageContentCodec.decode(wire)
         XCTAssertEqual(content, .video(thumbnail: nil, remoteURL: "https://example.com/v.mp4", localPath: nil, duration: 0))

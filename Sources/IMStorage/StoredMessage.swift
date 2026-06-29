@@ -110,6 +110,8 @@ public struct StoredMessage: Codable, Equatable, FetchableRecord, MutablePersist
             return .file(name: searchableContent ?? "", size: Int(textContent ?? "0") ?? 0, remoteURL: mediaRemoteURL, localPath: mediaLocalPath)
         case .recalled:
             return .recalled(operatorId: textContent ?? "")
+        case .location:
+            return .text(searchableContent ?? "[位置]")
         }
     }
 
