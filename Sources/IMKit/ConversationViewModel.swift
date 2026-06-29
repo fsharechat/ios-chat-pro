@@ -121,7 +121,7 @@ public final class ConversationViewModel {
         case .message(let message):
             guard message.status == .sendFailure else { return }
             try? messageSending?.resend(localMessageId: message.localMessageId)
-        case .systemTip, .timeHeader:
+        case .systemTip, .pendingVideo, .timeHeader:
             break
         }
     }

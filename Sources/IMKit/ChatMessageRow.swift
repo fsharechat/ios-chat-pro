@@ -27,6 +27,29 @@ public struct PendingImageUpload: Equatable, Hashable {
     }
 }
 
+/// A video message still uploading — lives only in `ConversationViewModel`'s
+/// in-memory state until upload succeeds, same lifecycle as `PendingImageUpload`.
+public struct PendingVideoUpload: Equatable, Hashable {
+    public enum State: Equatable, Hashable {
+        case uploading
+        case failed
+    }
+
+    public let id: UUID
+    public let thumbnail: Data
+    public let videoData: Data
+    public let duration: Int
+    public var state: State
+
+    public init(id: UUID, thumbnail: Data, videoData: Data, duration: Int, state: State) {
+        self.id = id
+        self.thumbnail = thumbnail
+        self.videoData = videoData
+        self.duration = duration
+        self.state = state
+    }
+}
+
 /// Flattened, `Hashable` presentation of a `StoredMessage`. `senderDisplayName`/
 /// `senderAvatarURL` are non-nil only for a group-chat message I received
 /// (never for single chat, never for my own outgoing messages — there's no
@@ -42,6 +65,9 @@ public struct StoredMessageRow: Equatable, Hashable {
     public let imageRemoteURL: String?
     public let senderDisplayName: String?
     public let senderAvatarURL: String?
+    /// Non-nil only for video messages — used by `ConversationViewController`
+    /// to dispatch to `VideoMessageCell` instead of `ImageMessageCell`.
+    public let videoDuration: Int?
 
     public init(
         storageId: Int64,
@@ -53,7 +79,8 @@ public struct StoredMessageRow: Equatable, Hashable {
         imageThumbnail: Data?,
         imageRemoteURL: String?,
         senderDisplayName: String? = nil,
-        senderAvatarURL: String? = nil
+        senderAvatarURL: String? = nil,
+        videoDuration: Int? = nil
     ) {
         self.storageId = storageId
         self.localMessageId = localMessageId
@@ -65,6 +92,7 @@ public struct StoredMessageRow: Equatable, Hashable {
         self.imageRemoteURL = imageRemoteURL
         self.senderDisplayName = senderDisplayName
         self.senderAvatarURL = senderAvatarURL
+        self.videoDuration = videoDuration
     }
 }
 
@@ -89,6 +117,7 @@ public struct SystemTipRow: Equatable, Hashable {
 public enum ChatMessageRow: Equatable, Hashable {
     case message(StoredMessageRow)
     case pendingImage(PendingImageUpload)
+    case pendingVideo(PendingVideoUpload)
     case systemTip(SystemTipRow)
     /// text: formatted display string; anchorId: storageId of the immediately
     /// following message, making each header globally unique even when two
@@ -105,7 +134,7 @@ extension ChatMessageRow {
         switch self {
         case .message(let row): return row.storageId
         case .systemTip(let row): return row.storageId
-        case .pendingImage, .timeHeader: return nil
+        case .pendingImage, .pendingVideo, .timeHeader: return nil
         }
     }
 
@@ -113,7 +142,7 @@ extension ChatMessageRow {
         switch self {
         case .message(let row): return row.timestamp
         case .systemTip(let row): return row.timestamp
-        case .pendingImage, .timeHeader: return nil
+        case .pendingImage, .pendingVideo, .timeHeader: return nil
         }
     }
 }

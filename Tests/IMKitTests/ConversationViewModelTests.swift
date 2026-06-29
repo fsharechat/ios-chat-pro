@@ -25,6 +25,12 @@ private final class FakeMessageSending: MessageSending {
 
     func sendFile(to target: String, conversationType: ConversationType, line: Int, name: String, size: Int, remoteURL: String) throws {}
 
+    private(set) var sentVideos: [(target: String, thumbnail: Data?, remoteURL: String, duration: Int)] = []
+
+    func sendVideo(to target: String, conversationType: ConversationType, line: Int, thumbnail: Data?, remoteURL: String, duration: Int) throws {
+        sentVideos.append((target, thumbnail, remoteURL, duration))
+    }
+
     func resend(localMessageId: Int64) throws {
         resentLocalMessageIds.append(localMessageId)
     }
