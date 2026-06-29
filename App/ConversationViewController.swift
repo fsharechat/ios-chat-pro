@@ -85,6 +85,7 @@ final class ConversationViewController: UIViewController {
     private func layoutViews() {
         tableView.register(TextMessageCell.self, forCellReuseIdentifier: TextMessageCell.reuseIdentifier)
         tableView.register(ImageMessageCell.self, forCellReuseIdentifier: ImageMessageCell.reuseIdentifier)
+        tableView.register(VideoMessageCell.self, forCellReuseIdentifier: VideoMessageCell.reuseIdentifier)
         tableView.register(VoiceMessageCell.self, forCellReuseIdentifier: VoiceMessageCell.reuseIdentifier)
         tableView.register(FileMessageCell.self, forCellReuseIdentifier: FileMessageCell.reuseIdentifier)
         tableView.register(SystemTipMessageCell.self, forCellReuseIdentifier: SystemTipMessageCell.reuseIdentifier)
@@ -130,6 +131,11 @@ final class ConversationViewController: UIViewController {
                 cell.configure(with: message)
                 cell.onRetryTapped = { [weak self] in self?.viewModel.retry(row: row) }
                 return cell
+            case .message(let message) where message.videoDuration != nil:
+                let cell = tableView.dequeueReusableCell(withIdentifier: VideoMessageCell.reuseIdentifier, for: indexPath) as! VideoMessageCell
+                cell.configure(with: VideoBubbleData(thumbnail: message.imageThumbnail, duration: message.videoDuration ?? 0, isOutgoing: message.isOutgoing, isUploading: message.status == .sending, isFailed: message.status == .sendFailure, senderDisplayName: message.senderDisplayName, senderAvatarURL: message.senderAvatarURL))
+                cell.onRetryTapped = { [weak self] in self?.viewModel.retry(row: row) }
+                return cell
             case .message(let message):
                 let cell = tableView.dequeueReusableCell(withIdentifier: ImageMessageCell.reuseIdentifier, for: indexPath) as! ImageMessageCell
                 cell.configure(with: ImageBubbleData(thumbnail: message.imageThumbnail, isOutgoing: message.isOutgoing, isUploading: message.status == .sending, isFailed: message.status == .sendFailure, senderDisplayName: message.senderDisplayName, senderAvatarURL: message.senderAvatarURL))
@@ -141,6 +147,11 @@ final class ConversationViewController: UIViewController {
                 cell.configure(with: ImageBubbleData(thumbnail: pending.thumbnail, isOutgoing: true, isUploading: pending.state == .uploading, isFailed: pending.state == .failed))
                 cell.onRetryTapped = { [weak self] in self?.viewModel.retry(row: row) }
                 cell.onTapped = { [weak self] in self?.presentImagePreview(thumbnail: pending.thumbnail, remoteURL: nil) }
+                return cell
+            case .pendingVideo(let pending):
+                let cell = tableView.dequeueReusableCell(withIdentifier: VideoMessageCell.reuseIdentifier, for: indexPath) as! VideoMessageCell
+                cell.configurePending(pending)
+                cell.onRetryTapped = { [weak self] in self?.viewModel.retry(row: row) }
                 return cell
             case .systemTip(let tip):
                 let cell = tableView.dequeueReusableCell(withIdentifier: SystemTipMessageCell.reuseIdentifier, for: indexPath) as! SystemTipMessageCell
@@ -265,6 +276,7 @@ final class ConversationViewController: UIViewController {
         switch row {
         case .message(let message): return "message-\(message.storageId)"
         case .pendingImage(let pending): return "pending-\(pending.id)"
+        case .pendingVideo(let pending): return "pendingVideo-\(pending.id)"
         case .systemTip(let tip): return "systemTip-\(tip.storageId)"
         case .timeHeader(let text, let anchorId): return "timeHeader-\(anchorId)-\(text)"
         case nil: return nil
