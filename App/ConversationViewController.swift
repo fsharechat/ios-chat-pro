@@ -350,23 +350,28 @@ final class ConversationViewController: UIViewController {
     }
 
     private func handlePickedVideo(at url: URL) {
-        let asset = AVAsset(url: url)
-        let durationSeconds = Int(CMTimeGetSeconds(asset.duration).rounded())
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self else { return }
+            let asset = AVAsset(url: url)
+            let durationSeconds = Int(CMTimeGetSeconds(asset.duration).rounded())
 
-        let thumbnailData: Data?
-        let generator = AVAssetImageGenerator(asset: asset)
-        generator.appliesPreferredTrackTransform = true
-        if let cgImage = try? generator.copyCGImage(at: .zero, actualTime: nil) {
-            let uiImage = UIImage(cgImage: cgImage)
-            thumbnailData = Self.makeThumbnailData(uiImage)
-        } else {
-            thumbnailData = nil
+            let thumbnailData: Data?
+            let generator = AVAssetImageGenerator(asset: asset)
+            generator.appliesPreferredTrackTransform = true
+            if let cgImage = try? generator.copyCGImage(at: .zero, actualTime: nil) {
+                let uiImage = UIImage(cgImage: cgImage)
+                thumbnailData = Self.makeThumbnailData(uiImage)
+            } else {
+                thumbnailData = nil
+            }
+
+            guard let videoData = try? Data(contentsOf: url) else { return }
+            try? FileManager.default.removeItem(at: url)
+
+            DispatchQueue.main.async {
+                self.viewModel.sendVideo(videoData: videoData, thumbnail: thumbnailData ?? Data(), duration: durationSeconds)
+            }
         }
-
-        guard let videoData = try? Data(contentsOf: url) else { return }
-        try? FileManager.default.removeItem(at: url)
-
-        viewModel.sendVideo(videoData: videoData, thumbnail: thumbnailData ?? Data(), duration: durationSeconds)
     }
 
     /// Scales the image to at most 200px on its longest side, then iteratively
