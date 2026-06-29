@@ -161,8 +161,16 @@ public final class ReceiveMessageHandler: MessageHandler {
             && (mentionedType == 2 || (mentionedType == 1 && mentionedTargets.contains(myUserId())))
 
         do {
+            // Server-generated messages (group notifications, etc.) have
+            // localMessageID == 0 because the client never assigned one.
+            // Inserting multiple such messages as direction=.send would violate
+            // the partial unique index on (localMessageId) WHERE direction=send.
+            // Use the server-assigned messageUID as a unique surrogate in that case.
+            let storedLocalMessageId = (direction == .send && wireMessage.localMessageID == 0)
+                ? wireMessage.messageID
+                : wireMessage.localMessageID
             let inserted = try storage.messages.insert(StoredMessage(
-                localMessageId: wireMessage.localMessageID,
+                localMessageId: storedLocalMessageId,
                 messageUid: wireMessage.messageID,
                 conversationType: conversationType,
                 target: target,
