@@ -54,6 +54,13 @@ public final class MediaUploadService {
         upload(data, mediaType: 4, fileName: fileName, completion: completion)
     }
 
+    /// Uploads video data and returns the remote URL string.
+    /// mediaType=3 matches WildFireChat's server-side convention (1=image,
+    /// 2=voice, 3=video, 4=file).
+    public func uploadVideo(_ data: Data, fileName: String, completion: @escaping (Result<String, MediaUploadError>) -> Void) {
+        upload(data, mediaType: 3, fileName: fileName, completion: completion)
+    }
+
     private func upload(
         _ data: Data,
         mediaType: Int32,
