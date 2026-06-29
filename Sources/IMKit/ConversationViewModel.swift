@@ -13,6 +13,7 @@ public final class ConversationViewModel {
     private let imageUploading: ImageUploading?
     private let voiceUploading: VoiceUploading?
     private let fileUploading: FileUploading?
+    private let videoUploading: VideoUploading?
     private let target: String
     private let conversationType: ConversationType
     private let line: Int
@@ -28,6 +29,7 @@ public final class ConversationViewModel {
     private var olderRows: [ChatMessageRow] = []
     private var liveRows: [ChatMessageRow] = []
     private var pendingImages: [PendingImageUpload] = []
+    private var pendingVideos: [PendingVideoUpload] = []
     private var lastMessages: [StoredMessage] = []
     private var cancellable: AnyCancellable?
 
@@ -37,6 +39,7 @@ public final class ConversationViewModel {
         imageUploading: ImageUploading?,
         voiceUploading: VoiceUploading? = nil,
         fileUploading: FileUploading? = nil,
+        videoUploading: VideoUploading? = nil,
         target: String,
         conversationType: ConversationType = .single,
         line: Int = 0,
@@ -48,6 +51,7 @@ public final class ConversationViewModel {
         self.imageUploading = imageUploading
         self.voiceUploading = voiceUploading
         self.fileUploading = fileUploading
+        self.videoUploading = videoUploading
         self.target = target
         self.conversationType = conversationType
         self.line = line
@@ -93,6 +97,33 @@ public final class ConversationViewModel {
         }
     }
 
+    public func sendVideo(videoData: Data, thumbnail: Data, duration: Int) {
+        let pending = PendingVideoUpload(id: UUID(), thumbnail: thumbnail, videoData: videoData, duration: duration, state: .uploading)
+        pendingVideos.append(pending)
+        publishRows()
+        startVideoUpload(pending)
+    }
+
+    private func startVideoUpload(_ pending: PendingVideoUpload) {
+        let fileName = "\(UUID().uuidString).mp4"
+        videoUploading?.uploadVideo(pending.videoData, fileName: fileName) { [weak self] result in
+            guard let self else { return }
+            switch result {
+            case .success(let remoteURL):
+                try? self.messageSending?.sendVideo(
+                    to: self.target, conversationType: self.conversationType, line: self.line,
+                    thumbnail: pending.thumbnail, remoteURL: remoteURL, duration: pending.duration
+                )
+                self.pendingVideos.removeAll { $0.id == pending.id }
+            case .failure:
+                if let index = self.pendingVideos.firstIndex(where: { $0.id == pending.id }) {
+                    self.pendingVideos[index].state = .failed
+                }
+            }
+            self.publishRows()
+        }
+    }
+
     /// Candidate members for the composer's "@" picker — empty for a
     /// non-group conversation. Excludes `.removed` members (same filter
     /// `GroupStore.members(groupId:)` already applies).
@@ -118,10 +149,15 @@ public final class ConversationViewModel {
             pendingImages[index].state = .uploading
             publishRows()
             startUpload(pendingImages[index])
+        case .pendingVideo(let pending):
+            guard let index = pendingVideos.firstIndex(where: { $0.id == pending.id }) else { return }
+            pendingVideos[index].state = .uploading
+            publishRows()
+            startVideoUpload(pendingVideos[index])
         case .message(let message):
             guard message.status == .sendFailure else { return }
             try? messageSending?.resend(localMessageId: message.localMessageId)
-        case .systemTip, .pendingVideo, .timeHeader:
+        case .systemTip, .timeHeader:
             break
         }
     }
@@ -203,7 +239,7 @@ public final class ConversationViewModel {
     }
 
     private func publishRows() {
-        rows = olderRows + liveRows + pendingImages.map { .pendingImage($0) }
+        rows = olderRows + liveRows + pendingImages.map { .pendingImage($0) } + pendingVideos.map { .pendingVideo($0) }
     }
 
     /// `message.id` is always non-nil for a row fetched back from the
@@ -229,7 +265,7 @@ public final class ConversationViewModel {
             let sizeStr = size > 1024*1024 ? String(format: "%.1fMB", Double(size)/1024/1024) : "\(size/1024)KB"
             return .message(buildStoredMessageRow(message, text: "[文件] \(name) \(sizeStr)", imageThumbnail: nil, imageRemoteURL: nil))
         case .video(let thumbnail, let remoteURL, _, let duration):
-            return .message(buildStoredMessageRow(message, text: "[视频] \(duration)秒", imageThumbnail: thumbnail, imageRemoteURL: remoteURL))
+            return .message(buildStoredMessageRow(message, text: nil, imageThumbnail: thumbnail, imageRemoteURL: remoteURL, videoDuration: duration))
         case .recalled(let operatorId):
             let displayName = resolveDisplayName(operatorId)
             return .systemTip(SystemTipRow(
@@ -240,7 +276,7 @@ public final class ConversationViewModel {
         }
     }
 
-    private func buildStoredMessageRow(_ message: StoredMessage, text: String?, imageThumbnail: Data?, imageRemoteURL: String?) -> StoredMessageRow {
+    private func buildStoredMessageRow(_ message: StoredMessage, text: String?, imageThumbnail: Data?, imageRemoteURL: String?, videoDuration: Int? = nil) -> StoredMessageRow {
         var senderDisplayName: String?
         // Always resolve the avatar — own portrait for outgoing, sender's for incoming.
         let avatarUid = message.direction == .send ? currentUserId : message.from
@@ -264,7 +300,8 @@ public final class ConversationViewModel {
             imageThumbnail: imageThumbnail,
             imageRemoteURL: imageRemoteURL,
             senderDisplayName: senderDisplayName,
-            senderAvatarURL: senderAvatarURL
+            senderAvatarURL: senderAvatarURL,
+            videoDuration: videoDuration
         )
     }
 

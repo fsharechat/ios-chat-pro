@@ -36,6 +36,22 @@ private final class FakeMessageSending: MessageSending {
     }
 }
 
+private final class FakeVideoUploading: VideoUploading {
+    var nextResult: Result<String, MediaUploadError> = .failure(.invalidUploadURL)
+    var completesSynchronously = true
+    private(set) var uploadedData: [Data] = []
+    private(set) var pendingCompletions: [(Result<String, MediaUploadError>) -> Void] = []
+
+    func uploadVideo(_ data: Data, fileName: String, completion: @escaping (Result<String, MediaUploadError>) -> Void) {
+        uploadedData.append(data)
+        if completesSynchronously {
+            completion(nextResult)
+        } else {
+            pendingCompletions.append(completion)
+        }
+    }
+}
+
 private final class FakeImageUploading: ImageUploading {
     var nextResult: Result<String, MediaUploadError> = .failure(.invalidUploadURL)
     // The real `MediaUploadService` always completes asynchronously (network
@@ -244,7 +260,7 @@ final class ConversationViewModelTests: XCTestCase {
             switch row {
             case .message(let m): return m.text
             case .systemTip: return "<systemTip>"
-            case .pendingImage, .timeHeader: return nil
+            case .pendingImage, .pendingVideo, .timeHeader: return nil
             }
         }, ["msg0", "<systemTip>", "msg2", "msg3", "msg4", "msg5"])
     }
@@ -431,6 +447,52 @@ final class ConversationViewModelTests: XCTestCase {
             return nil
         }
         XCTAssertTrue(tipRows.contains { $0.text == "unknown-uid撤回了一条消息" }, "rows: \(unknownUidViewModel.rows)")
+    }
+
+    func test_sendVideo_whileUploading_showsPendingVideoRow() {
+        let fakeVideo = FakeVideoUploading()
+        fakeVideo.completesSynchronously = false
+        let vm = ConversationViewModel(
+            storage: storage, messageSending: sending, imageUploading: uploading,
+            videoUploading: fakeVideo, target: "them", pageSize: 3, currentUserId: "me"
+        )
+        vm.sendVideo(videoData: Data([0x01, 0x02]), thumbnail: Data([0x03]), duration: 10)
+        XCTAssertEqual(vm.rows.count, 1)
+        guard case .pendingVideo(let p) = vm.rows.first else {
+            return XCTFail("Expected .pendingVideo, got \(String(describing: vm.rows.first))")
+        }
+        XCTAssertEqual(p.state, .uploading)
+        XCTAssertEqual(p.duration, 10)
+    }
+
+    func test_sendVideo_onUploadSuccess_removePendingAndSendsMessage() {
+        let fakeVideo = FakeVideoUploading()
+        fakeVideo.nextResult = .success("https://example.com/v.mp4")
+        fakeVideo.completesSynchronously = true
+        let vm = ConversationViewModel(
+            storage: storage, messageSending: sending, imageUploading: uploading,
+            videoUploading: fakeVideo, target: "them", pageSize: 3, currentUserId: "me"
+        )
+        vm.sendVideo(videoData: Data([0x01]), thumbnail: Data([0x02]), duration: 5)
+        // pendingVideo removed after successful upload
+        XCTAssertTrue(vm.rows.allSatisfy { if case .pendingVideo = $0 { return false }; return true })
+        XCTAssertEqual(sending.sentVideos.first?.remoteURL, "https://example.com/v.mp4")
+        XCTAssertEqual(sending.sentVideos.first?.duration, 5)
+    }
+
+    func test_sendVideo_onUploadFailure_showsFailedPendingRow() {
+        let fakeVideo = FakeVideoUploading()
+        fakeVideo.nextResult = .failure(.invalidUploadURL)
+        fakeVideo.completesSynchronously = true
+        let vm = ConversationViewModel(
+            storage: storage, messageSending: sending, imageUploading: uploading,
+            videoUploading: fakeVideo, target: "them", pageSize: 3, currentUserId: "me"
+        )
+        vm.sendVideo(videoData: Data([0x01]), thumbnail: Data([0x02]), duration: 5)
+        guard case .pendingVideo(let p) = vm.rows.first else {
+            return XCTFail("Expected .pendingVideo")
+        }
+        XCTAssertEqual(p.state, .failed)
     }
 
     private func makeGroupViewModel(target: String) -> ConversationViewModel {
