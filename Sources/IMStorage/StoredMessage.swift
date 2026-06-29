@@ -24,6 +24,9 @@ public enum MessageContent: Equatable {
     /// as the call progresses, it is never re-sent over the wire after the
     /// initial invite.
     case callRecord(callId: String, targetId: String, audioOnly: Bool, status: Int, connectTime: Int64, endTime: Int64)
+    /// Wire type 4. `duration` is in seconds. Fields follow the same
+    /// optional-presence convention as `.image` and `.voice`.
+    case video(thumbnail: Data?, remoteURL: String?, localPath: String?, duration: Int)
     /// Wire type 2. `duration` is in seconds. `remoteURL`/`localPath` follow
     /// the same optional-presence convention as `.image` — remote is nil until
     /// uploaded, local is nil until downloaded.
@@ -93,6 +96,13 @@ public struct StoredMessage: Codable, Equatable, FetchableRecord, MutablePersist
                 status: callStatus,
                 connectTime: callConnectTime,
                 endTime: callEndTime
+            )
+        case .video:
+            return .video(
+                thumbnail: mediaThumbnail,
+                remoteURL: mediaRemoteURL,
+                localPath: mediaLocalPath,
+                duration: Int(textContent ?? "0") ?? 0
             )
         case .voice:
             return .voice(remoteURL: mediaRemoteURL, localPath: mediaLocalPath, duration: Int(textContent ?? "0") ?? 0)
@@ -261,6 +271,17 @@ public struct StoredMessage: Codable, Equatable, FetchableRecord, MutablePersist
             mediaRemoteURL = remoteURL
             mediaLocalPath = localPath
             mediaThumbnail = nil
+            groupNotificationOperator = nil
+            groupNotificationMembersRaw = nil
+            groupNotificationValue = nil
+            callId = nil; callTargetId = nil; callAudioOnly = false; callStatus = 0; callConnectTime = 0; callEndTime = 0
+        case .video(let thumbnail, let remoteURL, let localPath, let duration):
+            contentType = .video
+            textContent = "\(duration)"
+            searchableContent = "[视频]"
+            mediaRemoteURL = remoteURL
+            mediaLocalPath = localPath
+            mediaThumbnail = thumbnail
             groupNotificationOperator = nil
             groupNotificationMembersRaw = nil
             groupNotificationValue = nil

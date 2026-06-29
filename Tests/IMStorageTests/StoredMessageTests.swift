@@ -2,6 +2,46 @@ import XCTest
 import Foundation
 @testable import IMStorage
 
+final class VideoMessageTests: XCTestCase {
+    func test_videoMessage_initFlattensContentToColumns() {
+        let thumbnail = Data([0xAA, 0xBB])
+        let message = StoredMessage(
+            localMessageId: 10, conversationType: .single, target: "u2", from: "u1",
+            content: .video(thumbnail: thumbnail, remoteURL: "https://example.com/v.mp4", localPath: nil, duration: 42),
+            timestamp: 1_000, status: .sent, direction: .send
+        )
+        XCTAssertEqual(message.contentType, .video)
+        XCTAssertEqual(message.searchableContent, "[视频]")
+        XCTAssertEqual(message.textContent, "42")
+        XCTAssertEqual(message.mediaThumbnail, thumbnail)
+        XCTAssertEqual(message.mediaRemoteURL, "https://example.com/v.mp4")
+        XCTAssertNil(message.mediaLocalPath)
+        XCTAssertNil(message.groupNotificationOperator)
+        XCTAssertNil(message.callId)
+    }
+
+    func test_videoMessage_contentPropertyRoundTrips() {
+        let thumbnail = Data([0xAA])
+        let original = MessageContent.video(thumbnail: thumbnail, remoteURL: "https://example.com/v.mp4", localPath: nil, duration: 42)
+        let message = StoredMessage(
+            localMessageId: 10, conversationType: .single, target: "u2", from: "u1",
+            content: original, timestamp: 1_000, status: .sent, direction: .send
+        )
+        XCTAssertEqual(message.content, original)
+    }
+
+    func test_videoMessage_setContent_clearsPreviousColumns() {
+        var message = StoredMessage(
+            localMessageId: 10, conversationType: .single, target: "u2", from: "u1",
+            content: .text("hello"), timestamp: 1_000, status: .sent, direction: .send
+        )
+        message.setContent(.video(thumbnail: nil, remoteURL: "https://example.com/v.mp4", localPath: nil, duration: 10))
+        XCTAssertNil(message.groupNotificationOperator)
+        XCTAssertNil(message.callId)
+        XCTAssertEqual(message.contentType, .video)
+    }
+}
+
 final class StoredMessageTests: XCTestCase {
     func test_textMessage_initFlattensContentAndSetsSearchableContent() {
         let message = StoredMessage(

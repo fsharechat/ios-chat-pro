@@ -99,6 +99,12 @@ public enum MessageContentCodec {
             wire.searchableContent = name
             wire.content = "\(size)"
             if let remoteURL { wire.remoteMediaURL = remoteURL }
+        case .video(let thumbnail, let remoteURL, _, let duration):
+            wire.type = 4
+            wire.searchableContent = "[视频]"
+            wire.content = "\(duration)"
+            if let thumbnail { wire.data = thumbnail }
+            if let remoteURL { wire.remoteMediaURL = remoteURL }
         case .recalled:
             // A recalled message is never re-sent over the wire — the client
             // only stores it locally after receiving a recall notification.
@@ -189,7 +195,7 @@ public enum MessageContentCodec {
             return .groupNotification(type: type, operatorUid: parsed.o ?? "", memberUids: [], value: parsed.n)
         case .dismissGroup, .changeGroupPortrait:
             return .groupNotification(type: type, operatorUid: parsed.o ?? "", memberUids: [], value: nil)
-        case .text, .image, .quitGroup, .callStart, .voice, .file, .recalled:
+        case .text, .image, .video, .quitGroup, .callStart, .voice, .file, .recalled:
             return .groupNotification(type: type, operatorUid: parsed.o ?? "", memberUids: [], value: nil) // unreachable
         }
     }

@@ -38,6 +38,7 @@ public enum MessageContentType: Int, Codable, Equatable {
     case text = 1
     case voice = 2
     case image = 3
+    case video = 4
     case file = 5
     case createGroup = 104
     case addGroupMember = 105
