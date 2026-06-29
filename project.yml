@@ -1,6 +1,6 @@
 name: ios-chat-pro
 options:
-  bundleIdPrefix: com.fshare.ios-chat-pro
+  bundleIdPrefix: cn.comsince
   deploymentTarget:
     iOS: "15.0"
 packages:
@@ -40,8 +40,8 @@ targets:
         NSMicrophoneUsageDescription: "语音/视频通话需要使用麦克风"
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.fshare.ios-chat-pro.App
-        ASSETCATALOG_COMPILER_APPICON_NAME: ""
+        PRODUCT_BUNDLE_IDENTIFIER: cn.comsince.fschat
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: S9PWD6X38T
     dependencies:
