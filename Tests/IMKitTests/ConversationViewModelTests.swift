@@ -495,6 +495,19 @@ final class ConversationViewModelTests: XCTestCase {
         XCTAssertEqual(p.state, .failed)
     }
 
+    func testMakeRow_video_setsVideoDuration() throws {
+        try storage.messages.insert(StoredMessage(
+            localMessageId: 1, conversationType: .single, target: "them", from: "them",
+            content: .video(thumbnail: Data([0xFF]), remoteURL: "https://example.com/v.mp4", localPath: nil, duration: 42),
+            timestamp: 1_000, status: .unread, direction: .receive
+        ))
+
+        waitForFirstNonEmptyRows()
+
+        guard case .message(let m)? = viewModel.rows.first else { return XCTFail("expected a message row") }
+        XCTAssertEqual(m.videoDuration, 42)
+    }
+
     private func makeGroupViewModel(target: String) -> ConversationViewModel {
         ConversationViewModel(storage: storage, messageSending: nil, imageUploading: nil, target: target, conversationType: .group, currentUserId: "me")
     }
