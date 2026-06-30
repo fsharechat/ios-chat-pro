@@ -116,20 +116,23 @@ final class LocationPickerViewController: UIViewController {
     }
 
     @objc private func sendTapped() {
+        sendButton.isEnabled = false
         let center = mapView.centerCoordinate
         let title = titleLabel.text ?? "位置"
         let region = mapView.region
         let opts = MKMapSnapshotter.Options()
         opts.region = region
-        opts.size = CGSize(width: 400, height: 240)
+        opts.size = CGSize(width: 200, height: 120)
         opts.scale = 2
         MKMapSnapshotter(options: opts).start { [weak self] snapshot, _ in
-            guard let self else { return }
             let image = snapshot?.image ?? UIImage()
-            let jpeg = image.jpegData(compressionQuality: 0.75) ?? Data()
+            guard let jpeg = image.jpegData(compressionQuality: 0.75), !jpeg.isEmpty else {
+                DispatchQueue.main.async { self?.sendButton.isEnabled = true }
+                return
+            }
             DispatchQueue.main.async {
-                self.onPicked?(center.latitude, center.longitude, title, jpeg)
-                self.dismiss(animated: true)
+                self?.onPicked?(center.latitude, center.longitude, title, jpeg)
+                self?.dismiss(animated: true)
             }
         }
     }
