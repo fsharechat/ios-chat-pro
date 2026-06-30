@@ -132,6 +132,20 @@ public final class ConversationListViewModel {
         )
     }
 
+    public func setTop(_ isTop: Bool, for row: ConversationRow) throws {
+        try storage.conversations.setTop(isTop, conversationType: row.conversationType, target: row.target, line: row.line)
+    }
+
+    public func clearConversation(_ row: ConversationRow) throws {
+        try storage.messages.clearMessages(conversationType: row.conversationType, target: row.target, line: row.line)
+        try storage.conversations.resetLastMessage(conversationType: row.conversationType, target: row.target, line: row.line)
+    }
+
+    public func deleteConversation(_ row: ConversationRow) throws {
+        try storage.messages.clearMessages(conversationType: row.conversationType, target: row.target, line: row.line)
+        try storage.conversations.deleteConversation(conversationType: row.conversationType, target: row.target, line: row.line)
+    }
+
     /// Returns a recall notice string if `lastMessage` is a recalled message,
     /// `nil` otherwise. Caller falls through to normal preview text on `nil`.
     /// Uses "您" for the current user (matching Android's convention) and the

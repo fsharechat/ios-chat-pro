@@ -263,6 +263,52 @@ final class ConversationListViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.rows.first?.previewText, "Bob撤回了一条消息")
     }
 
+    func test_setTop_true_updatesIsTopInRow() throws {
+        try storage.conversations.recordIncomingMessage(conversationType: .single, target: "them", line: 0, messageUid: 1, timestamp: 1_000, incrementUnread: false)
+        _ = try waitForRow(target: "them")
+        let row = try XCTUnwrap(viewModel.rows.first { $0.target == "them" })
+
+        try viewModel.setTop(true, for: row)
+
+        let expectation = expectation(description: "isTop becomes true")
+        expectation.assertForOverFulfill = false
+        viewModel.$rows.sink { rows in
+            if rows.first(where: { $0.target == "them" })?.isTop == true { expectation.fulfill() }
+        }.store(in: &cancellables)
+        wait(for: [expectation], timeout: 2)
+    }
+
+    func test_clearConversation_emptiesPreviewText() throws {
+        try storage.messages.insert(StoredMessage(localMessageId: 1, messageUid: 100, conversationType: .single, target: "them", from: "them", content: .text("hello"), timestamp: 1_000, status: .unread, direction: .receive))
+        try storage.conversations.recordIncomingMessage(conversationType: .single, target: "them", line: 0, messageUid: 100, timestamp: 1_000, incrementUnread: true)
+        _ = try waitForRow(target: "them")
+        let row = try XCTUnwrap(viewModel.rows.first { $0.target == "them" })
+
+        try viewModel.clearConversation(row)
+
+        let expectation = expectation(description: "previewText becomes empty")
+        expectation.assertForOverFulfill = false
+        viewModel.$rows.sink { rows in
+            if rows.first(where: { $0.target == "them" })?.previewText == "" { expectation.fulfill() }
+        }.store(in: &cancellables)
+        wait(for: [expectation], timeout: 2)
+    }
+
+    func test_deleteConversation_removesRowFromList() throws {
+        try storage.conversations.recordIncomingMessage(conversationType: .single, target: "them", line: 0, messageUid: 1, timestamp: 1_000, incrementUnread: false)
+        _ = try waitForRow(target: "them")
+        let row = try XCTUnwrap(viewModel.rows.first { $0.target == "them" })
+
+        try viewModel.deleteConversation(row)
+
+        let expectation = expectation(description: "row disappears")
+        expectation.assertForOverFulfill = false
+        viewModel.$rows.sink { rows in
+            if !rows.contains(where: { $0.target == "them" }) { expectation.fulfill() }
+        }.store(in: &cancellables)
+        wait(for: [expectation], timeout: 2)
+    }
+
     private func waitForRow(target: String) throws -> ConversationRow {
         let expectation = expectation(description: "row for \(target) appears")
         expectation.assertForOverFulfill = false
