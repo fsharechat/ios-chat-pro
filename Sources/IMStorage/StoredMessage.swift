@@ -37,6 +37,9 @@ public enum MessageContent: Equatable {
     /// The original message was recalled by `operatorId`. Stored in-place:
     /// `textContent` holds the operator uid; `searchableContent` is "[撤回消息]".
     case recalled(operatorId: String)
+    /// Wire type 4. `thumbnail` is the JPEG map screenshot. Coordinates use
+    /// Android's wire key names: `lat`/`long` (not `lng`).
+    case location(lat: Double, lng: Double, title: String, thumbnail: Data?)
 }
 
 public struct StoredMessage: Codable, Equatable, FetchableRecord, MutablePersistableRecord {
@@ -111,7 +114,16 @@ public struct StoredMessage: Codable, Equatable, FetchableRecord, MutablePersist
         case .recalled:
             return .recalled(operatorId: textContent ?? "")
         case .location:
-            return .text(searchableContent ?? "[位置]")
+            struct LocationCoords: Decodable { let lat: Double; let long: Double }
+            let coords = textContent
+                .flatMap { $0.data(using: .utf8) }
+                .flatMap { try? JSONDecoder().decode(LocationCoords.self, from: $0) }
+            return .location(
+                lat: coords?.lat ?? 0,
+                lng: coords?.long ?? 0,
+                title: searchableContent ?? "",
+                thumbnail: mediaThumbnail
+            )
         }
     }
 
@@ -295,6 +307,17 @@ public struct StoredMessage: Codable, Equatable, FetchableRecord, MutablePersist
             mediaRemoteURL = nil
             mediaLocalPath = nil
             mediaThumbnail = nil
+            groupNotificationOperator = nil
+            groupNotificationMembersRaw = nil
+            groupNotificationValue = nil
+            callId = nil; callTargetId = nil; callAudioOnly = false; callStatus = 0; callConnectTime = 0; callEndTime = 0
+        case .location(let lat, let lng, let title, let thumbnail):
+            contentType = .location
+            searchableContent = title
+            textContent = "{\"lat\":\(lat),\"long\":\(lng)}"
+            mediaThumbnail = thumbnail
+            mediaRemoteURL = nil
+            mediaLocalPath = nil
             groupNotificationOperator = nil
             groupNotificationMembersRaw = nil
             groupNotificationValue = nil

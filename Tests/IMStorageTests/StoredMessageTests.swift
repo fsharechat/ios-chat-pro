@@ -251,3 +251,51 @@ final class StoredMessageContentTests: XCTestCase {
         XCTAssertNil(message.groupNotificationOperator)
     }
 }
+
+final class LocationMessageTests: XCTestCase {
+    func test_locationMessage_initFlattensContentToColumns() {
+        let thumbnail = Data([0xAA, 0xBB])
+        let message = StoredMessage(
+            localMessageId: 10, conversationType: .single, target: "u2", from: "u1",
+            content: .location(lat: 31.23, lng: 121.47, title: "上海市中心", thumbnail: thumbnail),
+            timestamp: 1_000, status: .sent, direction: .send
+        )
+        XCTAssertEqual(message.contentType, .location)
+        XCTAssertEqual(message.searchableContent, "上海市中心")
+        XCTAssertEqual(message.textContent, "{\"lat\":31.23,\"long\":121.47}")
+        XCTAssertEqual(message.mediaThumbnail, thumbnail)
+        XCTAssertNil(message.mediaRemoteURL)
+        XCTAssertNil(message.groupNotificationOperator)
+        XCTAssertNil(message.callId)
+    }
+
+    func test_locationMessage_contentPropertyRoundTrips() {
+        let thumbnail = Data([0xCC])
+        let original = MessageContent.location(lat: 39.9, lng: 116.4, title: "北京", thumbnail: thumbnail)
+        let message = StoredMessage(
+            localMessageId: 11, conversationType: .single, target: "u2", from: "u1",
+            content: original, timestamp: 1_000, status: .sent, direction: .send
+        )
+        XCTAssertEqual(message.content, original)
+    }
+
+    func test_locationMessage_nilThumbnail_roundTrips() {
+        let original = MessageContent.location(lat: 22.5, lng: 114.1, title: "深圳", thumbnail: nil)
+        let message = StoredMessage(
+            localMessageId: 12, conversationType: .single, target: "u2", from: "u1",
+            content: original, timestamp: 1_000, status: .sent, direction: .send
+        )
+        XCTAssertEqual(message.content, original)
+    }
+
+    func test_locationMessage_setContent_clearsPreviousColumns() {
+        var message = StoredMessage(
+            localMessageId: 13, conversationType: .single, target: "u2", from: "u1",
+            content: .text("hello"), timestamp: 1_000, status: .sent, direction: .send
+        )
+        message.setContent(.location(lat: 31.0, lng: 121.0, title: "测试", thumbnail: nil))
+        XCTAssertNil(message.groupNotificationOperator)
+        XCTAssertNil(message.callId)
+        XCTAssertEqual(message.contentType, .location)
+    }
+}
