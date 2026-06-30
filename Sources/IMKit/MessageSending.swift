@@ -16,6 +16,7 @@ public protocol MessageSending: AnyObject {
     func sendVoice(to target: String, conversationType: ConversationType, line: Int, remoteURL: String, duration: Int) throws
     func sendFile(to target: String, conversationType: ConversationType, line: Int, name: String, size: Int, remoteURL: String) throws
     func sendVideo(to target: String, conversationType: ConversationType, line: Int, thumbnail: Data?, remoteURL: String, duration: Int) throws
+    func sendLocation(to target: String, conversationType: ConversationType, line: Int, lat: Double, lng: Double, title: String, thumbnail: Data?) throws
     func resend(localMessageId: Int64) throws
 }
 

@@ -361,4 +361,43 @@ final class MessageContentCodecTests: XCTestCase {
         let roundTripped = try MessageContentCodec.decode(MessageContentCodec.encode(original))
         XCTAssertEqual(roundTripped, original)
     }
+
+    // MARK: - Location (type=4)
+
+    func test_encodeLocation_setsType4AndAllWireFields() {
+        let thumbnail = Data([0x01, 0x02])
+        let wire = MessageContentCodec.encode(
+            .location(lat: 31.23, lng: 121.47, title: "上海市中心", thumbnail: thumbnail)
+        )
+        XCTAssertEqual(wire.type, 4)
+        XCTAssertEqual(wire.searchableContent, "上海市中心")
+        XCTAssertEqual(wire.data, thumbnail)
+        XCTAssertTrue(wire.content.contains("\"lat\":31.23"))
+        XCTAssertTrue(wire.content.contains("\"long\":121.47"))
+    }
+
+    func test_decodeType4_parsesAllFields() throws {
+        var wire = Im_MessageContent()
+        wire.type = 4
+        wire.searchableContent = "上海市中心"
+        wire.data = Data([0x03, 0x04])
+        wire.content = "{\"lat\":31.23,\"long\":121.47}"
+        let content = try MessageContentCodec.decode(wire)
+        XCTAssertEqual(content, .location(lat: 31.23, lng: 121.47, title: "上海市中心", thumbnail: Data([0x03, 0x04])))
+    }
+
+    func test_decodeType4_missingThumbnail_nilThumbnail() throws {
+        var wire = Im_MessageContent()
+        wire.type = 4
+        wire.searchableContent = "POI"
+        wire.content = "{\"lat\":22.5,\"long\":114.1}"
+        let content = try MessageContentCodec.decode(wire)
+        XCTAssertEqual(content, .location(lat: 22.5, lng: 114.1, title: "POI", thumbnail: nil))
+    }
+
+    func test_locationMessage_roundTrips_throughCodec() throws {
+        let original = MessageContent.location(lat: 39.9, lng: 116.4, title: "北京", thumbnail: Data([0xFF]))
+        let decoded = try MessageContentCodec.decode(MessageContentCodec.encode(original))
+        XCTAssertEqual(decoded, original)
+    }
 }

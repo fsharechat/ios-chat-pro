@@ -57,6 +57,13 @@ public enum MessageContentCodec {
         let duration: Int
     }
 
+    /// Wire shape for type 4 (location)'s `content` field — `long` matches
+    /// the Android `LocationMessageContent.encode()` JSON key name.
+    private struct LocationCoords: Codable {
+        let lat: Double
+        let long: Double
+    }
+
     public static func encode(_ content: MessageContent, mentionedType: Int32 = 0, mentionedTargets: [String] = []) -> Im_MessageContent {
         var wire = Im_MessageContent()
         switch content {
@@ -120,6 +127,14 @@ public enum MessageContentCodec {
             // This branch is unreachable in normal operation but must exist
             // to keep the switch exhaustive.
             wire.type = 80
+        case .location(let lat, let lng, let title, let thumbnail):
+            wire.type = 4
+            wire.searchableContent = title
+            if let thumbnail { wire.data = thumbnail }
+            if let json = try? JSONEncoder().encode(LocationCoords(lat: lat, long: lng)),
+               let str = String(data: json, encoding: .utf8) {
+                wire.content = str
+            }
         }
         if mentionedType != 0 {
             wire.mentionedType = mentionedType
@@ -177,6 +192,16 @@ public enum MessageContentCodec {
         case 80:
             // Android RecallMessageContent.decode() reads operatorId from payload.content.
             return .recalled(operatorId: wire.hasContent ? wire.content : "")
+        case 4:
+            let title = wire.hasSearchableContent ? wire.searchableContent : ""
+            let thumbnail: Data? = wire.hasData ? wire.data : nil
+            var lat = 0.0, lng = 0.0
+            if wire.hasContent,
+               let data = wire.content.data(using: .utf8),
+               let coords = try? JSONDecoder().decode(LocationCoords.self, from: data) {
+                lat = coords.lat; lng = coords.long
+            }
+            return .location(lat: lat, lng: lng, title: title, thumbnail: thumbnail)
         case 6:
             let duration: Int
             if wire.hasContent,

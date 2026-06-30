@@ -134,6 +134,12 @@ public final class MessagingService {
                  mentionedType: 0, mentionedTargets: [])
     }
 
+    public func sendLocation(to target: String, conversationType: ConversationType = .single, line: Int = 0, lat: Double, lng: Double, title: String, thumbnail: Data?) throws {
+        try send(to: target, conversationType: conversationType, line: line,
+                 content: .location(lat: lat, lng: lng, title: title, thumbnail: thumbnail),
+                 mentionedType: 0, mentionedTargets: [])
+    }
+
     /// Sends a CallStart (wire type 400) and persists it as a local call-
     /// record bubble, exactly like `sendText`/`sendImage` persist their
     /// content — this is the one call-signaling type that's a real chat

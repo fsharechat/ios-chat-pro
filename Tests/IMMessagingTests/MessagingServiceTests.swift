@@ -329,4 +329,18 @@ final class MessagingServiceTests: XCTestCase {
 
         XCTAssertEqual(captured?.content.type, 402)
     }
+
+    func test_sendLocation_insertsLocalEchoAndSendsCorrectWireFrame() throws {
+        let thumbnail = Data([0xAB, 0xCD])
+        try service.sendLocation(to: "them", lat: 31.23, lng: 121.47, title: "上海", thumbnail: thumbnail)
+
+        let echo = try storage.messages.messages(conversationType: .single, target: "them").first
+        XCTAssertEqual(echo?.content, .location(lat: 31.23, lng: 121.47, title: "上海", thumbnail: thumbnail))
+        XCTAssertEqual(echo?.status, .sending)
+
+        let frame = try decodeOnlySentFrame()
+        let wireMessage = try Im_Message(serializedBytes: frame.body)
+        XCTAssertEqual(try MessageContentCodec.decode(wireMessage.content),
+                       .location(lat: 31.23, lng: 121.47, title: "上海", thumbnail: thumbnail))
+    }
 }

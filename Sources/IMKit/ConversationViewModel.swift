@@ -273,6 +273,8 @@ public final class ConversationViewModel {
                 text: "\(displayName)撤回了一条消息",
                 timestamp: message.timestamp
             ))
+        case .location(_, _, let title, _):
+            return .message(buildStoredMessageRow(message, text: "[位置] \(title)", imageThumbnail: nil, imageRemoteURL: nil))
         }
     }
 
