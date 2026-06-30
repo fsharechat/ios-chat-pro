@@ -39,6 +39,7 @@ targets:
         NSCameraUsageDescription: "视频通话需要使用摄像头"
         NSMicrophoneUsageDescription: "语音/视频通话需要使用麦克风"
         NSLocationWhenInUseUsageDescription: "需要获取您的位置以发送位置消息"
+        NSPhotoLibraryAddUsageDescription: "保存图片或视频到相册"
         CFBundleDisplayName: "飞享IM"
         CFBundleName: "飞享IM"
     settings:

@@ -1,5 +1,6 @@
 // App/ConversationViewController.swift
 import UIKit
+import Photos
 import PhotosUI
 import UniformTypeIdentifiers
 import AVFoundation
@@ -29,6 +30,7 @@ final class ConversationViewController: UIViewController {
     var onGroupInfoTapped: (() -> Void)?
     var onContactInfoTapped: (() -> Void)?
     var onCallTapped: ((_ audioOnly: Bool) -> Void)?
+    var onForwardTapped: ((StoredMessageRow) -> Void)?
 
     init(row: ConversationRow, viewModel: ConversationViewModel) {
         self.row = row
@@ -510,12 +512,152 @@ final class ConversationViewController: UIViewController {
         inputBarBottomConstraint.constant = -keyboardHeight
         UIView.animate(withDuration: duration) { self.view.layoutIfNeeded() }
     }
+
+    private func buildContextMenu(for message: StoredMessageRow) -> UIMenu {
+        var actions: [UIAction] = []
+
+        // Copy — text-only (excludes voice/file prefixes, location, video)
+        if let text = message.text,
+           message.voiceDuration == nil,
+           message.fileName == nil,
+           message.locationLat == nil,
+           message.videoDuration == nil {
+            actions.append(UIAction(title: "复制", image: UIImage(systemName: "doc.on.doc")) { _ in
+                UIPasteboard.general.string = text
+            })
+        }
+
+        // Forward
+        actions.append(UIAction(title: "转发", image: UIImage(systemName: "arrowshape.turn.up.right")) { [weak self] _ in
+            self?.onForwardTapped?(message)
+        })
+
+        // Recall
+        if viewModel.canRecall(row: message) {
+            actions.append(UIAction(title: "撤回", image: UIImage(systemName: "arrow.uturn.backward")) { [weak self] _ in
+                self?.handleRecall(message: message)
+            })
+        }
+
+        // Delete
+        actions.append(UIAction(title: "删除", image: UIImage(systemName: "trash"), attributes: .destructive) { [weak self] _ in
+            self?.handleDelete(message: message)
+        })
+
+        // Save image — image messages only (has thumbnail, no video/voice/file)
+        if message.imageThumbnail != nil,
+           message.videoDuration == nil,
+           message.voiceDuration == nil,
+           message.fileName == nil {
+            actions.append(UIAction(title: "保存图片", image: UIImage(systemName: "square.and.arrow.down")) { [weak self] _ in
+                self?.saveMedia(urlString: message.imageRemoteURL, isVideo: false)
+            })
+        }
+
+        // Save video
+        if message.videoDuration != nil {
+            actions.append(UIAction(title: "保存视频", image: UIImage(systemName: "square.and.arrow.down")) { [weak self] _ in
+                self?.saveMedia(urlString: message.imageRemoteURL, isVideo: true)
+            })
+        }
+
+        return UIMenu(title: "", children: actions)
+    }
+
+    private func handleRecall(message: StoredMessageRow) {
+        viewModel.recallMessage(row: message) { [weak self] success in
+            DispatchQueue.main.async {
+                guard !success else { return }
+                let alert = UIAlertController(title: "撤回失败", message: "消息撤回失败，请稍后重试", preferredStyle: .alert)
+                alert.addAction(UIAlertAction(title: "确定", style: .default))
+                self?.present(alert, animated: true)
+            }
+        }
+    }
+
+    private func handleDelete(message: StoredMessageRow) {
+        let alert = UIAlertController(title: "删除消息", message: "删除后无法恢复，确认删除？", preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "取消", style: .cancel))
+        alert.addAction(UIAlertAction(title: "删除", style: .destructive) { [weak self] _ in
+            self?.viewModel.deleteMessage(row: message)
+        })
+        present(alert, animated: true)
+    }
+
+    private func saveMedia(urlString: String?, isVideo: Bool) {
+        guard let urlString, let url = URL(string: urlString) else { return }
+        let indicator = UIActivityIndicatorView(style: .large)
+        indicator.center = view.center
+        view.addSubview(indicator)
+        indicator.startAnimating()
+
+        if isVideo {
+            URLSession.shared.downloadTask(with: url) { [weak self] tempURL, _, _ in
+                DispatchQueue.main.async {
+                    indicator.removeFromSuperview()
+                    guard let tempURL, let self else { return }
+                    let destURL = FileManager.default.temporaryDirectory
+                        .appendingPathComponent(UUID().uuidString + ".mp4")
+                    try? FileManager.default.moveItem(at: tempURL, to: destURL)
+                    PHPhotoLibrary.shared().performChanges({
+                        PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: destURL)
+                    }) { success, _ in
+                        DispatchQueue.main.async {
+                            try? FileManager.default.removeItem(at: destURL)
+                            self.showToast(success ? "视频已保存到相册" : "保存失败")
+                        }
+                    }
+                }
+            }.resume()
+        } else {
+            URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
+                DispatchQueue.main.async {
+                    indicator.removeFromSuperview()
+                    guard let data, let image = UIImage(data: data), let self else { return }
+                    PHPhotoLibrary.shared().performChanges({
+                        PHAssetChangeRequest.creationRequestForAsset(from: image)
+                    }) { success, _ in
+                        DispatchQueue.main.async { self.showToast(success ? "图片已保存到相册" : "保存失败") }
+                    }
+                }
+            }.resume()
+        }
+    }
+
+    private func showToast(_ message: String) {
+        let toast = UILabel()
+        toast.text = message
+        toast.backgroundColor = UIColor.black.withAlphaComponent(0.7)
+        toast.textColor = .white
+        toast.textAlignment = .center
+        toast.font = .systemFont(ofSize: 14)
+        toast.layer.cornerRadius = 8
+        toast.clipsToBounds = true
+        toast.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(toast)
+        NSLayoutConstraint.activate([
+            toast.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            toast.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -60),
+            toast.widthAnchor.constraint(lessThanOrEqualTo: view.widthAnchor, constant: -40),
+            toast.heightAnchor.constraint(equalToConstant: 36),
+        ])
+        UIView.animate(withDuration: 0.3, delay: 1.5) { toast.alpha = 0 } completion: { _ in toast.removeFromSuperview() }
+    }
 }
 
 extension ConversationViewController: UITableViewDelegate {
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
         guard scrollView.contentOffset.y < 100 else { return }
         viewModel.loadMore()
+    }
+
+    func tableView(_ tableView: UITableView, contextMenuConfigurationForRowAt indexPath: IndexPath, point: CGPoint) -> UIContextMenuConfiguration? {
+        guard let item = dataSource.itemIdentifier(for: indexPath),
+              case .message(let message) = item else { return nil }
+        return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { [weak self] _ in
+            guard let self else { return UIMenu(title: "", children: []) }
+            return self.buildContextMenu(for: message)
+        }
     }
 }
 
