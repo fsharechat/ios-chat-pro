@@ -267,10 +267,12 @@ public final class ConversationViewModel {
         case .callRecord(_, _, let audioOnly, let status, let connectTime, let endTime):
             return .message(buildStoredMessageRow(message, text: renderCallRecordText(isOutgoing: message.direction == .send, audioOnly: audioOnly, status: status, connectTime: connectTime, endTime: endTime), imageThumbnail: nil, imageRemoteURL: nil))
         case .voice(let remoteURL, _, let duration):
-            return .message(buildStoredMessageRow(message, text: "[语音] \(duration)秒", imageThumbnail: nil, imageRemoteURL: remoteURL))
-        case .file(let name, let size, _, _):
+            return .message(buildStoredMessageRow(message, text: "[语音] \(duration)秒",
+                imageThumbnail: nil, imageRemoteURL: remoteURL, voiceDuration: duration))
+        case .file(let name, let size, let remoteURL, _):
             let sizeStr = size > 1024*1024 ? String(format: "%.1fMB", Double(size)/1024/1024) : "\(size/1024)KB"
-            return .message(buildStoredMessageRow(message, text: "[文件] \(name) \(sizeStr)", imageThumbnail: nil, imageRemoteURL: nil))
+            return .message(buildStoredMessageRow(message, text: "[文件] \(name) \(sizeStr)",
+                imageThumbnail: nil, imageRemoteURL: remoteURL, fileSize: size, fileName: name))
         case .video(let thumbnail, let remoteURL, _, let duration):
             return .message(buildStoredMessageRow(message, text: nil, imageThumbnail: thumbnail, imageRemoteURL: remoteURL, videoDuration: duration))
         case .recalled(let operatorId):
@@ -292,7 +294,18 @@ public final class ConversationViewModel {
         }
     }
 
-    private func buildStoredMessageRow(_ message: StoredMessage, text: String?, imageThumbnail: Data?, imageRemoteURL: String?, videoDuration: Int? = nil, locationLat: Double? = nil, locationLng: Double? = nil) -> StoredMessageRow {
+    private func buildStoredMessageRow(
+        _ message: StoredMessage,
+        text: String?,
+        imageThumbnail: Data?,
+        imageRemoteURL: String?,
+        videoDuration: Int? = nil,
+        voiceDuration: Int? = nil,
+        fileSize: Int? = nil,
+        fileName: String? = nil,
+        locationLat: Double? = nil,
+        locationLng: Double? = nil
+    ) -> StoredMessageRow {
         var senderDisplayName: String?
         // Always resolve the avatar — own portrait for outgoing, sender's for incoming.
         let avatarUid = message.direction == .send ? currentUserId : message.from
@@ -309,6 +322,7 @@ public final class ConversationViewModel {
         return StoredMessageRow(
             storageId: message.id ?? -1,
             localMessageId: message.localMessageId,
+            messageUid: message.messageUid,
             isOutgoing: message.direction == .send,
             status: message.status,
             timestamp: message.timestamp,
@@ -318,6 +332,9 @@ public final class ConversationViewModel {
             senderDisplayName: senderDisplayName,
             senderAvatarURL: senderAvatarURL,
             videoDuration: videoDuration,
+            voiceDuration: voiceDuration,
+            fileSize: fileSize,
+            fileName: fileName,
             locationLat: locationLat,
             locationLng: locationLng
         )

@@ -219,4 +219,12 @@ public final class MessageStore {
         existing.setContent(content)
         try existing.update(db)
     }
+
+    public func deleteMessage(id: Int64) throws {
+        try dbQueue.write { db in try self.deleteMessage(id: id, db: db) }
+    }
+
+    public func deleteMessage(id: Int64, db: Database) throws {
+        try db.execute(sql: "DELETE FROM message WHERE id = ?", arguments: [id])
+    }
 }

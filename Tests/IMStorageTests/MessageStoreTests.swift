@@ -309,4 +309,25 @@ final class MessageStoreTests: XCTestCase {
 
         XCTAssertTrue(results.isEmpty)
     }
+
+    func test_deleteMessage_removesRowFromStorage() throws {
+        let inserted = try store.insert(makeMessage(localMessageId: 10))
+        let id = try XCTUnwrap(inserted.id)
+
+        try store.deleteMessage(id: id)
+
+        XCTAssertNil(try store.message(localMessageId: 10))
+    }
+
+    func test_deleteMessage_doesNotAffectOtherMessages() throws {
+        let a = try store.insert(makeMessage(localMessageId: 11, text: "keep"))
+        let b = try store.insert(makeMessage(localMessageId: 12, text: "delete me"))
+        let bId = try XCTUnwrap(b.id)
+
+        try store.deleteMessage(id: bId)
+
+        XCTAssertNotNil(try store.message(localMessageId: 11))
+        XCTAssertNil(try store.message(localMessageId: 12))
+        _ = a
+    }
 }

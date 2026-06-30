@@ -613,4 +613,43 @@ final class ConversationViewModelTests: XCTestCase {
         XCTAssertNotNil(m.locationLat)
         XCTAssertNil(m.imageThumbnail)
     }
+
+    func test_voiceMessage_rowHasVoiceDuration() throws {
+        try storage.messages.insert(StoredMessage(
+            localMessageId: 50, conversationType: .single, target: "them", from: "them",
+            content: .voice(remoteURL: "https://cdn/v.amr", localPath: nil, duration: 12),
+            timestamp: 1_000, status: .unread, direction: .receive
+        ))
+        waitForFirstNonEmptyRows()
+
+        guard case .message(let row) = viewModel.rows.first else { return XCTFail("expected message row") }
+        XCTAssertEqual(row.voiceDuration, 12)
+        XCTAssertEqual(row.imageRemoteURL, "https://cdn/v.amr")
+    }
+
+    func test_fileMessage_rowHasFileNameAndSize() throws {
+        try storage.messages.insert(StoredMessage(
+            localMessageId: 51, conversationType: .single, target: "them", from: "them",
+            content: .file(name: "report.pdf", size: 204800, remoteURL: "https://cdn/r.pdf", localPath: nil),
+            timestamp: 1_000, status: .unread, direction: .receive
+        ))
+        waitForFirstNonEmptyRows()
+
+        guard case .message(let row) = viewModel.rows.first else { return XCTFail("expected message row") }
+        XCTAssertEqual(row.fileName, "report.pdf")
+        XCTAssertEqual(row.fileSize, 204800)
+        XCTAssertEqual(row.imageRemoteURL, "https://cdn/r.pdf")
+    }
+
+    func test_sentMessage_rowHasMessageUid() throws {
+        try storage.messages.insert(StoredMessage(
+            localMessageId: 52, messageUid: 9999,
+            conversationType: .single, target: "them", from: "me",
+            content: .text("hi"), timestamp: 1_000, status: .sent, direction: .send
+        ))
+        waitForFirstNonEmptyRows()
+
+        guard case .message(let row) = viewModel.rows.first else { return XCTFail("expected message row") }
+        XCTAssertEqual(row.messageUid, 9999)
+    }
 }

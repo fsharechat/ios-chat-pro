@@ -57,17 +57,21 @@ public struct PendingVideoUpload: Equatable, Hashable {
 public struct StoredMessageRow: Equatable, Hashable {
     public let storageId: Int64
     public let localMessageId: Int64
+    public let messageUid: Int64          // server-assigned uid; 0 until acked
     public let isOutgoing: Bool
     public let status: MessageStatus
     public let timestamp: Int64
     public let text: String?
     public let imageThumbnail: Data?
-    public let imageRemoteURL: String?
+    public let imageRemoteURL: String?    // also holds voice/file remote URLs
     public let senderDisplayName: String?
     public let senderAvatarURL: String?
     /// Non-nil only for video messages — used by `ConversationViewController`
     /// to dispatch to `VideoMessageCell` instead of `ImageMessageCell`.
     public let videoDuration: Int?
+    public let voiceDuration: Int?        // non-nil for voice messages
+    public let fileSize: Int?             // non-nil for file messages
+    public let fileName: String?          // non-nil for file messages
     /// Non-nil for location messages. Used by `ConversationViewController` to
     /// dispatch to `LocationMessageCell` and by `LocationPreviewViewController`.
     public let locationLat: Double?
@@ -76,6 +80,7 @@ public struct StoredMessageRow: Equatable, Hashable {
     public init(
         storageId: Int64,
         localMessageId: Int64,
+        messageUid: Int64 = 0,
         isOutgoing: Bool,
         status: MessageStatus,
         timestamp: Int64,
@@ -85,11 +90,15 @@ public struct StoredMessageRow: Equatable, Hashable {
         senderDisplayName: String? = nil,
         senderAvatarURL: String? = nil,
         videoDuration: Int? = nil,
+        voiceDuration: Int? = nil,
+        fileSize: Int? = nil,
+        fileName: String? = nil,
         locationLat: Double? = nil,
         locationLng: Double? = nil
     ) {
         self.storageId = storageId
         self.localMessageId = localMessageId
+        self.messageUid = messageUid
         self.isOutgoing = isOutgoing
         self.status = status
         self.timestamp = timestamp
@@ -99,6 +108,9 @@ public struct StoredMessageRow: Equatable, Hashable {
         self.senderDisplayName = senderDisplayName
         self.senderAvatarURL = senderAvatarURL
         self.videoDuration = videoDuration
+        self.voiceDuration = voiceDuration
+        self.fileSize = fileSize
+        self.fileName = fileName
         self.locationLat = locationLat
         self.locationLng = locationLng
     }
