@@ -79,4 +79,70 @@ extension ConversationListViewController: UITableViewDelegate {
         guard let row = dataSource.itemIdentifier(for: indexPath) else { return }
         onConversationSelected?(row)
     }
+
+    func tableView(_ tableView: UITableView, contextMenuConfigurationForRowAt indexPath: IndexPath, point: CGPoint) -> UIContextMenuConfiguration? {
+        guard let row = dataSource.itemIdentifier(for: indexPath) else { return nil }
+        return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { [weak self] _ in
+            guard let self else { return UIMenu(title: "", children: []) }
+            return self.makeContextMenu(for: row)
+        }
+    }
+}
+
+private extension ConversationListViewController {
+    func makeContextMenu(for row: ConversationRow) -> UIMenu {
+        let clearAction = UIAction(
+            title: "清空会话",
+            image: UIImage(systemName: "trash"),
+            attributes: .destructive
+        ) { [weak self] _ in
+            self?.confirmDestructive(title: "清空会话") {
+                try self?.viewModel.clearConversation(row)
+            }
+        }
+
+        let deleteAction = UIAction(
+            title: "删除会话",
+            image: UIImage(systemName: "xmark.circle"),
+            attributes: .destructive
+        ) { [weak self] _ in
+            self?.confirmDestructive(title: "删除会话") {
+                try self?.viewModel.deleteConversation(row)
+            }
+        }
+
+        let pinTitle = row.isTop ? "取消置顶" : "置顶"
+        let pinSymbol = row.isTop ? "pin.slash" : "pin"
+        let pinAction = UIAction(
+            title: pinTitle,
+            image: UIImage(systemName: pinSymbol)
+        ) { [weak self] _ in
+            do {
+                try self?.viewModel.setTop(!row.isTop, for: row)
+            } catch {
+                self?.showStorageError(error)
+            }
+        }
+
+        return UIMenu(title: "", children: [clearAction, deleteAction, pinAction])
+    }
+
+    func confirmDestructive(title: String, action: @escaping () throws -> Void) {
+        let alert = UIAlertController(title: title, message: "此操作不可撤销。", preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "取消", style: .cancel))
+        alert.addAction(UIAlertAction(title: "确认", style: .destructive) { [weak self] _ in
+            do {
+                try action()
+            } catch {
+                self?.showStorageError(error)
+            }
+        })
+        present(alert, animated: true)
+    }
+
+    func showStorageError(_ error: Error) {
+        let alert = UIAlertController(title: "操作失败", message: error.localizedDescription, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "好", style: .default))
+        present(alert, animated: true)
+    }
 }
