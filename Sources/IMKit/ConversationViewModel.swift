@@ -97,6 +97,13 @@ public final class ConversationViewModel {
         }
     }
 
+    public func sendLocation(lat: Double, lng: Double, title: String, thumbnail: Data?) {
+        try? messageSending?.sendLocation(
+            to: target, conversationType: conversationType, line: line,
+            lat: lat, lng: lng, title: title, thumbnail: thumbnail
+        )
+    }
+
     public func sendVideo(videoData: Data, thumbnail: Data, duration: Int) {
         let pending = PendingVideoUpload(id: UUID(), thumbnail: thumbnail, videoData: videoData, duration: duration, state: .uploading)
         pendingVideos.append(pending)
@@ -273,12 +280,19 @@ public final class ConversationViewModel {
                 text: "\(displayName)撤回了一条消息",
                 timestamp: message.timestamp
             ))
-        case .location(_, _, let title, _):
-            return .message(buildStoredMessageRow(message, text: "[位置] \(title)", imageThumbnail: nil, imageRemoteURL: nil))
+        case .location(let lat, let lng, let title, let thumbnail):
+            return .message(buildStoredMessageRow(
+                message,
+                text: title,
+                imageThumbnail: thumbnail,
+                imageRemoteURL: nil,
+                locationLat: lat,
+                locationLng: lng
+            ))
         }
     }
 
-    private func buildStoredMessageRow(_ message: StoredMessage, text: String?, imageThumbnail: Data?, imageRemoteURL: String?, videoDuration: Int? = nil) -> StoredMessageRow {
+    private func buildStoredMessageRow(_ message: StoredMessage, text: String?, imageThumbnail: Data?, imageRemoteURL: String?, videoDuration: Int? = nil, locationLat: Double? = nil, locationLng: Double? = nil) -> StoredMessageRow {
         var senderDisplayName: String?
         // Always resolve the avatar — own portrait for outgoing, sender's for incoming.
         let avatarUid = message.direction == .send ? currentUserId : message.from
@@ -303,7 +317,9 @@ public final class ConversationViewModel {
             imageRemoteURL: imageRemoteURL,
             senderDisplayName: senderDisplayName,
             senderAvatarURL: senderAvatarURL,
-            videoDuration: videoDuration
+            videoDuration: videoDuration,
+            locationLat: locationLat,
+            locationLng: locationLng
         )
     }
 

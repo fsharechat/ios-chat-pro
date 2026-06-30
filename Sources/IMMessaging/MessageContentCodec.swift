@@ -51,7 +51,7 @@ public enum MessageContentCodec {
         let duration: Int
     }
 
-    /// Wire shape for type 4 (video)'s `content` field — mirrors voice's
+    /// Wire shape for type 6 (video)'s `content` field — mirrors voice's
     /// duration JSON convention.
     private struct VideoDurationPayload: Codable {
         let duration: Int

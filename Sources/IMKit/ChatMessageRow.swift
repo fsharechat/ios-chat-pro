@@ -68,6 +68,10 @@ public struct StoredMessageRow: Equatable, Hashable {
     /// Non-nil only for video messages — used by `ConversationViewController`
     /// to dispatch to `VideoMessageCell` instead of `ImageMessageCell`.
     public let videoDuration: Int?
+    /// Non-nil for location messages. Used by `ConversationViewController` to
+    /// dispatch to `LocationMessageCell` and by `LocationPreviewViewController`.
+    public let locationLat: Double?
+    public let locationLng: Double?
 
     public init(
         storageId: Int64,
@@ -80,7 +84,9 @@ public struct StoredMessageRow: Equatable, Hashable {
         imageRemoteURL: String?,
         senderDisplayName: String? = nil,
         senderAvatarURL: String? = nil,
-        videoDuration: Int? = nil
+        videoDuration: Int? = nil,
+        locationLat: Double? = nil,
+        locationLng: Double? = nil
     ) {
         self.storageId = storageId
         self.localMessageId = localMessageId
@@ -93,6 +99,8 @@ public struct StoredMessageRow: Equatable, Hashable {
         self.senderDisplayName = senderDisplayName
         self.senderAvatarURL = senderAvatarURL
         self.videoDuration = videoDuration
+        self.locationLat = locationLat
+        self.locationLng = locationLng
     }
 }
 

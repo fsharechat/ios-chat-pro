@@ -31,6 +31,8 @@ private final class FakeMessageSending: MessageSending {
         sentVideos.append((target, thumbnail, remoteURL, duration))
     }
 
+    func sendLocation(to target: String, conversationType: ConversationType, line: Int, lat: Double, lng: Double, title: String, thumbnail: Data?) throws {}
+
     func resend(localMessageId: Int64) throws {
         resentLocalMessageIds.append(localMessageId)
     }
@@ -579,5 +581,36 @@ final class ConversationViewModelTests: XCTestCase {
 
         guard case .message(let row)? = viewModel.rows.first else { return XCTFail("expected a message row") }
         XCTAssertEqual(row.text, "📞 语音通话")
+    }
+
+    func testMakeRow_location_setsLocationCoordinatesAndTitle() throws {
+        let thumbnail = Data([0xAA])
+        try storage.messages.insert(StoredMessage(
+            localMessageId: 1, conversationType: .single, target: "them", from: "them",
+            content: .location(lat: 31.23, lng: 121.47, title: "上海市中心", thumbnail: thumbnail),
+            timestamp: 1_000, status: .unread, direction: .receive
+        ))
+
+        waitForFirstNonEmptyRows()
+
+        guard case .message(let m)? = viewModel.rows.first else { return XCTFail("expected a message row") }
+        XCTAssertEqual(m.locationLat, 31.23)
+        XCTAssertEqual(m.locationLng, 121.47)
+        XCTAssertEqual(m.text, "上海市中心")
+        XCTAssertEqual(m.imageThumbnail, thumbnail)
+    }
+
+    func testMakeRow_location_nilThumbnail_locationLatNonNil() throws {
+        try storage.messages.insert(StoredMessage(
+            localMessageId: 2, conversationType: .single, target: "them", from: "them",
+            content: .location(lat: 22.5, lng: 114.1, title: "深圳", thumbnail: nil),
+            timestamp: 1_000, status: .unread, direction: .receive
+        ))
+
+        waitForFirstNonEmptyRows()
+
+        guard case .message(let m)? = viewModel.rows.first else { return XCTFail("expected a message row") }
+        XCTAssertNotNil(m.locationLat)
+        XCTAssertNil(m.imageThumbnail)
     }
 }
