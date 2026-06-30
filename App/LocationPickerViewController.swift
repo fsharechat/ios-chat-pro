@@ -112,12 +112,7 @@ final class LocationPickerViewController: UIViewController {
     }
 
     @objc private func locateTapped() {
-        if let coord = lastGPSCoordinate {
-            let region = MKCoordinateRegion(center: coord, latitudinalMeters: 500, longitudinalMeters: 500)
-            mapView.setRegion(region, animated: true)
-        } else {
-            locationManager.startUpdatingLocation()
-        }
+        locationManager.startUpdatingLocation()
     }
 
     private func reverseGeocodeCenter() {
