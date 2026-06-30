@@ -139,6 +139,7 @@ public final class ConversationListViewModel {
     public func clearConversation(_ row: ConversationRow) throws {
         try storage.messages.clearMessages(conversationType: row.conversationType, target: row.target, line: row.line)
         try storage.conversations.resetLastMessage(conversationType: row.conversationType, target: row.target, line: row.line)
+        try storage.conversations.clearUnread(conversationType: row.conversationType, target: row.target, line: row.line)
     }
 
     public func deleteConversation(_ row: ConversationRow) throws {
