@@ -30,7 +30,9 @@ final class ConversationViewController: UIViewController {
     var onGroupInfoTapped: (() -> Void)?
     var onContactInfoTapped: (() -> Void)?
     var onCallTapped: ((_ audioOnly: Bool) -> Void)?
-    var onForwardTapped: ((StoredMessageRow) -> Void)?
+    /// Set by SceneDelegate. Called each time the user initiates a forward to
+    /// produce a fresh ConversationListViewModel for the picker screen.
+    var forwardViewModelFactory: (() -> ConversationListViewModel)?
 
     init(row: ConversationRow, viewModel: ConversationViewModel) {
         self.row = row
@@ -529,7 +531,7 @@ final class ConversationViewController: UIViewController {
 
         // Forward
         actions.append(UIAction(title: "转发", image: UIImage(systemName: "arrowshape.turn.up.right")) { [weak self] _ in
-            self?.onForwardTapped?(message)
+            self?.handleForward(message: message)
         })
 
         // Recall
@@ -562,6 +564,16 @@ final class ConversationViewController: UIViewController {
         }
 
         return UIMenu(title: "", children: actions)
+    }
+
+    private func handleForward(message: StoredMessageRow) {
+        guard let factory = forwardViewModelFactory else { return }
+        let pickerVC = ForwardPickerViewController(sourceMessage: message, viewModel: factory())
+        pickerVC.onConfirmForward = { [weak self, weak pickerVC] targetRow, note in
+            self?.viewModel.forward(row: message, to: targetRow, note: note)
+            self?.navigationController?.popViewController(animated: true)
+        }
+        navigationController?.pushViewController(pickerVC, animated: true)
     }
 
     private func handleRecall(message: StoredMessageRow) {

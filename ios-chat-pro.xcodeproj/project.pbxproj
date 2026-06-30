@@ -25,6 +25,7 @@
 		40533D31B36757999CD71E73 /* ConversationListViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3FE0167E8E8C013706DF83B /* ConversationListViewController.swift */; };
 		42817FDACD1A84A336066261 /* LocationPickerViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BFD92E47E6C5AE1CD51B7EE /* LocationPickerViewController.swift */; };
 		471B25795C53FC319DED0CCD /* MentionPickerViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CE65FB3E4BBBDBC011338C7 /* MentionPickerViewController.swift */; };
+		47A9ADF6067FC38530A2ABEA /* ForwardPickerViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B65530874C01F08C0C8B669 /* ForwardPickerViewController.swift */; };
 		4C0E9667BF3FEAD9168A31CC /* ExtPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25D8EA95D53B3D0A78B985BE /* ExtPanelView.swift */; };
 		5178BA7DEFDD3B7EBEFDABE3 /* SearchMessageViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4CDE3524198DE5097D7D78B /* SearchMessageViewController.swift */; };
 		53ECB95D10FDFC383AD3BFFF /* GroupQRCodeViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03560F1E35A1CD83F06CBEFF /* GroupQRCodeViewController.swift */; };
@@ -59,6 +60,7 @@
 		DA32151AD7668352890D9013 /* VoiceConverter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5803A5A486BFF04BC8C60228 /* VoiceConverter.swift */; };
 		DD3207003DBDA1B1CC3ED7CE /* ImagePreviewViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B7725E347391300F698E8D6 /* ImagePreviewViewController.swift */; };
 		DFE88FBF3B3A22EEF47634EB /* CallViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 433A3515C086B0178E667801 /* CallViewController.swift */; };
+		E1556A736693B9FCAC98259B /* ForwardPreviewViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14A2F42FFBACA55D6A5741FA /* ForwardPreviewViewController.swift */; };
 		E2E627EE50345A115DB5B2ED /* GroupInfoViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A887447B146764C16A4E603 /* GroupInfoViewController.swift */; };
 		E48899C747B0A0BD8C98A028 /* EmojiPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 767A2D49F043AA9A82A8FFFB /* EmojiPanelView.swift */; };
 		E9F8B2779486AB4D8F736447 /* GroupEntryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B177F3C5957AF38D8250AC7 /* GroupEntryView.swift */; };
@@ -72,9 +74,11 @@
 /* Begin PBXFileReference section */
 		03560F1E35A1CD83F06CBEFF /* GroupQRCodeViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupQRCodeViewController.swift; sourceTree = "<group>"; };
 		0832B3942D777D6A0D67E100 /* NewFriendsViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewFriendsViewController.swift; sourceTree = "<group>"; };
+		0B65530874C01F08C0C8B669 /* ForwardPickerViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForwardPickerViewController.swift; sourceTree = "<group>"; };
 		0CE65FB3E4BBBDBC011338C7 /* MentionPickerViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MentionPickerViewController.swift; sourceTree = "<group>"; };
 		0E4C429A89F749F13C87CB2D /* CreateGroupViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateGroupViewController.swift; sourceTree = "<group>"; };
 		1499CDEAF049F73974F200A4 /* NewFriendsEntryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewFriendsEntryView.swift; sourceTree = "<group>"; };
+		14A2F42FFBACA55D6A5741FA /* ForwardPreviewViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForwardPreviewViewController.swift; sourceTree = "<group>"; };
 		1A7AF95FBB4F8D27A5F4067D /* MessageInputBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageInputBar.swift; sourceTree = "<group>"; };
 		25D8EA95D53B3D0A78B985BE /* ExtPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtPanelView.swift; sourceTree = "<group>"; };
 		29D71A57B85DC64E3CCC00C7 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -192,6 +196,8 @@
 				25D8EA95D53B3D0A78B985BE /* ExtPanelView.swift */,
 				BDF651A69DA130BE158D8EF1 /* FavGroupListViewController.swift */,
 				A00822E7236C8497D7E1D66E /* FileMessageCell.swift */,
+				0B65530874C01F08C0C8B669 /* ForwardPickerViewController.swift */,
+				14A2F42FFBACA55D6A5741FA /* ForwardPreviewViewController.swift */,
 				E4F8B269AD818644389D362C /* FriendRequestCell.swift */,
 				4B177F3C5957AF38D8250AC7 /* GroupEntryView.swift */,
 				2A887447B146764C16A4E603 /* GroupInfoViewController.swift */,
@@ -332,6 +338,8 @@
 				4C0E9667BF3FEAD9168A31CC /* ExtPanelView.swift in Sources */,
 				D50D77865C2E9DFF7B261829 /* FavGroupListViewController.swift in Sources */,
 				5CCCCCD8B87CE043CB00EFFA /* FileMessageCell.swift in Sources */,
+				47A9ADF6067FC38530A2ABEA /* ForwardPickerViewController.swift in Sources */,
+				E1556A736693B9FCAC98259B /* ForwardPreviewViewController.swift in Sources */,
 				F8875E643BF006517AB52361 /* FriendRequestCell.swift in Sources */,
 				E9F8B2779486AB4D8F736447 /* GroupEntryView.swift in Sources */,
 				E2E627EE50345A115DB5B2ED /* GroupInfoViewController.swift in Sources */,

@@ -144,6 +144,15 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             conversationViewController.onCallTapped = { [weak self] audioOnly in
                 self?.startCallIfAuthorized(to: row.target, audioOnly: audioOnly)
             }
+            conversationViewController.forwardViewModelFactory = { [weak self] in
+                guard let self else { return ConversationListViewModel(storage: (try? IMStorage.openInMemory()) ?? (try! IMStorage.openInMemory()), contactSync: nil, currentUserId: "") }
+                return ConversationListViewModel(
+                    storage: self.environment.storage,
+                    contactSync: self.environment.contactSyncService,
+                    groupSync: self.environment.groupSyncService,
+                    currentUserId: self.environment.imClient?.userId ?? ""
+                )
+            }
             listViewController?.navigationController?.pushViewController(conversationViewController, animated: true)
         }
         listViewController.onCreateGroupTapped = { [weak self, weak listViewController] in
@@ -175,6 +184,15 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
                 )
                 let conversationViewController = ConversationViewController(row: conversationRow, viewModel: conversationViewModel)
                 self.wireGroupInfoNavigation(on: conversationViewController, groupId: groupId)
+                conversationViewController.forwardViewModelFactory = { [weak self] in
+                    guard let self else { return ConversationListViewModel(storage: (try? IMStorage.openInMemory()) ?? (try! IMStorage.openInMemory()), contactSync: nil, currentUserId: "") }
+                    return ConversationListViewModel(
+                        storage: self.environment.storage,
+                        contactSync: self.environment.contactSyncService,
+                        groupSync: self.environment.groupSyncService,
+                        currentUserId: self.environment.imClient?.userId ?? ""
+                    )
+                }
                 listViewController?.navigationController?.popToRootViewController(animated: false)
                 listViewController?.navigationController?.pushViewController(conversationViewController, animated: true)
             }
