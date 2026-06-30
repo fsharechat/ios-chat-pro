@@ -36,6 +36,14 @@ private final class FakeMessageSending: MessageSending {
     func resend(localMessageId: Int64) throws {
         resentLocalMessageIds.append(localMessageId)
     }
+
+    private(set) var recallCalls: [(messageUid: Int64, storageId: Int64)] = []
+    var nextRecallSuccess = true
+
+    func recall(messageUid: Int64, storageId: Int64, conversationType: ConversationType, target: String, line: Int, completion: @escaping (Bool) -> Void) {
+        recallCalls.append((messageUid, storageId))
+        completion(nextRecallSuccess)
+    }
 }
 
 private final class FakeVideoUploading: VideoUploading {

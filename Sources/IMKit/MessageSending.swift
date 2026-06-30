@@ -18,6 +18,14 @@ public protocol MessageSending: AnyObject {
     func sendVideo(to target: String, conversationType: ConversationType, line: Int, thumbnail: Data?, remoteURL: String, duration: Int) throws
     func sendLocation(to target: String, conversationType: ConversationType, line: Int, lat: Double, lng: Double, title: String, thumbnail: Data?) throws
     func resend(localMessageId: Int64) throws
+    func recall(
+        messageUid: Int64,
+        storageId: Int64,
+        conversationType: ConversationType,
+        target: String,
+        line: Int,
+        completion: @escaping (Bool) -> Void
+    )
 }
 
 extension MessagingService: MessageSending {}

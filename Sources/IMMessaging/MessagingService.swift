@@ -20,6 +20,8 @@ public final class MessagingService {
     private let nowMillis: () -> Int64
     private let receiveMessageHandler: ReceiveMessageHandler
     private let recallNotifyHandler: RecallNotifyMessageHandler
+    private let recallAckHandler: RecallAckHandler
+    private var pendingRecalls: [UInt16: (Bool) -> Void] = [:]
 
     /// Forwards to the internal `ReceiveMessageHandler`'s own closure of the
     /// same name — see that type's doc comment. Exposed here because
@@ -76,11 +78,20 @@ public final class MessagingService {
         // before `self` is captured anywhere (even weakly).
         let recallHandler = RecallNotifyMessageHandler(storage: storage)
         recallNotifyHandler = recallHandler
+        // recallAckHandler must be assigned before the first [weak self] closure
+        // below — Swift phase-1 init requires every stored property to be set
+        // before `self` is captured anywhere (even weakly).
+        let recallAckHandlerInstance = RecallAckHandler()
+        recallAckHandler = recallAckHandlerInstance
 
         let notifyHandler = NotifyMessageHandler()
         notifyHandler.onNotify = { [weak self] head, type in self?.pullMessages(from: head, type: type) }
         imClient.register(notifyHandler)
         imClient.register(recallHandler)
+        recallAckHandlerInstance.onAck = { [weak self] wireId, success in
+            self?.pendingRecalls.removeValue(forKey: wireId)?(success)
+        }
+        imClient.register(recallAckHandlerInstance)
     }
 
     /// Call once after a successful login (wire this to
@@ -223,6 +234,28 @@ public final class MessagingService {
         // Phase-1 gap documented in `ReceiveMessageHandler.persist`.
 
         try sendWireMessage(localMessageId: echo.localMessageId, conversationType: conversationType, target: target, line: line, content: content, mentionedType: mentionedType, mentionedTargets: mentionedTargets)
+    }
+
+    public func recall(
+        messageUid: Int64,
+        storageId: Int64,
+        conversationType: ConversationType,
+        target: String,
+        line: Int,
+        completion: @escaping (Bool) -> Void
+    ) {
+        var buf = Im_INT64Buf()
+        buf.id = messageUid
+        guard let body = try? buf.serializedData() else { completion(false); return }
+        let wireId = imClient.sendFrame(signal: .publish, subSignal: .mr, body: body)
+        pendingRecalls[wireId] = { [weak self] success in
+            guard let self, success else { completion(false); return }
+            try? self.storage.write { db in
+                try self.storage.messages.updateContent(id: storageId, content: .recalled(operatorId: self.imClient.userId), db: db)
+                try self.storage.conversations.touchConversation(conversationType: conversationType, target: target, line: line, db: db)
+            }
+            completion(true)
+        }
     }
 
     /// Re-sends an already-stored message that previously failed (`status

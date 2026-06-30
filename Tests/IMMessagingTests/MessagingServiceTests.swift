@@ -330,6 +330,69 @@ final class MessagingServiceTests: XCTestCase {
         XCTAssertEqual(captured?.content.type, 402)
     }
 
+    func test_recall_sendsPublishMRWithMessageUid() throws {
+        try storage.messages.insert(StoredMessage(
+            localMessageId: 99, messageUid: 500,
+            conversationType: .single, target: "them", from: "me",
+            content: .text("hello"), timestamp: 1_000, status: .sent, direction: .send
+        ))
+        try storage.conversations.recordIncomingMessage(
+            conversationType: .single, target: "them", line: 0,
+            messageUid: 500, timestamp: 1_000, incrementUnread: false
+        )
+        let inserted = try XCTUnwrap(storage.messages.message(localMessageId: 99))
+
+        service.recall(messageUid: 500, storageId: inserted.id!, conversationType: .single, target: "them", line: 0) { _ in }
+
+        let frame = try decodeOnlySentFrame()
+        XCTAssertEqual(frame.header.signal, .publish)
+        XCTAssertEqual(frame.header.subSignal, .mr)
+        let buf = try Im_INT64Buf(serializedBytes: frame.body)
+        XCTAssertEqual(buf.id, 500)
+    }
+
+    func test_recall_ackSuccess_updatesLocalMessageToRecalled() throws {
+        try storage.conversations.recordIncomingMessage(
+            conversationType: .single, target: "them", line: 0,
+            messageUid: 0, timestamp: 1_000, incrementUnread: false
+        )
+        let inserted = try storage.messages.insert(StoredMessage(
+            localMessageId: 100, messageUid: 501,
+            conversationType: .single, target: "them", from: "me",
+            content: .text("bye"), timestamp: 1_000, status: .sent, direction: .send
+        ))
+
+        var capturedSuccess: Bool?
+        service.recall(messageUid: 501, storageId: inserted.id!, conversationType: .single, target: "them", line: 0) { capturedSuccess = $0 }
+
+        let sentFrame = try decodeOnlySentFrame()
+        let ackBytes = FrameEncoder.encode(signal: .pubAck, subSignal: .mr, messageId: sentFrame.header.messageId, body: Data([0x00]))
+        fakeTransport.simulateReceivedData(ackBytes)
+
+        XCTAssertEqual(capturedSuccess, true)
+        let updated = try storage.messages.message(localMessageId: 100)
+        XCTAssertEqual(updated?.content, .recalled(operatorId: "me"))
+    }
+
+    func test_recall_ackFailure_doesNotUpdateMessageAndCallsCompletionFalse() throws {
+        let inserted = try storage.messages.insert(StoredMessage(
+            localMessageId: 101, messageUid: 502,
+            conversationType: .single, target: "them", from: "me",
+            content: .text("keep me"), timestamp: 1_000, status: .sent, direction: .send
+        ))
+
+        var capturedSuccess: Bool?
+        service.recall(messageUid: 502, storageId: inserted.id!, conversationType: .single, target: "them", line: 0) { capturedSuccess = $0 }
+
+        let sentFrame = try decodeOnlySentFrame()
+        let ackBytes = FrameEncoder.encode(signal: .pubAck, subSignal: .mr, messageId: sentFrame.header.messageId, body: Data([0x06]))
+        fakeTransport.simulateReceivedData(ackBytes)
+
+        XCTAssertEqual(capturedSuccess, false)
+        let unchanged = try storage.messages.message(localMessageId: 101)
+        XCTAssertEqual(unchanged?.content, .text("keep me"))
+    }
+
     func test_sendLocation_insertsLocalEchoAndSendsCorrectWireFrame() throws {
         let thumbnail = Data([0xAB, 0xCD])
         try service.sendLocation(to: "them", lat: 31.23, lng: 121.47, title: "上海", thumbnail: thumbnail)
