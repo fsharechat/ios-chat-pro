@@ -135,4 +135,25 @@ public final class ConversationStore {
             )
         }
     }
+
+    public func deleteConversation(conversationType: ConversationType, target: String, line: Int = 0) throws {
+        try dbQueue.write { db in
+            try db.execute(
+                sql: "DELETE FROM conversation WHERE conversationType = ? AND target = ? AND line = ?",
+                arguments: [conversationType.rawValue, target, line]
+            )
+        }
+    }
+
+    public func resetLastMessage(conversationType: ConversationType, target: String, line: Int = 0) throws {
+        try dbQueue.write { db in
+            guard var conversation = try StoredConversation
+                .filter(Column("conversationType") == conversationType.rawValue)
+                .filter(Column("target") == target)
+                .filter(Column("line") == line)
+                .fetchOne(db) else { return }
+            conversation.lastMessageUid = nil
+            try conversation.save(db)
+        }
+    }
 }

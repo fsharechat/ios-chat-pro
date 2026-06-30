@@ -130,4 +130,38 @@ final class ConversationStoreTests: XCTestCase {
 
         XCTAssertEqual(try store.conversation(conversationType: .group, target: "g1")?.isMuted, false)
     }
+
+    func test_deleteConversation_removesRow() throws {
+        try store.recordIncomingMessage(conversationType: .single, target: "u2", line: 0, messageUid: 10, timestamp: 1_000, incrementUnread: false)
+
+        try store.deleteConversation(conversationType: .single, target: "u2", line: 0)
+
+        XCTAssertNil(try store.conversation(conversationType: .single, target: "u2"))
+    }
+
+    func test_deleteConversation_whenRowDoesNotExist_isNoOp() throws {
+        XCTAssertNoThrow(try store.deleteConversation(conversationType: .single, target: "nonexistent", line: 0))
+    }
+
+    func test_resetLastMessage_clearsLastMessageUid() throws {
+        try store.recordIncomingMessage(conversationType: .single, target: "u2", line: 0, messageUid: 42, timestamp: 1_000, incrementUnread: false)
+
+        try store.resetLastMessage(conversationType: .single, target: "u2", line: 0)
+
+        XCTAssertNil(try store.conversation(conversationType: .single, target: "u2")?.lastMessageUid)
+    }
+
+    func test_resetLastMessage_preservesTimestampAndOtherFields() throws {
+        try store.recordIncomingMessage(conversationType: .single, target: "u2", line: 0, messageUid: 42, timestamp: 1_000, incrementUnread: true)
+
+        try store.resetLastMessage(conversationType: .single, target: "u2", line: 0)
+
+        let conversation = try store.conversation(conversationType: .single, target: "u2")
+        XCTAssertEqual(conversation?.timestamp, 1_000)
+        XCTAssertEqual(conversation?.unreadCount, 1)
+    }
+
+    func test_resetLastMessage_whenRowDoesNotExist_isNoOp() throws {
+        XCTAssertNoThrow(try store.resetLastMessage(conversationType: .single, target: "nonexistent", line: 0))
+    }
 }
