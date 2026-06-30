@@ -622,6 +622,127 @@ final class ConversationViewModelTests: XCTestCase {
         XCTAssertNil(m.imageThumbnail)
     }
 
+    // MARK: - canRecall
+
+    func test_canRecall_outgoingAckedMessage_returnsTrue() throws {
+        try storage.messages.insert(StoredMessage(
+            localMessageId: 200, messageUid: 1001,
+            conversationType: .single, target: "them", from: "me",
+            content: .text("hi"), timestamp: 1_000, status: .sent, direction: .send
+        ))
+        waitForFirstNonEmptyRows()
+        guard case .message(let row) = viewModel.rows.first else { return XCTFail() }
+        XCTAssertTrue(viewModel.canRecall(row: row))
+    }
+
+    func test_canRecall_outgoingUnackedMessage_returnsFalse() throws {
+        // messageUid == 0 means not yet acked
+        try storage.messages.insert(StoredMessage(
+            localMessageId: 201, messageUid: 0,
+            conversationType: .single, target: "them", from: "me",
+            content: .text("pending"), timestamp: 1_000, status: .sending, direction: .send
+        ))
+        waitForFirstNonEmptyRows()
+        guard case .message(let row) = viewModel.rows.first else { return XCTFail() }
+        XCTAssertFalse(viewModel.canRecall(row: row))
+    }
+
+    func test_canRecall_incomingSingleChatMessage_returnsFalse() throws {
+        try storage.messages.insert(StoredMessage(
+            localMessageId: 202, messageUid: 1002,
+            conversationType: .single, target: "them", from: "them",
+            content: .text("their msg"), timestamp: 1_000, status: .unread, direction: .receive
+        ))
+        waitForFirstNonEmptyRows()
+        guard case .message(let row) = viewModel.rows.first else { return XCTFail() }
+        XCTAssertFalse(viewModel.canRecall(row: row))
+    }
+
+    // MARK: - deleteMessage
+
+    func test_deleteMessage_removesRowFromStorageAndPublisher() throws {
+        _ = try storage.messages.insert(StoredMessage(
+            localMessageId: 300, conversationType: .single, target: "them", from: "them",
+            content: .text("delete me"), timestamp: 1_000, status: .unread, direction: .receive
+        ))
+        waitForFirstNonEmptyRows()
+        guard case .message(let row) = viewModel.rows.first else { return XCTFail() }
+
+        let disappearExpectation = expectation(description: "rows becomes empty")
+        disappearExpectation.assertForOverFulfill = false
+        viewModel.$rows.dropFirst().sink { rows in
+            if rows.isEmpty { disappearExpectation.fulfill() }
+        }.store(in: &cancellables)
+
+        viewModel.deleteMessage(row: row)
+        wait(for: [disappearExpectation], timeout: 2)
+
+        XCTAssertNil(try storage.messages.message(localMessageId: 300))
+    }
+
+    // MARK: - recallMessage
+
+    func test_recallMessage_callsSendingRecallWithCorrectUid() throws {
+        try storage.messages.insert(StoredMessage(
+            localMessageId: 400, messageUid: 2000,
+            conversationType: .single, target: "them", from: "me",
+            content: .text("recall me"), timestamp: 1_000, status: .sent, direction: .send
+        ))
+        waitForFirstNonEmptyRows()
+        guard case .message(let row) = viewModel.rows.first else { return XCTFail() }
+
+        var completionFired = false
+        viewModel.recallMessage(row: row) { _ in completionFired = true }
+
+        XCTAssertEqual(sending.recallCalls.last?.messageUid, 2000)
+        XCTAssertTrue(completionFired)
+    }
+
+    // MARK: - forward
+
+    func test_forward_textMessage_callsSendTextOnTarget() throws {
+        try storage.messages.insert(StoredMessage(
+            localMessageId: 500, messageUid: 3000,
+            conversationType: .single, target: "them", from: "me",
+            content: .text("forward this"), timestamp: 1_000, status: .sent, direction: .send
+        ))
+        waitForFirstNonEmptyRows()
+        guard case .message(let row) = viewModel.rows.first else { return XCTFail() }
+
+        let targetConv = ConversationRow(
+            conversationType: .single, target: "other", line: 0,
+            displayName: "Other", avatarURL: nil, previewText: "",
+            timestamp: 0, unreadCount: 0, hasUnreadMention: false,
+            isTop: false, isMuted: false, lastMessageStatus: nil
+        )
+        viewModel.forward(row: row, to: targetConv, note: nil)
+
+        XCTAssertEqual(sending.sentTexts.last?.target, "other")
+        XCTAssertEqual(sending.sentTexts.last?.text, "forward this")
+    }
+
+    func test_forward_withNote_sendsTwoMessages() throws {
+        try storage.messages.insert(StoredMessage(
+            localMessageId: 501, messageUid: 3001,
+            conversationType: .single, target: "them", from: "me",
+            content: .text("msg"), timestamp: 1_000, status: .sent, direction: .send
+        ))
+        waitForFirstNonEmptyRows()
+        guard case .message(let row) = viewModel.rows.first else { return XCTFail() }
+
+        let targetConv = ConversationRow(
+            conversationType: .single, target: "other", line: 0,
+            displayName: "Other", avatarURL: nil, previewText: "",
+            timestamp: 0, unreadCount: 0, hasUnreadMention: false,
+            isTop: false, isMuted: false, lastMessageStatus: nil
+        )
+        viewModel.forward(row: row, to: targetConv, note: "check this out")
+
+        XCTAssertEqual(sending.sentTexts.count, 2)
+        XCTAssertEqual(sending.sentTexts[0].text, "msg")
+        XCTAssertEqual(sending.sentTexts[1].text, "check this out")
+    }
+
     func test_voiceMessage_rowHasVoiceDuration() throws {
         try storage.messages.insert(StoredMessage(
             localMessageId: 50, conversationType: .single, target: "them", from: "them",

@@ -205,6 +205,71 @@ public final class ConversationViewModel {
         }
     }
 
+    /// Returns true if the current user may recall this message.
+    /// Rule: outgoing acked messages always; incoming group messages when current
+    /// user is .manager or .owner of the group.
+    public func canRecall(row: StoredMessageRow) -> Bool {
+        guard row.messageUid != 0 else { return false }
+        if row.isOutgoing { return true }
+        guard conversationType == .group else { return false }
+        let members = (try? storage.groups.members(groupId: target)) ?? []
+        let myMember = members.first { $0.memberId == currentUserId }
+        return myMember?.memberType == .manager || myMember?.memberType == .owner
+    }
+
+    /// Sends a recall request to the server. On success the message content is
+    /// updated to `.recalled` in storage. Calls `completion(false)` immediately
+    /// when `messageSending` is nil.
+    public func recallMessage(row: StoredMessageRow, completion: @escaping (Bool) -> Void) {
+        guard let sending = messageSending else { completion(false); return }
+        sending.recall(
+            messageUid: row.messageUid,
+            storageId: row.storageId,
+            conversationType: conversationType,
+            target: target,
+            line: line,
+            completion: completion
+        )
+    }
+
+    /// Deletes a single message from local storage only. No server request.
+    public func deleteMessage(row: StoredMessageRow) {
+        try? storage.write { db in
+            try storage.messages.deleteMessage(id: row.storageId, db: db)
+            try storage.conversations.touchConversation(
+                conversationType: conversationType, target: target, line: line, db: db
+            )
+        }
+    }
+
+    /// Forwards a message to a different conversation, then sends an optional
+    /// note as a separate text message. Determines message type by inspecting
+    /// the row's fields in priority order: file → voice → video → location →
+    /// image → text/call-record.
+    public func forward(row: StoredMessageRow, to targetConv: ConversationRow, note: String?) {
+        let t = targetConv.target
+        let ct = targetConv.conversationType
+        let l = targetConv.line
+
+        if let name = row.fileName, let size = row.fileSize, let url = row.imageRemoteURL {
+            try? messageSending?.sendFile(to: t, conversationType: ct, line: l, name: name, size: size, remoteURL: url)
+        } else if let duration = row.voiceDuration, let url = row.imageRemoteURL {
+            try? messageSending?.sendVoice(to: t, conversationType: ct, line: l, remoteURL: url, duration: duration)
+        } else if let duration = row.videoDuration, let url = row.imageRemoteURL {
+            try? messageSending?.sendVideo(to: t, conversationType: ct, line: l, thumbnail: row.imageThumbnail, remoteURL: url, duration: duration)
+        } else if let lat = row.locationLat, let lng = row.locationLng {
+            try? messageSending?.sendLocation(to: t, conversationType: ct, line: l, lat: lat, lng: lng, title: row.text ?? "", thumbnail: row.imageThumbnail)
+        } else if let url = row.imageRemoteURL {
+            try? messageSending?.sendImage(to: t, conversationType: ct, line: l, thumbnail: row.imageThumbnail, remoteURL: url)
+        } else if let text = row.text {
+            try? messageSending?.sendText(to: t, conversationType: ct, line: l, text: text, mentionedType: 0, mentionedTargets: [])
+        }
+
+        if let note, !note.isEmpty {
+            try? messageSending?.sendText(to: t, conversationType: ct, line: l, text: note, mentionedType: 0, mentionedTargets: [])
+        }
+    }
+
     public func reprocessMessages() {
         handleMessagesUpdate(lastMessages)
     }
