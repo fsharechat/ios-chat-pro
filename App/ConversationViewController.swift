@@ -89,6 +89,7 @@ final class ConversationViewController: UIViewController {
         tableView.register(VideoMessageCell.self, forCellReuseIdentifier: VideoMessageCell.reuseIdentifier)
         tableView.register(VoiceMessageCell.self, forCellReuseIdentifier: VoiceMessageCell.reuseIdentifier)
         tableView.register(FileMessageCell.self, forCellReuseIdentifier: FileMessageCell.reuseIdentifier)
+        tableView.register(LocationMessageCell.self, forCellReuseIdentifier: LocationMessageCell.reuseIdentifier)
         tableView.register(SystemTipMessageCell.self, forCellReuseIdentifier: SystemTipMessageCell.reuseIdentifier)
         tableView.register(TimeHeaderCell.self, forCellReuseIdentifier: TimeHeaderCell.reuseIdentifier)
         tableView.delegate = self
@@ -126,6 +127,20 @@ final class ConversationViewController: UIViewController {
             case .message(let message) where message.text?.hasPrefix("[文件]") == true:
                 let cell = tableView.dequeueReusableCell(withIdentifier: FileMessageCell.reuseIdentifier, for: indexPath) as! FileMessageCell
                 cell.configure(with: message)
+                return cell
+            case .message(let message) where message.locationLat != nil:
+                let cell = tableView.dequeueReusableCell(withIdentifier: LocationMessageCell.reuseIdentifier, for: indexPath) as! LocationMessageCell
+                cell.configure(with: LocationBubbleData(
+                    thumbnail: message.imageThumbnail,
+                    title: message.text ?? "",
+                    isOutgoing: message.isOutgoing,
+                    senderDisplayName: message.senderDisplayName,
+                    senderAvatarURL: message.senderAvatarURL
+                ))
+                cell.onTapped = { [weak self] in
+                    guard let lat = message.locationLat, let lng = message.locationLng else { return }
+                    self?.presentLocationPreview(lat: lat, lng: lng, title: message.text ?? "位置")
+                }
                 return cell
             case .message(let message) where message.text != nil:
                 let cell = tableView.dequeueReusableCell(withIdentifier: TextMessageCell.reuseIdentifier, for: indexPath) as! TextMessageCell
@@ -298,6 +313,16 @@ final class ConversationViewController: UIViewController {
         inputBar.onPickImage = { [weak self] in self?.presentImagePicker() }
         inputBar.onCamera = { [weak self] in self?.presentCamera() }
         inputBar.onPickFile = { [weak self] in self?.presentFilePicker() }
+        inputBar.onPickLocation = { [weak self] in
+            guard let self else { return }
+            let picker = LocationPickerViewController()
+            picker.onPicked = { [weak self] lat, lng, title, thumbnail in
+                self?.viewModel.sendLocation(lat: lat, lng: lng, title: title, thumbnail: thumbnail)
+            }
+            let nav = UINavigationController(rootViewController: picker)
+            nav.modalPresentationStyle = .fullScreen
+            self.present(nav, animated: true)
+        }
         inputBar.onSendVoice = { [weak self] audioData, duration, fileName, localM4AURL in
             if let localM4AURL {
                 let stem = URL(fileURLWithPath: fileName).deletingPathExtension().lastPathComponent
@@ -403,6 +428,11 @@ final class ConversationViewController: UIViewController {
         let playerVC = AVPlayerViewController()
         playerVC.player = player
         present(playerVC, animated: true) { player.play() }
+    }
+
+    private func presentLocationPreview(lat: Double, lng: Double, title: String) {
+        let vc = LocationPreviewViewController(lat: lat, lng: lng, title: title)
+        navigationController?.pushViewController(vc, animated: true)
     }
 
     private func stopCurrentVoicePlayback() {

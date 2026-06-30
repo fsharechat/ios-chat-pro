@@ -8,6 +8,7 @@ final class MessageInputBar: UIView {
     var onPickImage: (() -> Void)?
     var onCamera: (() -> Void)?
     var onPickFile: (() -> Void)?
+    var onPickLocation: (() -> Void)?
     var onSendVoice: ((_ audioData: Data, _ duration: Int, _ fileName: String, _ localM4AURL: URL?) -> Void)?
     var onMentionTriggered: (() -> Void)?
 
@@ -196,6 +197,7 @@ final class MessageInputBar: UIView {
         extPanel.onAlbum = { [weak self] in self?.onPickImage?() }
         extPanel.onCamera = { [weak self] in self?.onCamera?() }
         extPanel.onFile = { [weak self] in self?.onPickFile?() }
+        extPanel.onLocation = { [weak self] in self?.onPickLocation?() }
     }
 
     // MARK: - Button Actions

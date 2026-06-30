@@ -6,6 +6,7 @@ final class ExtPanelView: UIView {
     var onAlbum: (() -> Void)?
     var onCamera: (() -> Void)?
     var onFile: (() -> Void)?
+    var onLocation: (() -> Void)?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -14,6 +15,7 @@ final class ExtPanelView: UIView {
             ("photo.on.rectangle", "相册", #selector(albumTapped)),
             ("camera", "拍摄", #selector(cameraTapped)),
             ("doc", "文件", #selector(fileTapped)),
+            ("location.fill", "位置", #selector(locationTapped)),
         ]
         let stack = UIStackView()
         stack.axis = .horizontal
@@ -78,4 +80,5 @@ final class ExtPanelView: UIView {
     @objc private func albumTapped() { onAlbum?() }
     @objc private func cameraTapped() { onCamera?() }
     @objc private func fileTapped() { onFile?() }
+    @objc private func locationTapped() { onLocation?() }
 }
