@@ -122,7 +122,6 @@ final class LocationMessageCell: UITableViewCell {
             bubbleStack.backgroundColor = Theme.accent
             rowStack.addArrangedSubview(spacer)
             rowStack.addArrangedSubview(bubbleColumn)
-            senderAvatarImageView.setAvatar(urlString: data.senderAvatarURL, displayName: "我")
         } else {
             bubbleStack.backgroundColor = Theme.backgroundTertiary
             senderNameLabel.text = data.senderDisplayName
