@@ -35,9 +35,11 @@ public final class FriendRequestSyncHandler: MessageHandler {
     public var onRemoteUpdateNotified: (() -> Void)?
 
     private let storage: IMStorage
+    private let myUid: String
 
-    public init(storage: IMStorage) {
+    public init(storage: IMStorage, myUid: String) {
         self.storage = storage
+        self.myUid = myUid
     }
 
     public func canHandle(signal: Signal, subSignal: SubSignal) -> Bool {
@@ -57,25 +59,32 @@ public final class FriendRequestSyncHandler: MessageHandler {
         guard let result = try? Im_GetFriendRequestResult(serializedBytes: frame.body.dropFirst()) else { return }
         guard !result.entry.isEmpty else { return }
 
-        let requests = result.entry.map { entry in
-            StoredFriendRequest(
+        // On the initial sync (head == 0), treat all imported requests as already
+        // read locally so the badge doesn't show stale historical counts on first login.
+        let isInitialSync = (try? storage.syncState.get())?.friendRequestHead == 0
+
+        // The server may include outgoing requests (toUid != myUid) in the batch.
+        // Only persist incoming requests to avoid duplicate fromUid rows in the table,
+        // which would produce identical FriendRequestRow identifiers and crash the
+        // DiffableDataSource. Still advance the head using ALL entries so we don't
+        // re-fetch the filtered-out outgoing records on the next pull.
+        for entry in result.entry where entry.toUid == myUid {
+            let request = StoredFriendRequest(
                 fromUid: entry.fromUid,
                 toUid: entry.toUid,
                 reason: entry.reason,
                 status: Int(entry.status),
                 updateDt: entry.updateDt,
                 fromReadStatus: entry.fromReadStatus,
-                toReadStatus: entry.toReadStatus
+                toReadStatus: isInitialSync ? true : entry.toReadStatus
             )
-        }
-        for request in requests {
             // Accepted Phase-2 gap: a failed upsert for one row is silently
             // dropped (no logging facility yet), same as every other
             // PUB_ACK handler in this codebase.
             try? storage.friendRequests.upsert(request)
         }
 
-        guard let maxUpdateDt = requests.map(\.updateDt).max() else { return }
+        guard let maxUpdateDt = result.entry.map(\.updateDt).max() else { return }
         guard var syncState = try? storage.syncState.get() else { return }
         syncState.friendRequestHead = maxUpdateDt
         try? storage.syncState.set(syncState)

@@ -164,6 +164,13 @@ public final class IMDatabase {
                 t.add(column: "isFav", .boolean).notNull().defaults(to: false)
             }
         }
+        migrator.registerMigration("v8_markExistingFriendRequestsAsRead") { db in
+            // Historical friend requests synced before this version had toReadStatus=false
+            // from the server, causing a large unread badge on first login. Mark all
+            // existing rows as read so only genuinely new requests (arriving after this
+            // migration) appear in the badge count.
+            try db.execute(sql: "UPDATE friendRequest SET toReadStatus = 1")
+        }
         return migrator
     }
 }

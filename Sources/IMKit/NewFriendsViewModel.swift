@@ -36,7 +36,13 @@ public final class NewFriendsViewModel {
     }
 
     private func handleRequestsUpdate(_ requests: [StoredFriendRequest]) {
-        rows = requests.map { request in
+        // Deduplicate by fromUid. The DB should already be clean (FriendRequestSyncHandler
+        // filters out outgoing requests), but this guards against stale data from
+        // before that fix was deployed, which would otherwise crash DiffableDataSource
+        // with "supplied item identifiers are not unique".
+        var seen = Set<String>()
+        rows = requests.compactMap { request in
+            guard seen.insert(request.fromUid).inserted else { return nil }
             let user = try? storage.users.user(uid: request.fromUid)
             let displayName = user?.displayName ?? user?.name ?? request.fromUid
             return FriendRequestRow(

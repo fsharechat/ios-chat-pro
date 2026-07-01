@@ -40,7 +40,7 @@ public final class ContactSyncService {
         imClient.register(FriendRequestActionHandler(tracker: friendRequestActionTracker))
         imClient.register(ProfileUpdateHandler(tracker: profileUpdateTracker))
 
-        let friendRequestSyncHandler = FriendRequestSyncHandler(storage: storage)
+        let friendRequestSyncHandler = FriendRequestSyncHandler(storage: storage, myUid: imClient.userId)
         friendRequestSyncHandler.onRemoteUpdateNotified = { [weak self] in self?.syncFriendRequests() }
         imClient.register(friendRequestSyncHandler)
     }

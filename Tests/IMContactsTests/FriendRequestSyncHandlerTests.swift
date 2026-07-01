@@ -13,7 +13,7 @@ final class FriendRequestSyncHandlerTests: XCTestCase {
     override func setUpWithError() throws {
         try super.setUpWithError()
         storage = try IMStorage.openInMemory()
-        handler = FriendRequestSyncHandler(storage: storage)
+        handler = FriendRequestSyncHandler(storage: storage, myUid: "me")
     }
 
     private func makeEntry(fromUid: String, toUid: String, updateDt: Int64) -> Im_FriendRequest {
