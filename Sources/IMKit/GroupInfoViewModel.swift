@@ -68,7 +68,24 @@ public final class GroupInfoViewModel {
             }
         membersCancellable = storage.groups.membersPublisher(groupId: groupId)
             .replaceError(with: [])
-            .sink { [weak self] members in self?.handleMembersUpdate(members) }
+            .receive(on: DispatchQueue.global(qos: .userInitiated))
+            .map { [weak self] storedMembers -> [MemberRow] in
+                guard let self else { return [] }
+                let uids = storedMembers.map { $0.memberId }
+                let userMap = (try? self.storage.users.users(uids: uids))?
+                    .reduce(into: [String: StoredUser]()) { $0[$1.uid] = $1 } ?? [:]
+                return storedMembers.map { member in
+                    let user = userMap[member.memberId]
+                    return MemberRow(
+                        uid: member.memberId,
+                        displayName: user?.displayName ?? user?.name ?? member.memberId,
+                        avatarURL: user?.portrait,
+                        isOwner: member.memberType == .owner
+                    )
+                }
+            }
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] rows in self?.members = rows }
     }
 
     public func refresh() {
@@ -151,18 +168,6 @@ public final class GroupInfoViewModel {
         self.group = group
         self.isFav = group?.isFav ?? false
         recomputePermissions()
-    }
-
-    private func handleMembersUpdate(_ storedMembers: [StoredGroupMember]) {
-        members = storedMembers.map { member in
-            let user = try? storage.users.user(uid: member.memberId)
-            return MemberRow(
-                uid: member.memberId,
-                displayName: user?.displayName ?? user?.name ?? member.memberId,
-                avatarURL: user?.portrait,
-                isOwner: member.memberType == .owner
-            )
-        }
     }
 
     private func recomputePermissions() {

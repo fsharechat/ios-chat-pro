@@ -21,7 +21,7 @@ final class SingleConversationInfoViewController: UIViewController {
         case clearMessages
     }
 
-    private let tableView = UITableView(frame: .zero, style: .plain)
+    private let tableView = UITableView(frame: .zero, style: .insetGrouped)
     private let avatarImageView = AvatarImageView(loader: AvatarLoader())
     private let nameLabel = UILabel()
 
@@ -172,14 +172,10 @@ final class SingleConversationInfoViewController: UIViewController {
 extension SingleConversationInfoViewController: UITableViewDelegate {
     func tableView(_ tableView: UITableView, heightForRowAt indexPath: IndexPath) -> CGFloat { 50 }
 
-    func tableView(_ tableView: UITableView, viewForHeaderInSection section: Int) -> UIView? {
-        let spacer = UIView()
-        spacer.backgroundColor = .systemGroupedBackground
-        return spacer
-    }
+    func tableView(_ tableView: UITableView, viewForHeaderInSection section: Int) -> UIView? { nil }
 
     func tableView(_ tableView: UITableView, heightForHeaderInSection section: Int) -> CGFloat {
-        section == 0 ? 0 : 10
+        section == 0 ? 0 : UITableView.automaticDimension
     }
 
     func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {

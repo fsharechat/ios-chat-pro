@@ -48,7 +48,7 @@ final class GroupInfoViewController: UIViewController {
     }
     private var showMemberNicknamesKey: String { "showMemberNicknames_\(viewModel.group?.groupId ?? "")" }
 
-    private let tableView = UITableView(frame: .zero, style: .plain)
+    private let tableView = UITableView(frame: .zero, style: .insetGrouped)
     private let memberGridView = GroupMemberGridView()
     private let bottomButton = UIButton(type: .system)
 
@@ -342,14 +342,10 @@ extension GroupInfoViewController: UITableViewDelegate {
 
     func tableView(_ tableView: UITableView, heightForRowAt indexPath: IndexPath) -> CGFloat { 50 }
 
-    func tableView(_ tableView: UITableView, viewForHeaderInSection section: Int) -> UIView? {
-        let spacer = UIView()
-        spacer.backgroundColor = .systemGroupedBackground
-        return spacer
-    }
+    func tableView(_ tableView: UITableView, viewForHeaderInSection section: Int) -> UIView? { nil }
 
     func tableView(_ tableView: UITableView, heightForHeaderInSection section: Int) -> CGFloat {
-        section == 0 ? 0 : 10
+        section == 0 ? 0 : UITableView.automaticDimension
     }
 
     func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {

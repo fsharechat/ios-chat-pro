@@ -22,9 +22,9 @@ final class GroupMemberGridView: UIView {
 
     private static let columns = 5
     private static let cellSize: CGFloat = 60
-    private static let spacing: CGFloat = 8
-    private static let hPadding: CGFloat = 7
-    private static let vPadding: CGFloat = 15
+    private static let spacing: CGFloat = 4
+    private static let hPadding: CGFloat = 20
+    private static let vPadding: CGFloat = 12
 
     override init(frame: CGRect) {
         let layout = UICollectionViewFlowLayout()
@@ -33,7 +33,8 @@ final class GroupMemberGridView: UIView {
         layout.itemSize = CGSize(width: Self.cellSize, height: Self.cellSize + 20)
         collectionView = UICollectionView(frame: .zero, collectionViewLayout: layout)
         super.init(frame: frame)
-        collectionView.backgroundColor = .systemBackground
+        backgroundColor = .systemGroupedBackground
+        collectionView.backgroundColor = .systemGroupedBackground
         collectionView.isScrollEnabled = false
         collectionView.translatesAutoresizingMaskIntoConstraints = false
         addSubview(collectionView)

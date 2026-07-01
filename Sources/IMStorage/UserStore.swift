@@ -16,6 +16,14 @@ public final class UserStore {
         try dbQueue.read { db in try StoredUser.fetchOne(db, key: uid) }
     }
 
+    public func users(uids: [String]) throws -> [StoredUser] {
+        guard !uids.isEmpty else { return [] }
+        let placeholders = repeatElement("?", count: uids.count).joined(separator: ",")
+        return try dbQueue.read { db in
+            try StoredUser.fetchAll(db, sql: "SELECT * FROM user WHERE uid IN (\(placeholders))", arguments: StatementArguments(uids))
+        }
+    }
+
     /// Sorted with NULL `displayName`s last, not first: plain `ORDER BY
     /// displayName` puts SQLite NULLs ahead of every real name, which would
     /// float not-yet-synced contacts to the top of the list. `displayName
