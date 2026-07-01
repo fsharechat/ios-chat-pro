@@ -247,8 +247,40 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             groupInfoViewController.onMemberTapped = { [weak self, weak groupInfoViewController] uid in
                 guard let self else { return }
                 let userInfoVC = UserInfoViewController(userId: uid, storage: self.environment.storage)
-                userInfoVC.onSendMessage = { [weak groupInfoViewController] in
-                    groupInfoViewController?.navigationController?.popViewController(animated: true)
+                userInfoVC.onSendMessage = { [weak self, weak groupInfoViewController] in
+                    guard let self else { return }
+                    let conversationViewModel = ConversationViewModel(
+                        storage: self.environment.storage,
+                        messageSending: self.environment.messagingService,
+                        imageUploading: self.environment.mediaUploadService,
+                        voiceUploading: self.environment.mediaUploadService,
+                        fileUploading: self.environment.mediaUploadService,
+                        videoUploading: self.environment.mediaUploadService,
+                        target: uid,
+                        conversationType: .single,
+                        currentUserId: self.environment.imClient?.userId ?? ""
+                    )
+                    let user = try? self.environment.storage.users.user(uid: uid)
+                    let conversationRow = ConversationRow(
+                        conversationType: .single,
+                        target: uid,
+                        line: 0,
+                        displayName: user?.displayName ?? user?.name ?? uid,
+                        avatarURL: user?.portrait,
+                        previewText: "",
+                        timestamp: 0,
+                        unreadCount: 0,
+                        hasUnreadMention: false,
+                        isTop: false,
+                        isMuted: false,
+                        lastMessageStatus: nil
+                    )
+                    let conversationVC = ConversationViewController(row: conversationRow, viewModel: conversationViewModel)
+                    conversationVC.onCallTapped = { [weak self] audioOnly in
+                        self?.startCallIfAuthorized(to: uid, audioOnly: audioOnly)
+                    }
+                    self.wireContactInfoNavigation(on: conversationVC, userId: uid)
+                    groupInfoViewController?.navigationController?.pushViewController(conversationVC, animated: true)
                 }
                 userInfoVC.onVideoCall = { [weak self] in
                     self?.startCallIfAuthorized(to: uid, audioOnly: false)
@@ -293,7 +325,8 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             let vm = SingleConversationInfoViewModel(userId: userId, storage: self.environment.storage)
             let infoVC = SingleConversationInfoViewController(viewModel: vm)
 
-            infoVC.onAvatarTapped = { [weak infoVC] in
+            infoVC.onAvatarTapped = { [weak self, weak infoVC] in
+                guard let self else { return }
                 let userInfoVC = UserInfoViewController(userId: userId, storage: self.environment.storage)
                 userInfoVC.onSendMessage = { [weak infoVC] in
                     infoVC?.navigationController?.popViewController(animated: true)
