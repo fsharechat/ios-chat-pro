@@ -4,14 +4,14 @@ import IMKit
 import IMStorage
 
 final class SearchMessageViewController: UIViewController {
-    private let viewModel: GroupInfoViewModel
+    private let searcher: (String) -> [StoredMessage]
     private var results: [StoredMessage] = []
 
     private let searchBar = UISearchBar()
     private let tableView = UITableView()
 
-    init(viewModel: GroupInfoViewModel) {
-        self.viewModel = viewModel
+    init(searcher: @escaping (String) -> [StoredMessage]) {
+        self.searcher = searcher
         super.init(nibName: nil, bundle: nil)
         title = "查找聊天记录"
     }
@@ -49,7 +49,7 @@ final class SearchMessageViewController: UIViewController {
             tableView.reloadData()
             return
         }
-        results = viewModel.searchMessages(keyword: keyword)
+        results = searcher(keyword)
         tableView.reloadData()
     }
 }

@@ -269,7 +269,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 
             // 查找聊天记录
             groupInfoViewController.onSearchMessagesTapped = { [weak groupInfoViewController] in
-                let searchVC = SearchMessageViewController(viewModel: groupInfoViewModel)
+                let searchVC = SearchMessageViewController(searcher: groupInfoViewModel.searchMessages)
                 groupInfoViewController?.navigationController?.pushViewController(searchVC, animated: true)
             }
 
