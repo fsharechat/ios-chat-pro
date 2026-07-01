@@ -141,6 +141,9 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             )
             let conversationViewController = ConversationViewController(row: row, viewModel: conversationViewModel)
             self.wireGroupInfoNavigation(on: conversationViewController, groupId: row.target)
+            if row.conversationType == .single {
+                self.wireContactInfoNavigation(on: conversationViewController, userId: row.target)
+            }
             conversationViewController.onCallTapped = { [weak self] audioOnly in
                 self?.startCallIfAuthorized(to: row.target, audioOnly: audioOnly)
             }
@@ -241,9 +244,16 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             }
 
             // 查看成员资料
-            groupInfoViewController.onMemberTapped = { [weak groupInfoViewController] _ in
-                // TODO: 跳转成员详情页（后续实现）
-                _ = groupInfoViewController
+            groupInfoViewController.onMemberTapped = { [weak self, weak groupInfoViewController] uid in
+                guard let self else { return }
+                let userInfoVC = UserInfoViewController(userId: uid, storage: self.environment.storage)
+                userInfoVC.onSendMessage = { [weak groupInfoViewController] in
+                    groupInfoViewController?.navigationController?.popViewController(animated: true)
+                }
+                userInfoVC.onVideoCall = { [weak self] in
+                    self?.startCallIfAuthorized(to: uid, audioOnly: false)
+                }
+                groupInfoViewController?.navigationController?.pushViewController(userInfoVC, animated: true)
             }
 
             // 群二维码
@@ -277,6 +287,32 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         }
     }
 
+    private func wireContactInfoNavigation(on conversationVC: ConversationViewController, userId: String) {
+        conversationVC.onContactInfoTapped = { [weak self, weak conversationVC] in
+            guard let self else { return }
+            let vm = SingleConversationInfoViewModel(userId: userId, storage: self.environment.storage)
+            let infoVC = SingleConversationInfoViewController(viewModel: vm)
+
+            infoVC.onAvatarTapped = { [weak infoVC] in
+                let userInfoVC = UserInfoViewController(userId: userId, storage: self.environment.storage)
+                userInfoVC.onSendMessage = { [weak infoVC] in
+                    infoVC?.navigationController?.popViewController(animated: true)
+                }
+                userInfoVC.onVideoCall = { [weak self] in
+                    self?.startCallIfAuthorized(to: userId, audioOnly: false)
+                }
+                infoVC?.navigationController?.pushViewController(userInfoVC, animated: true)
+            }
+
+            infoVC.onSearchMessagesTapped = { [weak infoVC] in
+                let searchVC = SearchMessageViewController(searcher: vm.searchMessages)
+                infoVC?.navigationController?.pushViewController(searchVC, animated: true)
+            }
+
+            conversationVC?.navigationController?.pushViewController(infoVC, animated: true)
+        }
+    }
+
     /// `ConversationViewController` requires a `ConversationRow` purely for
     /// its nav-bar title/avatar — it has no backing `StoredConversation` row
     /// yet the first time you message a brand-new contact (one gets created
@@ -293,39 +329,45 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         let listViewController = ContactListViewController(viewModel: viewModel)
         listViewController.onContactSelected = { [weak self, weak listViewController] row in
             guard let self else { return }
-            let conversationViewModel = ConversationViewModel(
-                storage: self.environment.storage,
-                messageSending: self.environment.messagingService,
-                imageUploading: self.environment.mediaUploadService,
-                voiceUploading: self.environment.mediaUploadService,
-                fileUploading: self.environment.mediaUploadService,
-                videoUploading: self.environment.mediaUploadService,
-                target: row.uid,
-                conversationType: .single,
-                currentUserId: self.environment.imClient?.userId ?? ""
-            )
-            let conversationRow = ConversationRow(
-                conversationType: .single,
-                target: row.uid,
-                line: 0,
-                displayName: row.displayName,
-                avatarURL: row.avatarURL,
-                previewText: "",
-                timestamp: 0,
-                unreadCount: 0,
-                hasUnreadMention: false,
-                isTop: false,
-                isMuted: false,
-                lastMessageStatus: nil
-            )
-            let conversationViewController = ConversationViewController(row: conversationRow, viewModel: conversationViewModel)
-            conversationViewController.onCallTapped = { [weak self] audioOnly in
-                self?.startCallIfAuthorized(to: row.uid, audioOnly: audioOnly)
+            let userInfoVC = UserInfoViewController(userId: row.uid, storage: self.environment.storage)
+            userInfoVC.onSendMessage = { [weak self, weak listViewController] in
+                guard let self else { return }
+                let conversationViewModel = ConversationViewModel(
+                    storage: self.environment.storage,
+                    messageSending: self.environment.messagingService,
+                    imageUploading: self.environment.mediaUploadService,
+                    voiceUploading: self.environment.mediaUploadService,
+                    fileUploading: self.environment.mediaUploadService,
+                    videoUploading: self.environment.mediaUploadService,
+                    target: row.uid,
+                    conversationType: .single,
+                    currentUserId: self.environment.imClient?.userId ?? ""
+                )
+                let conversationRow = ConversationRow(
+                    conversationType: .single,
+                    target: row.uid,
+                    line: 0,
+                    displayName: row.displayName,
+                    avatarURL: row.avatarURL,
+                    previewText: "",
+                    timestamp: 0,
+                    unreadCount: 0,
+                    hasUnreadMention: false,
+                    isTop: false,
+                    isMuted: false,
+                    lastMessageStatus: nil
+                )
+                let conversationVC = ConversationViewController(row: conversationRow, viewModel: conversationViewModel)
+                conversationVC.onCallTapped = { [weak self] audioOnly in
+                    self?.startCallIfAuthorized(to: row.uid, audioOnly: audioOnly)
+                }
+                self.wireContactInfoNavigation(on: conversationVC, userId: row.uid)
+                listViewController?.navigationController?.pushViewController(conversationVC, animated: true)
             }
-            listViewController?.navigationController?.pushViewController(
-                conversationViewController,
-                animated: true
-            )
+            userInfoVC.onVideoCall = { [weak self] in
+                self?.startCallIfAuthorized(to: row.uid, audioOnly: false)
+            }
+            listViewController?.navigationController?.pushViewController(userInfoVC, animated: true)
         }
         listViewController.onGroupEntryTapped = { [weak self, weak listViewController] in
             guard let self else { return }

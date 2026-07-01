@@ -1,6 +1,7 @@
 // App/UserInfoViewController.swift
 import UIKit
 import IMStorage
+import IMKit
 
 final class UserInfoViewController: UIViewController {
 
@@ -49,17 +50,17 @@ final class UserInfoViewController: UIViewController {
 
         sendMessageButton.setTitle("发消息", for: .normal)
         sendMessageButton.setTitleColor(.white, for: .normal)
-        sendMessageButton.backgroundColor = Theme.tint
+        sendMessageButton.backgroundColor = Theme.accent
         sendMessageButton.layer.cornerRadius = 6
         sendMessageButton.titleLabel?.font = .systemFont(ofSize: 16)
         sendMessageButton.translatesAutoresizingMaskIntoConstraints = false
         sendMessageButton.addTarget(self, action: #selector(sendMessageTapped), for: .touchUpInside)
 
         videoCallButton.setTitle("视频聊天", for: .normal)
-        videoCallButton.setTitleColor(Theme.tint, for: .normal)
+        videoCallButton.setTitleColor(Theme.accent, for: .normal)
         videoCallButton.layer.cornerRadius = 6
         videoCallButton.layer.borderWidth = 1
-        videoCallButton.layer.borderColor = Theme.tint.cgColor
+        videoCallButton.layer.borderColor = Theme.accent.cgColor
         videoCallButton.titleLabel?.font = .systemFont(ofSize: 16)
         videoCallButton.translatesAutoresizingMaskIntoConstraints = false
         videoCallButton.addTarget(self, action: #selector(videoCallTapped), for: .touchUpInside)

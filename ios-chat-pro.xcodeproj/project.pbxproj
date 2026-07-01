@@ -8,9 +8,11 @@
 
 /* Begin PBXBuildFile section */
 		029D819BBD6C2F36F5711085 /* NavigationRowCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55BBBC6ED72EBA9DF8E8E1BA /* NavigationRowCell.swift */; };
+		067CE7DC8127C1F90F45E735 /* UserInfoViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B035D72A76A3F36AA69CEBE /* UserInfoViewController.swift */; };
 		08504DA6B3F3A100FA1C2484 /* SearchUserViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 690D108BAFD2ED791E23C0A9 /* SearchUserViewController.swift */; };
 		10F0F91A0119D922D2F5C61A /* IMCall in Frameworks */ = {isa = PBXBuildFile; productRef = 9238D717B4E81FE77D740748 /* IMCall */; };
 		125E3001F6FE0F6B35D28D1A /* TimeHeaderCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBC2A561BBA6202E28B826DA /* TimeHeaderCell.swift */; };
+		17CC56837FF685D1854C1F77 /* SingleConversationInfoViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A868472B0D7644EECCB4752 /* SingleConversationInfoViewController.swift */; };
 		1A8F5F1C4845AC9F553E5CAE /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = E696B814AB99A34483A11EA8 /* Theme.swift */; };
 		1B5930294F64F9611516D67B /* LocationPreviewViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB3814EE6D598EF1B0A74571 /* LocationPreviewViewController.swift */; };
 		1B79BB5974B6C9D4C24D1877 /* VoiceMessageCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD5904F1F07CC229CCF0DA07 /* VoiceMessageCell.swift */; };
@@ -82,12 +84,14 @@
 		1A7AF95FBB4F8D27A5F4067D /* MessageInputBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageInputBar.swift; sourceTree = "<group>"; };
 		25D8EA95D53B3D0A78B985BE /* ExtPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtPanelView.swift; sourceTree = "<group>"; };
 		29D71A57B85DC64E3CCC00C7 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		2A868472B0D7644EECCB4752 /* SingleConversationInfoViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SingleConversationInfoViewController.swift; sourceTree = "<group>"; };
 		2A887447B146764C16A4E603 /* GroupInfoViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupInfoViewController.swift; sourceTree = "<group>"; };
 		2B7725E347391300F698E8D6 /* ImagePreviewViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImagePreviewViewController.swift; sourceTree = "<group>"; };
 		2BFD92E47E6C5AE1CD51B7EE /* LocationPickerViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationPickerViewController.swift; sourceTree = "<group>"; };
 		38D6C28B7BC3F34AF2780264 /* LoginViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginViewController.swift; sourceTree = "<group>"; };
 		3CE3F018CE1845A6A279978F /* SystemTipMessageCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemTipMessageCell.swift; sourceTree = "<group>"; };
 		433A3515C086B0178E667801 /* CallViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CallViewController.swift; sourceTree = "<group>"; };
+		4B035D72A76A3F36AA69CEBE /* UserInfoViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserInfoViewController.swift; sourceTree = "<group>"; };
 		4B177F3C5957AF38D8250AC7 /* GroupEntryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupEntryView.swift; sourceTree = "<group>"; };
 		4E848D7102A8E3E27251A49D /* ThemeViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemeViewController.swift; sourceTree = "<group>"; };
 		53A605ADEEFEFF8E5A5674D9 /* AboutViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutViewController.swift; sourceTree = "<group>"; };
@@ -223,6 +227,7 @@
 				B4CDE3524198DE5097D7D78B /* SearchMessageViewController.swift */,
 				690D108BAFD2ED791E23C0A9 /* SearchUserViewController.swift */,
 				85923E6E0B056A0DFB4951CC /* SettingsViewController.swift */,
+				2A868472B0D7644EECCB4752 /* SingleConversationInfoViewController.swift */,
 				3CE3F018CE1845A6A279978F /* SystemTipMessageCell.swift */,
 				648E9F022D0DE7CACE6E5C39 /* TextMessageCell.swift */,
 				7044AD6B3681821E10EBBD77 /* TextValueRowCell.swift */,
@@ -231,6 +236,7 @@
 				4E848D7102A8E3E27251A49D /* ThemeViewController.swift */,
 				BBC2A561BBA6202E28B826DA /* TimeHeaderCell.swift */,
 				783F647445420DE668035D28 /* ToggleSwitchCell.swift */,
+				4B035D72A76A3F36AA69CEBE /* UserInfoViewController.swift */,
 				E0FEE3A84C6B0830276652AE /* VideoMessageCell.swift */,
 				5803A5A486BFF04BC8C60228 /* VoiceConverter.swift */,
 				AD5904F1F07CC229CCF0DA07 /* VoiceMessageCell.swift */,
@@ -364,6 +370,7 @@
 				5178BA7DEFDD3B7EBEFDABE3 /* SearchMessageViewController.swift in Sources */,
 				08504DA6B3F3A100FA1C2484 /* SearchUserViewController.swift in Sources */,
 				20975C9275A5F1A2D28AB36B /* SettingsViewController.swift in Sources */,
+				17CC56837FF685D1854C1F77 /* SingleConversationInfoViewController.swift in Sources */,
 				364E10AD59CD0F1727BB41EA /* SystemTipMessageCell.swift in Sources */,
 				925E32D89E4D590BFE89B808 /* TextMessageCell.swift in Sources */,
 				A2DF324B8AB6D3023C51A0CC /* TextValueRowCell.swift in Sources */,
@@ -372,6 +379,7 @@
 				5DF857D59C206BEC63D76B76 /* ThemeViewController.swift in Sources */,
 				125E3001F6FE0F6B35D28D1A /* TimeHeaderCell.swift in Sources */,
 				EF0CA2C372E7C21E53FC2452 /* ToggleSwitchCell.swift in Sources */,
+				067CE7DC8127C1F90F45E735 /* UserInfoViewController.swift in Sources */,
 				8E767651E511E3DC65B66846 /* VideoMessageCell.swift in Sources */,
 				DA32151AD7668352890D9013 /* VoiceConverter.swift in Sources */,
 				1B79BB5974B6C9D4C24D1877 /* VoiceMessageCell.swift in Sources */,
