@@ -26,6 +26,7 @@ final class ConversationViewController: UIViewController {
     private let inputBar = MessageInputBar()
     private var inputBarBottomConstraint: NSLayoutConstraint!
     private var previousRawRows: [ChatMessageRow] = []
+    private var tableReady = false
 
     var onGroupInfoTapped: (() -> Void)?
     var onContactInfoTapped: (() -> Void)?
@@ -51,6 +52,7 @@ final class ConversationViewController: UIViewController {
         viewModel.clearUnread()
         viewModel.reprocessMessages()
     }
+
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -100,6 +102,7 @@ final class ConversationViewController: UIViewController {
         tableView.backgroundColor = Theme.backgroundPrimary
         tableView.separatorStyle = .none
         tableView.translatesAutoresizingMaskIntoConstraints = false
+        tableView.alpha = 0
 
         inputBar.translatesAutoresizingMaskIntoConstraints = false
 
@@ -111,7 +114,7 @@ final class ConversationViewController: UIViewController {
         NSLayoutConstraint.activate([
             tableView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             tableView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            tableView.topAnchor.constraint(equalTo: view.topAnchor),
+            tableView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
             tableView.bottomAnchor.constraint(equalTo: inputBar.topAnchor),
 
             inputBar.leadingAnchor.constraint(equalTo: view.leadingAnchor),
@@ -213,13 +216,22 @@ final class ConversationViewController: UIViewController {
         var snapshot = NSDiffableDataSourceSnapshot<Int, ChatMessageRow>()
         snapshot.appendSections([0])
         snapshot.appendItems(displayRows, toSection: 0)
-        dataSource.apply(snapshot, animatingDifferences: !isPrepend) { [weak self] in
+        // Disable animation on initial load (oldRows empty) to avoid visible
+        // insert-from-top flash before scrollToBottom repositions the view.
+        dataSource.apply(snapshot, animatingDifferences: !isPrepend && !oldRows.isEmpty) { [weak self] in
             guard let self else { return }
             if isPrepend {
                 let delta = self.tableView.contentSize.height - previousContentHeight
                 self.tableView.contentOffset.y += delta
             } else if isAppend {
+                if !self.tableReady {
+                    // Force layout so self-sizing cells compute correct contentSize
+                    // before the first scroll, then reveal the table in one shot.
+                    self.view.layoutIfNeeded()
+                    self.tableReady = true
+                }
                 self.scrollToBottom(animated: !oldRows.isEmpty)
+                self.tableView.alpha = 1
             }
         }
     }
