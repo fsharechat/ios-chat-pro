@@ -103,9 +103,13 @@ public final class WebRTCClient: NSObject, MediaEngine {
     /// behavior VoIP calls expect — echo cancellation, automatic
     /// receiver/speaker switching — for free).
     private func configureAudioSession() {
+        // iOS-only: AVAudioSession doesn't exist on macOS, and Package.swift
+        // declares .macOS(.v12) so `swift test` can build the package.
+        #if os(iOS)
         let session = AVAudioSession.sharedInstance()
         try? session.setCategory(.playAndRecord, mode: .voiceChat, options: [.allowBluetooth, .allowBluetoothA2DP])
         try? session.setActive(true)
+        #endif
     }
 
     /// Front camera by default — matches the chosen in-call UI (design doc
@@ -187,7 +191,11 @@ public final class WebRTCClient: NSObject, MediaEngine {
         // Deactivate with `.notifyOthersOnDeactivation` so apps that were
         // ducked/interrupted by `configureAudioSession`'s `.playAndRecord`
         // activation (e.g. background music) get a chance to resume.
+        // iOS-only: AVAudioSession doesn't exist on macOS, and Package.swift
+        // declares .macOS(.v12) so `swift test` can build the package.
+        #if os(iOS)
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        #endif
     }
 }
 
