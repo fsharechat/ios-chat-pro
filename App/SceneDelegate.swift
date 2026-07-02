@@ -134,6 +134,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
                 voiceUploading: self.environment.mediaUploadService,
                 fileUploading: self.environment.mediaUploadService,
                 videoUploading: self.environment.mediaUploadService,
+                remoteHistory: self.environment.messagingService,
                 target: row.target,
                 conversationType: row.conversationType,
                 line: row.line,
@@ -175,6 +176,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
                     voiceUploading: self.environment.mediaUploadService,
                     fileUploading: self.environment.mediaUploadService,
                     videoUploading: self.environment.mediaUploadService,
+                    remoteHistory: self.environment.messagingService,
                     target: groupId,
                     conversationType: .group,
                     currentUserId: self.environment.imClient?.userId ?? ""
@@ -256,6 +258,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
                         voiceUploading: self.environment.mediaUploadService,
                         fileUploading: self.environment.mediaUploadService,
                         videoUploading: self.environment.mediaUploadService,
+                        remoteHistory: self.environment.messagingService,
                         target: uid,
                         conversationType: .single,
                         currentUserId: self.environment.imClient?.userId ?? ""
@@ -372,6 +375,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
                     voiceUploading: self.environment.mediaUploadService,
                     fileUploading: self.environment.mediaUploadService,
                     videoUploading: self.environment.mediaUploadService,
+                    remoteHistory: self.environment.messagingService,
                     target: row.uid,
                     conversationType: .single,
                     currentUserId: self.environment.imClient?.userId ?? ""
@@ -414,6 +418,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
                     voiceUploading: self.environment.mediaUploadService,
                     fileUploading: self.environment.mediaUploadService,
                     videoUploading: self.environment.mediaUploadService,
+                    remoteHistory: self.environment.messagingService,
                     target: groupId,
                     conversationType: .group,
                     line: 0,

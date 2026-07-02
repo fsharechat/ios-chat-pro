@@ -14,6 +14,10 @@ public final class ConversationViewModel {
     private let voiceUploading: VoiceUploading?
     private let fileUploading: FileUploading?
     private let videoUploading: VideoUploading?
+    private let remoteHistory: RemoteHistoryFetching?
+    /// Set once the server confirms there's nothing older than what's
+    /// stored locally — stops `loadMoreHistory` from re-asking every pull.
+    private var remoteHistoryExhausted = false
     private let target: String
     private let conversationType: ConversationType
     private let line: Int
@@ -40,6 +44,7 @@ public final class ConversationViewModel {
         voiceUploading: VoiceUploading? = nil,
         fileUploading: FileUploading? = nil,
         videoUploading: VideoUploading? = nil,
+        remoteHistory: RemoteHistoryFetching? = nil,
         target: String,
         conversationType: ConversationType = .single,
         line: Int = 0,
@@ -52,6 +57,7 @@ public final class ConversationViewModel {
         self.voiceUploading = voiceUploading
         self.fileUploading = fileUploading
         self.videoUploading = videoUploading
+        self.remoteHistory = remoteHistory
         self.target = target
         self.conversationType = conversationType
         self.line = line
@@ -177,16 +183,62 @@ public final class ConversationViewModel {
     /// message. A no-op if nothing is loaded yet or a previous call already
     /// determined there's no more history (`canLoadMore == false`).
     public func loadMore() {
+        loadMoreLocalPage()
+    }
+
+    /// The pull-to-refresh entry point — mirrors Android's
+    /// `ConversationViewModel.loadOldMessages`: page in older history from
+    /// local storage first; only when local history is exhausted, fall back
+    /// to fetching from the server (`RemoteHistoryFetching`), then page the
+    /// newly persisted rows in. `completion` always fires exactly once (on
+    /// the main queue), so the caller can end its refresh spinner.
+    public func loadMoreHistory(completion: @escaping () -> Void) {
+        if loadMoreLocalPage() > 0 { completion(); return }
+        guard let remoteHistory, !remoteHistoryExhausted else { completion(); return }
+        remoteHistory.loadRemoteMessages(
+            conversationType: conversationType, target: target, line: line,
+            beforeUid: oldestKnownMessageUid(), count: pageSize
+        ) { [weak self] inserted in
+            guard let self else { completion(); return }
+            if inserted > 0 {
+                // Local paging had just concluded "no more" — the remote
+                // fetch disproved that by persisting older rows, so re-arm
+                // it and page them in.
+                self.canLoadMore = true
+                self.loadMoreLocalPage()
+            } else {
+                self.remoteHistoryExhausted = true
+            }
+            completion()
+        }
+    }
+
+    /// Returns how many rows were prepended (0 when nothing older exists
+    /// locally, or nothing is loaded yet to page before).
+    @discardableResult
+    private func loadMoreLocalPage() -> Int {
         guard canLoadMore, let oldest = (olderRows.first ?? liveRows.first),
-              let oldestTimestamp = oldest.timestamp, let oldestId = oldest.storageId else { return }
+              let oldestTimestamp = oldest.timestamp, let oldestId = oldest.storageId else { return 0 }
         let older = (try? storage.messages.olderMessages(
             conversationType: conversationType, target: target, line: line,
             beforeTimestamp: oldestTimestamp, beforeId: oldestId, limit: pageSize
         )) ?? []
         if older.count < pageSize { canLoadMore = false }
-        guard !older.isEmpty else { return }
+        guard !older.isEmpty else { return 0 }
         olderRows.insert(contentsOf: older.map(makeRow), at: 0)
         publishRows()
+        return older.count
+    }
+
+    /// The `beforeUid` cursor for a remote-history request: the uid of the
+    /// oldest loaded real message. `.systemTip`/pending rows carry no uid and
+    /// are skipped; 0 (an empty conversation) means "from the newest",
+    /// matching Android's `loadMoreOldMessages` seeding.
+    private func oldestKnownMessageUid() -> Int64 {
+        for row in olderRows + liveRows {
+            if case .message(let message) = row, message.messageUid != 0 { return message.messageUid }
+        }
+        return 0
     }
 
     private func startUpload(_ pending: PendingImageUpload) {
@@ -292,6 +344,16 @@ public final class ConversationViewModel {
         // crossing would defeat the "latest pageSize" windowing entirely.
         let newLiveRows = messages.map(makeRow)
         let newStorageIds = Set(newLiveRows.compactMap(\.storageId))
+        // The reverse of eviction: when the conversation holds fewer than
+        // pageSize messages, persisting remote history *expands the live
+        // window backward* over rows `loadMoreHistory` just paged into
+        // `olderRows`. Keep the two arrays disjoint or `publishRows` emits
+        // the same storageId twice — a fatal "supplied item identifiers are
+        // not unique" in the diffable data source downstream.
+        olderRows.removeAll { row in
+            guard let id = row.storageId else { return false }
+            return newStorageIds.contains(id)
+        }
         if !olderRows.isEmpty {
             let evicted = liveRows.filter { row in
                 guard let id = row.storageId else { return false }

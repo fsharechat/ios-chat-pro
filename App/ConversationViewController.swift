@@ -23,6 +23,7 @@ final class ConversationViewController: UIViewController {
     private static var localVoiceM4ACache: [String: URL] = [:]
 
     private let tableView = UITableView()
+    private let refreshControl = UIRefreshControl()
     private let inputBar = MessageInputBar()
     private var inputBarBottomConstraint: NSLayoutConstraint!
     private var previousRawRows: [ChatMessageRow] = []
@@ -89,6 +90,12 @@ final class ConversationViewController: UIViewController {
     @objc private func videoCallTapped() { onCallTapped?(false) }
     @objc private func audioCallTapped() { onCallTapped?(true) }
 
+    @objc private func refreshTriggered() {
+        viewModel.loadMoreHistory { [weak self] in
+            self?.refreshControl.endRefreshing()
+        }
+    }
+
     private func layoutViews() {
         tableView.register(TextMessageCell.self, forCellReuseIdentifier: TextMessageCell.reuseIdentifier)
         tableView.register(ImageMessageCell.self, forCellReuseIdentifier: ImageMessageCell.reuseIdentifier)
@@ -101,6 +108,10 @@ final class ConversationViewController: UIViewController {
         tableView.delegate = self
         tableView.backgroundColor = Theme.backgroundPrimary
         tableView.separatorStyle = .none
+        // Pull-to-top + release loads older history — the iOS counterpart of
+        // Android's SwipeRefreshLayout.setOnRefreshListener(loadMoreOldMessages).
+        refreshControl.addTarget(self, action: #selector(refreshTriggered), for: .valueChanged)
+        tableView.refreshControl = refreshControl
         tableView.translatesAutoresizingMaskIntoConstraints = false
         tableView.alpha = 0
 
@@ -670,11 +681,6 @@ final class ConversationViewController: UIViewController {
 }
 
 extension ConversationViewController: UITableViewDelegate {
-    func scrollViewDidScroll(_ scrollView: UIScrollView) {
-        guard scrollView.contentOffset.y < 100 else { return }
-        viewModel.loadMore()
-    }
-
     func tableView(_ tableView: UITableView, contextMenuConfigurationForRowAt indexPath: IndexPath, point: CGPoint) -> UIContextMenuConfiguration? {
         guard let item = dataSource.itemIdentifier(for: indexPath),
               case .message(let message) = item else { return nil }

@@ -3,6 +3,7 @@ import IMClient
 import IMTransport
 import IMProto
 import IMStorage
+import GRDB
 
 /// The single entry point Plan E/F's UI code constructs: wires
 /// `MessageSendAckHandler`/`ReceiveMessageHandler`/`NotifyMessageHandler`
@@ -21,7 +22,15 @@ public final class MessagingService {
     private let receiveMessageHandler: ReceiveMessageHandler
     private let recallNotifyHandler: RecallNotifyMessageHandler
     private let recallAckHandler: RecallAckHandler
+    private let remoteMessageAckHandler: RemoteMessageAckHandler
+    private let scheduler: Scheduler
     private var pendingRecalls: [UInt16: (Bool) -> Void] = [:]
+
+    private struct PendingRemoteLoad {
+        let timeoutToken: SchedulerToken
+        let completion: (Int) -> Void
+    }
+    private var pendingRemoteLoads: [UInt16: PendingRemoteLoad] = [:]
 
     /// Forwards to the internal `ReceiveMessageHandler`'s own closure of the
     /// same name — see that type's doc comment. Exposed here because
@@ -65,6 +74,7 @@ public final class MessagingService {
     ) {
         self.imClient = imClient
         self.storage = storage
+        self.scheduler = scheduler
         tracker = OutgoingMessageTracker(scheduler: scheduler)
         self.idGenerator = idGenerator
         self.nowMillis = nowMillis
@@ -83,6 +93,8 @@ public final class MessagingService {
         // before `self` is captured anywhere (even weakly).
         let recallAckHandlerInstance = RecallAckHandler()
         recallAckHandler = recallAckHandlerInstance
+        let remoteAckHandlerInstance = RemoteMessageAckHandler()
+        remoteMessageAckHandler = remoteAckHandlerInstance
 
         let notifyHandler = NotifyMessageHandler()
         notifyHandler.onNotify = { [weak self] head, type in self?.pullMessages(from: head, type: type) }
@@ -92,6 +104,10 @@ public final class MessagingService {
             self?.pendingRecalls.removeValue(forKey: wireId)?(success)
         }
         imClient.register(recallAckHandlerInstance)
+        remoteAckHandlerInstance.onResult = { [weak self] wireId, messages in
+            self?.handleRemoteMessagesResult(wireId: wireId, messages: messages)
+        }
+        imClient.register(remoteAckHandlerInstance)
     }
 
     /// Call once after a successful login (wire this to
@@ -296,6 +312,110 @@ public final class MessagingService {
             case .failed:
                 try? self.storage.messages.updateStatus(localMessageId: localId, status: .sendFailure)
             }
+        }
+    }
+
+    /// Requests up to `count` messages strictly older than `beforeUid` from
+    /// the server (`PUBLISH`/`LRM`) and persists any it doesn't already have
+    /// locally. Mirrors Android's `ChatManager.getRemoteMessages` — the
+    /// remote fallback the conversation screen uses when local history is
+    /// exhausted. `beforeUid == 0` means "from the newest".
+    ///
+    /// `completion` receives the number of *newly persisted* messages: 0 on
+    /// server error, on timeout (5s, same as send acks), or when everything
+    /// returned was already stored. Persisting history deliberately does
+    /// **not** touch the conversation row (no unread badge, no last-message
+    /// preview regression to an older message) nor the incremental-pull sync
+    /// head — history sits strictly behind what the user has already seen.
+    public func loadRemoteMessages(
+        conversationType: ConversationType,
+        target: String,
+        line: Int,
+        beforeUid: Int64,
+        count: Int,
+        completion: @escaping (Int) -> Void
+    ) {
+        var request = Im_LoadRemoteMessages()
+        request.conversation.type = Int32(conversationType.rawValue)
+        request.conversation.target = target
+        request.conversation.line = Int32(line)
+        request.beforeUid = beforeUid
+        request.count = Int32(count)
+        guard let body = try? request.serializedData() else { completion(0); return }
+        let wireId = imClient.sendFrame(signal: .publish, subSignal: .lrm, body: body)
+        let timeoutToken = scheduler.scheduleOnce(after: 5) { [weak self] in
+            self?.pendingRemoteLoads.removeValue(forKey: wireId)?.completion(0)
+        }
+        pendingRemoteLoads[wireId] = PendingRemoteLoad(timeoutToken: timeoutToken, completion: completion)
+    }
+
+    private func handleRemoteMessagesResult(wireId: UInt16, messages: [Im_Message]?) {
+        guard let pending = pendingRemoteLoads.removeValue(forKey: wireId) else { return }
+        pending.timeoutToken.cancel()
+        guard let messages, !messages.isEmpty else { pending.completion(0); return }
+        var inserted = 0
+        try? storage.write { db in
+            for wireMessage in messages where persistHistory(wireMessage, db: db) {
+                inserted += 1
+            }
+        }
+        pending.completion(inserted)
+    }
+
+    /// Persist path for remote *history* — same wire-to-stored conversion as
+    /// `ReceiveMessageHandler.persist` (direction/target mapping, content
+    /// fallbacks) but with everything conversation-facing stripped: no
+    /// `recordIncomingMessage`, no sync-head advance, no group/call
+    /// callbacks. Returns whether a new row was inserted.
+    private func persistHistory(_ wireMessage: Im_Message, db: Database) -> Bool {
+        guard wireMessage.messageID != 0 else { return false }
+        if (try? storage.messages.message(uid: wireMessage.messageID, db: db)) != nil {
+            return false // already have it via server uid
+        }
+        if [401, 402, 403, 404].contains(wireMessage.content.type) {
+            return false // transient call signaling never persists (see ReceiveMessageHandler)
+        }
+        guard var content = try? MessageContentCodec.decode(wireMessage.content) else { return false }
+        if case .groupNotification(let type, let operatorUid, let memberUids, let value) = content, operatorUid.isEmpty {
+            content = .groupNotification(type: type, operatorUid: wireMessage.fromUser, memberUids: memberUids, value: value)
+        }
+        if case .recalled(let operatorId) = content, operatorId.isEmpty {
+            content = .recalled(operatorId: wireMessage.fromUser)
+        }
+
+        let direction: MessageDirection = wireMessage.fromUser == imClient.userId ? .send : .receive
+        let conversationType = ConversationType(rawValue: Int(wireMessage.conversation.type)) ?? .single
+        let target: String
+        if conversationType == .single && direction == .receive {
+            target = wireMessage.fromUser
+        } else {
+            target = wireMessage.conversation.target
+        }
+
+        do {
+            // History rows never reconcile with an in-flight local echo (any
+            // message this device sent is already stored and deduped by uid
+            // above), so the server uid doubles as the send-direction
+            // localMessageId surrogate — an old device's localMessageID could
+            // collide with this device's generator under the partial unique
+            // index on (localMessageId) WHERE direction=send.
+            try storage.messages.insert(StoredMessage(
+                localMessageId: direction == .send ? wireMessage.messageID : wireMessage.localMessageID,
+                messageUid: wireMessage.messageID,
+                conversationType: conversationType,
+                target: target,
+                line: Int(wireMessage.conversation.line),
+                from: wireMessage.fromUser,
+                content: content,
+                timestamp: wireMessage.serverTimestamp,
+                status: direction == .send ? .sent : .read,
+                direction: direction,
+                mentionedType: Int(wireMessage.content.mentionedType),
+                mentionedTargets: wireMessage.content.mentionedTarget
+            ), db: db)
+            return true
+        } catch {
+            return false // one malformed row shouldn't abort the rest of the batch
         }
     }
 
