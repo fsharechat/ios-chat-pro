@@ -18,6 +18,10 @@ final class TextMessageCell: UITableViewCell {
 
     var onRetryTapped: (() -> Void)?
     var onExpandTapped: (() -> Void)?
+    /// Kept so a light/dark switch can re-render: markdown attributes (and
+    /// the table bitmap especially) bake in colors resolved at configure
+    /// time — dynamic colors can't adapt inside a drawn image.
+    private var lastConfiguredRow: StoredMessageRow?
 
     override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
         super.init(style: style, reuseIdentifier: reuseIdentifier)
@@ -87,27 +91,48 @@ final class TextMessageCell: UITableViewCell {
             rowStack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -8),
             rowStack.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 4),
             rowStack.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -4),
-            bubbleColumn.widthAnchor.constraint(lessThanOrEqualTo: contentView.widthAnchor, multiplier: 0.65),
+            // Bubble may grow until its far edge aligns with where the
+            // opposite party's avatar sits: 2×(8pt row inset + 36pt avatar
+            // + 8pt gap) = 104pt reserved. Wider than the old 65% cap —
+            // gives tables room to render as a real grid.
+            bubbleColumn.widthAnchor.constraint(lessThanOrEqualTo: contentView.widthAnchor, constant: -Self.reservedHorizontalSpace),
         ])
     }
 
+    /// 8pt row inset + 36pt avatar + 8pt gap, mirrored on both sides.
+    private static let reservedHorizontalSpace: CGFloat = 104
+    /// Widest the label content can be: bubble max width minus the bubble's
+    /// 12pt+12pt text insets. Used as the markdown table's render width.
+    static var maxContentWidth: CGFloat { UIScreen.main.bounds.width - reservedHorizontalSpace - 24 }
+
     func configure(with row: StoredMessageRow) {
+        lastConfiguredRow = row
+        let isOutgoing = row.isOutgoing
         // Collapse very long text — a single self-sizing label holding a
         // multi-thousand-character message makes the bubble taller than the
         // GPU's maximum texture size and stalls open/scroll on TextKit
         // layout. Full text remains available via 查看全文/copy/forward.
         let preview = LongTextPreview.preview(for: row.text ?? "")
-        messageTextLabel.text = preview.text
+        // Resolve the dynamic color against this cell's traits *now*: the
+        // table renderer bakes it into a bitmap (which can't re-resolve),
+        // and the resolved value keys the render cache per appearance.
+        let textColor = (isOutgoing ? Theme.textOnAccent : Theme.textPrimary)
+            .resolvedColor(with: traitCollection)
+        messageTextLabel.attributedText = MarkdownRenderer.render(
+            preview.text,
+            textColor: textColor,
+            availableWidth: Self.maxContentWidth
+        )
         expandButton.isHidden = !preview.isTruncated
-
-        let isOutgoing = row.isOutgoing
         let showsSender = !isOutgoing && row.senderDisplayName != nil
 
         senderNameLabel.isHidden = !showsSender
         senderNameLabel.text = showsSender ? row.senderDisplayName : nil
 
         bubbleView.backgroundColor = isOutgoing ? Theme.accent : Theme.incomingBubble
-        messageTextLabel.textColor = isOutgoing ? Theme.textOnAccent : Theme.textPrimary
+        // No textColor assignment here: setting UILabel.textColor after
+        // attributedText repaints the whole string, clobbering the per-run
+        // colors (quote/divider alpha) MarkdownRenderer produced.
         bubbleColumn.alignment = isOutgoing ? .trailing : .leading
         statusLabel.textAlignment = isOutgoing ? .right : .left
 
@@ -142,6 +167,15 @@ final class TextMessageCell: UITableViewCell {
                 displayName: row.senderDisplayName ?? ""
             )
         }
+    }
+
+    override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+        super.traitCollectionDidChange(previousTraitCollection)
+        guard traitCollection.hasDifferentColorAppearance(comparedTo: previousTraitCollection),
+              let row = lastConfiguredRow else { return }
+        // Callbacks (onRetryTapped etc.) are untouched — re-running
+        // configure only refreshes the appearance-dependent content.
+        configure(with: row)
     }
 
     @objc private func retryTapped() { onRetryTapped?() }

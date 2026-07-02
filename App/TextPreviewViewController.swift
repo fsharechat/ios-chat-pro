@@ -6,6 +6,7 @@ import UIKit
 /// stays smooth — unlike the chat bubble's fully-laid-out UILabel.
 final class TextPreviewViewController: UIViewController {
     private let text: String
+    private let textView = UITextView()
 
     init(text: String) {
         self.text = text
@@ -21,11 +22,10 @@ final class TextPreviewViewController: UIViewController {
         super.viewDidLoad()
         view.backgroundColor = Theme.backgroundPrimary
 
-        let textView = UITextView()
         textView.isEditable = false
-        textView.text = text
-        textView.font = .systemFont(ofSize: 16)
-        textView.textColor = Theme.textPrimary
+        renderContent()
+        // Color only, no underline — matches the bubble's link treatment.
+        textView.linkTextAttributes = [.foregroundColor: UIColor.systemBlue]
         textView.backgroundColor = .clear
         textView.textContainerInset = UIEdgeInsets(top: 16, left: 12, bottom: 16, right: 12)
         textView.alwaysBounceVertical = true
@@ -37,5 +37,23 @@ final class TextPreviewViewController: UIViewController {
             textView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             textView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
         ])
+    }
+
+    /// Colors are resolved to concrete values at render time (the table
+    /// bitmap can't hold dynamic colors), so a light/dark switch re-renders.
+    private func renderContent() {
+        // 34 = textContainerInset (12+12) + lineFragmentPadding (5×2).
+        textView.attributedText = MarkdownRenderer.render(
+            text,
+            textColor: Theme.textPrimary.resolvedColor(with: traitCollection),
+            availableWidth: UIScreen.main.bounds.width - 34
+        )
+    }
+
+    override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+        super.traitCollectionDidChange(previousTraitCollection)
+        if traitCollection.hasDifferentColorAppearance(comparedTo: previousTraitCollection) {
+            renderContent()
+        }
     }
 }

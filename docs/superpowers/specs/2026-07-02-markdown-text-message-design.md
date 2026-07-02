@@ -51,7 +51,9 @@ public enum MarkdownMessage {
 规则:
 - 逐行扫描;每个源码行产出一个块,渲染时块间以换行连接 → 原始换行结构完整保留。
 - 行内解析失败(非法语法)→ 该行降级为纯文本 span。
-- **表格行(`|` 开头)不解析**,原样保留为 paragraph——NSAttributedString 无法合理渲染表格,降级最稳妥。
+- **表格聚合为 `.table(alignments:header:rows:)`**:连续 `|` 行合并成一个表格块;分隔行(`|:---|---:|`)被消费,定义各列对齐(`:---:` 居中、`---:` 右对齐)并把上一行提升为表头;行按最大列数补齐空单元格;孤立分隔行丢弃。
+- **表格渲染成真网格**(对齐 Android 客户端,2026-07-02 用户反馈):`MarkdownTableRenderer` 把表格绘制为 UIImage,以 `NSTextAttachment` 嵌入富文本——hairline 网格线、表头加粗 + 底色、按列对齐、单元格内自动折行。列宽算法在 IMKit `MarkdownTableLayout`(纯函数可单测):自然宽度装得下则等比放大铺满可用宽度,装不下则等比压缩、低于 44pt 下限的列钉在下限并从最宽列扣回(其单元格折行消化)。
+- **气泡加宽**:文本气泡最大宽度从屏宽 65% 放宽到"与对向头像对齐"——两侧各预留 8+36+8pt,即 `屏宽 - 104pt`,给表格留出横向空间。
 - 代码围栏 ```` ``` ```` 开/闭之间的行原样收进 `codeBlock`;未闭合的围栏视为闭合到文末。
 
 ### App:`MarkdownRenderer.swift`(UIKit)
@@ -62,8 +64,9 @@ enum MarkdownRenderer {
 }
 ```
 
-- 样式映射:标题 1/2/3 级 → 加粗 22/20/18pt(4-6 级 → 加粗 16pt);列表加 "• " / "n. " 前缀;引用 → 60% 透明度;代码(行内与块)→ 等宽 13pt;分隔线 → "───" 40% 透明度;粗体/斜体/删除线/链接为标准 attribute。
-- 链接:加 `.link` attribute——全文页(UITextView)可点击跳转,气泡(UILabel)仅显示样式,不可点(接受)。
+- 样式映射:标题 1/2/3 级 → 加粗 22/20/18pt(4-6 级 → 加粗 16pt);列表加 "• " / "n. " 前缀;引用 → 60% 透明度;行内代码 → 等宽字体 + 12% 前景色文字底色;代码块 → `MarkdownCodeBlockRenderer` 绘制成全宽圆角卡片附件图(整块 12% 底色 + 10pt 内边距,按字符折行防长 token 溢出)——`.backgroundColor` attribute 只能给文字染色,做不了整块背景(2026-07-02 用户反馈);分隔线 → "───" 40% 透明度;粗体/斜体/删除线/链接为标准 attribute。
+- **动态颜色必须在渲染入口解析成具体色**(`resolvedColor(with: traitCollection)`):表格位图无法二次解析动态色,曾导致浅色模式下表格文字是烤进去的白色;解析后的具体色同时充当缓存 key 的外观维度。深浅切换由 cell/VC 的 `traitCollectionDidChange` 重渲染。
+- 链接:加 `.link` attribute,**不加下划线**(2026-07-02 用户反馈);全文页(UITextView,`linkTextAttributes` 仅设颜色)可点击跳转,气泡(UILabel)仅显示颜色,不可点(接受)。
 - **缓存**:`NSCache<NSString, NSAttributedString>`,key = `"\(fontSize)|\(textColor hash)|\(text)"`,滚动复用零重复解析。
 
 ### 接入点
@@ -86,6 +89,7 @@ enum MarkdownRenderer {
 - 粗体/斜体/行内代码/删除线/链接 span 解析;
 - 标题各级、无序/有序列表、引用、分隔线;
 - 围栏代码块(闭合与未闭合);
-- 表格行降级为原样 paragraph。
+- 表格:连续行聚合、表头与列对齐解析、不规则行补齐、单元格行内语法、孤立分隔行丢弃、表格后文本独立成段;
+- 列宽算法(`MarkdownTableLayoutTests`):铺满放大、超宽等比压缩、最小列宽钉住并从最宽列扣回、全零宽度均分。
 
 App 层渲染由使用者真机验证(项目约定)。
