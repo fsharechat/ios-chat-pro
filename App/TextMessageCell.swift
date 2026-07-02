@@ -14,8 +14,10 @@ final class TextMessageCell: UITableViewCell {
     private let bubbleColumn = UIStackView()
     private let rowStack = UIStackView()
     private let spacer = UIView()
+    private let expandButton = UIButton(type: .system)
 
     var onRetryTapped: (() -> Void)?
+    var onExpandTapped: (() -> Void)?
 
     override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
         super.init(style: style, reuseIdentifier: reuseIdentifier)
@@ -30,6 +32,7 @@ final class TextMessageCell: UITableViewCell {
     override func prepareForReuse() {
         super.prepareForReuse()
         onRetryTapped = nil
+        onExpandTapped = nil
     }
 
     private func layoutViews() {
@@ -55,11 +58,17 @@ final class TextMessageCell: UITableViewCell {
         retryButton.tintColor = .systemRed
         retryButton.addTarget(self, action: #selector(retryTapped), for: .touchUpInside)
 
-        // bubbleColumn stacks sender name + bubble + status vertically
+        expandButton.setTitle("查看全文", for: .normal)
+        expandButton.titleLabel?.font = .systemFont(ofSize: 13)
+        expandButton.addTarget(self, action: #selector(expandTapped), for: .touchUpInside)
+        expandButton.isHidden = true
+
+        // bubbleColumn stacks sender name + bubble + expand + status vertically
         bubbleColumn.axis = .vertical
         bubbleColumn.spacing = 2
         bubbleColumn.addArrangedSubview(senderNameLabel)
         bubbleColumn.addArrangedSubview(bubbleView)
+        bubbleColumn.addArrangedSubview(expandButton)
         bubbleColumn.addArrangedSubview(statusLabel)
 
         rowStack.axis = .horizontal
@@ -83,7 +92,13 @@ final class TextMessageCell: UITableViewCell {
     }
 
     func configure(with row: StoredMessageRow) {
-        messageTextLabel.text = row.text
+        // Collapse very long text — a single self-sizing label holding a
+        // multi-thousand-character message makes the bubble taller than the
+        // GPU's maximum texture size and stalls open/scroll on TextKit
+        // layout. Full text remains available via 查看全文/copy/forward.
+        let preview = LongTextPreview.preview(for: row.text ?? "")
+        messageTextLabel.text = preview.text
+        expandButton.isHidden = !preview.isTruncated
 
         let isOutgoing = row.isOutgoing
         let showsSender = !isOutgoing && row.senderDisplayName != nil
@@ -130,4 +145,5 @@ final class TextMessageCell: UITableViewCell {
     }
 
     @objc private func retryTapped() { onRetryTapped?() }
+    @objc private func expandTapped() { onExpandTapped?() }
 }

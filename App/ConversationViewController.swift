@@ -186,6 +186,10 @@ final class ConversationViewController: UIViewController {
                 let cell = tableView.dequeueReusableCell(withIdentifier: TextMessageCell.reuseIdentifier, for: indexPath) as! TextMessageCell
                 cell.configure(with: message)
                 cell.onRetryTapped = { [weak self] in self?.viewModel.retry(row: row) }
+                cell.onExpandTapped = { [weak self] in
+                    guard let text = message.text else { return }
+                    self?.navigationController?.pushViewController(TextPreviewViewController(text: text), animated: true)
+                }
                 return cell
             case .message(let message) where message.videoDuration != nil:
                 let cell = tableView.dequeueReusableCell(withIdentifier: VideoMessageCell.reuseIdentifier, for: indexPath) as! VideoMessageCell

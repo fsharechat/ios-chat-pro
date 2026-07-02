@@ -13,6 +13,7 @@
 		10F0F91A0119D922D2F5C61A /* IMCall in Frameworks */ = {isa = PBXBuildFile; productRef = 9238D717B4E81FE77D740748 /* IMCall */; };
 		125E3001F6FE0F6B35D28D1A /* TimeHeaderCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBC2A561BBA6202E28B826DA /* TimeHeaderCell.swift */; };
 		17CC56837FF685D1854C1F77 /* SingleConversationInfoViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A868472B0D7644EECCB4752 /* SingleConversationInfoViewController.swift */; };
+		186A5E818B7717CAF728C853 /* TextPreviewViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 01F48A9FE1740DCDDAC2EBD0 /* TextPreviewViewController.swift */; };
 		1A8F5F1C4845AC9F553E5CAE /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = E696B814AB99A34483A11EA8 /* Theme.swift */; };
 		1B5930294F64F9611516D67B /* LocationPreviewViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB3814EE6D598EF1B0A74571 /* LocationPreviewViewController.swift */; };
 		1B79BB5974B6C9D4C24D1877 /* VoiceMessageCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD5904F1F07CC229CCF0DA07 /* VoiceMessageCell.swift */; };
@@ -74,6 +75,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		01F48A9FE1740DCDDAC2EBD0 /* TextPreviewViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextPreviewViewController.swift; sourceTree = "<group>"; };
 		03560F1E35A1CD83F06CBEFF /* GroupQRCodeViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupQRCodeViewController.swift; sourceTree = "<group>"; };
 		0832B3942D777D6A0D67E100 /* NewFriendsViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewFriendsViewController.swift; sourceTree = "<group>"; };
 		0B65530874C01F08C0C8B669 /* ForwardPickerViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForwardPickerViewController.swift; sourceTree = "<group>"; };
@@ -230,6 +232,7 @@
 				2A868472B0D7644EECCB4752 /* SingleConversationInfoViewController.swift */,
 				3CE3F018CE1845A6A279978F /* SystemTipMessageCell.swift */,
 				648E9F022D0DE7CACE6E5C39 /* TextMessageCell.swift */,
+				01F48A9FE1740DCDDAC2EBD0 /* TextPreviewViewController.swift */,
 				7044AD6B3681821E10EBBD77 /* TextValueRowCell.swift */,
 				E696B814AB99A34483A11EA8 /* Theme.swift */,
 				619515E59C475B7B0ECBF677 /* ThemeMode+UIKit.swift */,
@@ -373,6 +376,7 @@
 				17CC56837FF685D1854C1F77 /* SingleConversationInfoViewController.swift in Sources */,
 				364E10AD59CD0F1727BB41EA /* SystemTipMessageCell.swift in Sources */,
 				925E32D89E4D590BFE89B808 /* TextMessageCell.swift in Sources */,
+				186A5E818B7717CAF728C853 /* TextPreviewViewController.swift in Sources */,
 				A2DF324B8AB6D3023C51A0CC /* TextValueRowCell.swift in Sources */,
 				1A8F5F1C4845AC9F553E5CAE /* Theme.swift in Sources */,
 				8C63466A0D9B5726B7F5C6F0 /* ThemeMode+UIKit.swift in Sources */,
