@@ -28,6 +28,13 @@ final class ConversationViewController: UIViewController {
     private var inputBarBottomConstraint: NSLayoutConstraint!
     private var previousRawRows: [ChatMessageRow] = []
     private var tableReady = false
+    /// UIRefreshControl fires .valueChanged mid-drag, the moment the pull
+    /// crosses the threshold. Loading then would prepend rows while the pan
+    /// gesture still owns contentOffset, so the keep-position adjustment in
+    /// applySnapshot gets overwritten every frame. Instead we only note the
+    /// request here and start the real load on finger lift.
+    private var pendingHistoryRefresh = false
+    private var isLoadingHistory = false
 
     var onGroupInfoTapped: (() -> Void)?
     var onContactInfoTapped: (() -> Void)?
@@ -91,8 +98,23 @@ final class ConversationViewController: UIViewController {
     @objc private func audioCallTapped() { onCallTapped?(true) }
 
     @objc private func refreshTriggered() {
+        if tableView.isDragging {
+            pendingHistoryRefresh = true
+        } else {
+            startHistoryLoad()
+        }
+    }
+
+    private func startHistoryLoad() {
+        guard !isLoadingHistory else { return }
+        isLoadingHistory = true
         viewModel.loadMoreHistory { [weak self] in
-            self?.refreshControl.endRefreshing()
+            guard let self else { return }
+            self.isLoadingHistory = false
+            // One hop later than the rows sink, so the prepend snapshot (and
+            // its contentOffset restoration) is applied before the refresh
+            // control's inset-collapse animation starts.
+            DispatchQueue.main.async { self.refreshControl.endRefreshing() }
         }
     }
 
@@ -221,20 +243,20 @@ final class ConversationViewController: UIViewController {
         let isPrepend = !oldRows.isEmpty && rows.count > oldRows.count && Array(rows.suffix(oldRows.count)) == oldRows
         let isAppend = Self.rowIdentity(rows.last) != Self.rowIdentity(oldRows.last)
         previousRawRows = rows
-        let previousContentHeight = tableView.contentSize.height
 
         let displayRows = injectTimeHeaders(rows)
         var snapshot = NSDiffableDataSourceSnapshot<Int, ChatMessageRow>()
         snapshot.appendSections([0])
         snapshot.appendItems(displayRows, toSection: 0)
+        if isPrepend {
+            applyPreservingReadingPosition(snapshot, anchor: oldRows.first)
+            return
+        }
         // Disable animation on initial load (oldRows empty) to avoid visible
         // insert-from-top flash before scrollToBottom repositions the view.
-        dataSource.apply(snapshot, animatingDifferences: !isPrepend && !oldRows.isEmpty) { [weak self] in
+        dataSource.apply(snapshot, animatingDifferences: !oldRows.isEmpty) { [weak self] in
             guard let self else { return }
-            if isPrepend {
-                let delta = self.tableView.contentSize.height - previousContentHeight
-                self.tableView.contentOffset.y += delta
-            } else if isAppend {
+            if isAppend {
                 if !self.tableReady {
                     // Force layout so self-sizing cells compute correct contentSize
                     // before the first scroll, then reveal the table in one shot.
@@ -244,6 +266,35 @@ final class ConversationViewController: UIViewController {
                 self.scrollToBottom(animated: !oldRows.isEmpty)
                 self.tableView.alpha = 1
             }
+        }
+    }
+
+    /// Applies a snapshot that prepends older history while keeping the
+    /// user's reading position. Anchors on the previously-oldest row: capture
+    /// where it sits on screen, apply, force layout, then scroll it back to
+    /// that exact spot — all synchronously within one frame. A contentSize
+    /// delta can't do this reliably: with self-sizing cells a large
+    /// non-animated apply rebuilds layout from *estimated* heights, so
+    /// "after minus before" compares two incommensurable numbers (on device
+    /// this overshot by the height of everything already loaded, teleporting
+    /// the view near the bottom), and a completion-based adjustment lands a
+    /// frame late, flashing the unpositioned prepended rows first.
+    private func applyPreservingReadingPosition(
+        _ snapshot: NSDiffableDataSourceSnapshot<Int, ChatMessageRow>,
+        anchor: ChatMessageRow?
+    ) {
+        var anchorScreenY: CGFloat?
+        if let anchor, let path = dataSource.indexPath(for: anchor) {
+            anchorScreenY = tableView.rectForRow(at: path).minY - tableView.contentOffset.y
+        }
+        UIView.performWithoutAnimation {
+            dataSource.apply(snapshot, animatingDifferences: false)
+            tableView.layoutIfNeeded()
+            guard let anchor, let screenY = anchorScreenY,
+                  let newPath = dataSource.indexPath(for: anchor) else { return }
+            let target = tableView.rectForRow(at: newPath).minY - screenY
+            let minOffset = -tableView.adjustedContentInset.top
+            tableView.setContentOffset(CGPoint(x: 0, y: max(target, minOffset)), animated: false)
         }
     }
 
@@ -681,6 +732,13 @@ final class ConversationViewController: UIViewController {
 }
 
 extension ConversationViewController: UITableViewDelegate {
+    func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
+        if pendingHistoryRefresh {
+            pendingHistoryRefresh = false
+            startHistoryLoad()
+        }
+    }
+
     func tableView(_ tableView: UITableView, contextMenuConfigurationForRowAt indexPath: IndexPath, point: CGPoint) -> UIContextMenuConfiguration? {
         guard let item = dataSource.itemIdentifier(for: indexPath),
               case .message(let message) = item else { return nil }
