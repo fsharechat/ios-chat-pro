@@ -428,6 +428,23 @@ final class CallManagerTests: XCTestCase {
         XCTAssertTrue(mediaEngine.audioOnlyCalls.isEmpty)
     }
 
+    /// Android 仅在 Connected 处理/发送 Modify —— connecting 阶段两端
+    /// PeerConnection 还没建好,提前切 audioOnly 会让两端最终协商出的
+    /// audioOnly 状态分叉。之前 iOS 在 connecting 也放行会发 Modify,
+    /// 现收紧为仅 `.connected`。
+    func test_setAudioOnly_whileConnecting_isANoOp() throws {
+        try manager.startCall(to: "them", audioOnly: false)
+        let callId = callIdFromLastCallStart()
+        try deliverSignal(.answer(callId: callId, audioOnly: false), from: "them") // → .connecting,尚未 simulateConnected
+        let countBefore = try sentWireMessages().count
+
+        XCTAssertNoThrow(try manager.setAudioOnly(true))
+
+        XCTAssertEqual(manager.audioOnly, false) // 不变
+        XCTAssertTrue(mediaEngine.audioOnlyCalls.isEmpty)
+        XCTAssertEqual(try sentWireMessages().count, countBefore) // 没发 Modify
+    }
+
     func test_setAudioOnly_turningVideoOn_whenCallStartedAsAudioOnly_isANoOp() throws {
         try manager.startCall(to: "them", audioOnly: true)
         try deliverSignal(.answer(callId: callIdFromLastCallStart(), audioOnly: true), from: "them")
@@ -462,6 +479,18 @@ final class CallManagerTests: XCTestCase {
         try deliverSignal(.modify(callId: callId, audioOnly: false), from: "them")
 
         XCTAssertEqual(manager.audioOnly, true) // 不变
+        XCTAssertTrue(mediaEngine.audioOnlyCalls.isEmpty)
+    }
+
+    /// 入站 Modify 同样仅在 `.connected` 处理 —— 对齐 Android。
+    func test_receivingModify_whileConnecting_isIgnored() throws {
+        try manager.startCall(to: "them", audioOnly: false)
+        let callId = callIdFromLastCallStart()
+        try deliverSignal(.answer(callId: callId, audioOnly: false), from: "them") // → .connecting,尚未 simulateConnected
+
+        try deliverSignal(.modify(callId: callId, audioOnly: true), from: "them")
+
+        XCTAssertEqual(manager.audioOnly, false) // 不变
         XCTAssertTrue(mediaEngine.audioOnlyCalls.isEmpty)
     }
 

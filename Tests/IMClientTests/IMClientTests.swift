@@ -153,4 +153,37 @@ final class IMClientTests: XCTestCase {
 
         XCTAssertEqual(handler.captured?.body, Data("hi".utf8))
     }
+
+    // MARK: - serverTimeDeltaMillis (Fix 2: 90s 来电新鲜度需要服务器时间校正)
+
+    func test_serverTimeDeltaMillis_defaultsToZeroBeforeAnyConnectAck() {
+        XCTAssertEqual(client.serverTimeDeltaMillis, 0)
+    }
+
+    func test_receivingConnectAckWithServerTime_computesDeltaAgainstLocalClock() {
+        client.connect()
+        fakeTransport.simulate(.connected)
+        fakeTransport.completeOldestSend()
+
+        // 模拟设备时钟慢了 2 分钟:server_time 比本机当前时间超前 120s。
+        let localNow = Int64(Date().timeIntervalSince1970 * 1000)
+        var payload = Im_ConnectAckPayload()
+        payload.msgHead = 100
+        payload.serverTime = localNow + 120_000
+        let body = try! payload.serializedData()
+        fakeTransport.simulateReceivedData(FrameEncoder.encode(signal: .connectAck, subSignal: .none, messageId: 1, body: body))
+
+        // 允许测试执行耗时带来的少量误差。
+        XCTAssertTrue(abs(client.serverTimeDeltaMillis - 120_000) < 5_000, "delta was \(client.serverTimeDeltaMillis)")
+    }
+
+    func test_receivingConnectAckWithoutServerTime_leavesDeltaAtZero() {
+        client.connect()
+        fakeTransport.simulate(.connected)
+        fakeTransport.completeOldestSend()
+
+        fakeTransport.simulateReceivedData(makeConnectAckFrameBytes()) // server_time 未设置(=0)
+
+        XCTAssertEqual(client.serverTimeDeltaMillis, 0)
+    }
 }

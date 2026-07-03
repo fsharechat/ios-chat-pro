@@ -1,5 +1,6 @@
 import Foundation
 import IMTransport
+import IMProto
 
 public enum IMConnectionStatus: Equatable {
     case disconnected
@@ -65,6 +66,17 @@ public final class IMClient {
         didSet { onConnectionStatusChange?(connectionStatus) }
     }
     public var onConnectionStatusChange: ((IMConnectionStatus) -> Void)?
+
+    /// 服务器时间(毫秒,来自最近一次 CONNECT_ACK 里 `Im_ConnectAckPayload.
+    /// server_time`)减本机当前时间的差值。默认 0(尚未收到过 ConnectAck)。
+    /// 调用方(`AppEnvironment` 注入给 `CallManager` 的 `nowMillis` 闭包)
+    /// 用 `本机当前时间 + serverTimeDeltaMillis` 得到"服务器认为的当前
+    /// 时间",校正设备时钟漂移 —— 对齐 Android `AVEngineKit` 的
+    /// `serverDeltaTime`,该值被用来判断 90 秒来电新鲜度窗口
+    /// (`System.currentTimeMillis() - (serverTime - deltaTime) < 90000`)。
+    /// 若设备时钟本身快了 ≥90 秒,不校正会导致所有来电永远判定为"过期",
+    /// 来电永不弹窗。
+    public private(set) var serverTimeDeltaMillis: Int64 = 0
 
     private static let maxAutomaticReconnectAttempts = 4
 
@@ -205,17 +217,29 @@ public final class IMClient {
         for frame in frameDecoder.feed(data) {
             print("[DEBUG-FP][\({ let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"; return f.string(from: Date()) }())] recv signal=\(frame.header.signal) subSignal=\(frame.header.subSignal) bodyLength=\(frame.header.bodyLength) messageId=\(frame.header.messageId)")
             if frame.header.signal == .connectAck {
-                handleConnectAck()
+                handleConnectAck(body: frame.body)
             }
             handlerRegistry.dispatch(frame)
         }
     }
 
-    private func handleConnectAck() {
+    private func handleConnectAck(body: Data) {
         reconnectAttempt = 0
         reconnectToken?.cancel()
         connectionStatus = .connected
+        updateServerTimeDelta(fromConnectAckBody: body)
         sendHeartbeat(interval: heartbeatManager.currentHeartInterval())
+    }
+
+    /// 解析同一个 CONNECT_ACK frame 的 payload 拿 `server_time` 校正
+    /// `serverTimeDeltaMillis`——与 `ConnectAckHandler`(`IMMessaging`/
+    /// `AppCore` 注册的独立 handler,负责 msgHead/friendHead 等增量同步字段)
+    /// 各自独立解析同一份 body,互不依赖对方是否已注册,`IMClient` 因此
+    /// 无需等待任何外部 handler 就能自行维护这个只读属性。`server_time`
+    /// 未设置(=0)或 payload 解析失败时保持 delta 为 0,退化为裸本机时间。
+    private func updateServerTimeDelta(fromConnectAckBody body: Data) {
+        guard let payload = try? Im_ConnectAckPayload(serializedBytes: body), payload.serverTime > 0 else { return }
+        serverTimeDeltaMillis = payload.serverTime - nowMillis()
     }
 
     private func sendHeartbeat(interval: Int64) {

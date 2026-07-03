@@ -124,8 +124,12 @@ public final class CallManager {
     /// 本来就是视频通话(`!session.audioOnly`,该字段记录通话原始模式,不被
     /// 本方法改写)—— 音频通话升级视频需要 SDP 重协商,不在本期范围,静默
     /// no-op 而不是误发 Modify。
+    ///
+    /// 仅 `.connected` 允许——对齐 Android(仅在 Connected 处理/发送
+    /// Modify)。之前 `.connecting` 也放行,connecting 阶段两端 PeerConnection
+    /// 还没建好,提前切 audioOnly 会导致两端最终协商出的 audioOnly 状态分叉。
     public func setAudioOnly(_ audioOnly: Bool) throws {
-        guard let session, state == .connecting || state == .connected else { return }
+        guard let session, state == .connected else { return }
         guard audioOnly || !session.audioOnly else { return }
         try sendSignal(.modify(callId: session.callId, audioOnly: audioOnly), to: session.peerUid)
         self.audioOnly = audioOnly
@@ -195,6 +199,9 @@ public final class CallManager {
             mediaEngine.removeRemoteCandidates(candidates)
 
         case .modify(_, let newAudioOnly):
+            // 仅 `.connected` 处理——对齐 Android(仅在 Connected 处理/发送
+            // Modify),避免 connecting 阶段两端 audioOnly 状态分叉。
+            guard state == .connected else { return }
             // 与 setAudioOnly 相同的门:这台设备以纯音频开局的通话没有可
             // 再启用的视频轨,对方请求打开视频只能忽略。
             guard newAudioOnly || !session.audioOnly else { return }

@@ -99,7 +99,15 @@ public final class AppEnvironment {
         mediaUploadService = MediaUploadService(imClient: client)
         let webRTC = WebRTCClient(iceServers: config.iceServers.map { IceServer(urlString: $0.urlString, username: $0.username, credential: $0.credential) })
         webRTCClient = webRTC
-        callManager = CallManager(messagingService: service, storage: storage, mediaEngine: webRTC, myUserId: { client.userId })
+        // `nowMillis` 用本机时间加上 `client.serverTimeDeltaMillis` 校正设备
+        // 时钟漂移,对应 Android `AVEngineKit` 的 `serverDeltaTime` 用法 ——
+        // 若设备时钟快 ≥90 秒且不校正,`CallManager` 的 90 秒来电新鲜度判断
+        // 会让所有来电都被当成"过期"而永不弹窗(见 IMClient.serverTimeDeltaMillis
+        // 的文档)。与上面 `myUserId` 一致地强捕获 `client`(局部 let,同一份
+        // 引用已存在 `imClient` 里,不构成新的引用环)。
+        callManager = CallManager(messagingService: service, storage: storage, mediaEngine: webRTC, myUserId: { client.userId }, nowMillis: {
+            Int64(Date().timeIntervalSince1970 * 1000) + client.serverTimeDeltaMillis
+        })
         client.connect()
         return true
     }

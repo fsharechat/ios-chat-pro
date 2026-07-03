@@ -207,8 +207,11 @@ public final class WebRTCClient: NSObject, MediaEngine {
         localVideoTrack = nil
         localAudioTrack = nil
         remoteVideoTrack = nil
-        localRenderer = nil
-        remoteRenderer = nil
+        // 注意:不清 localRenderer/remoteRenderer —— renderer 归 UI(CallViewController)
+        // 持有,不归这次通话的 PeerConnection 生命周期管。glare 败者路径下
+        // CallManager 会 close() 掉预览再转入 incoming,但同一个 CallViewController
+        // 不会重建,若这里把 renderer 置 nil,接听后就没有 renderer 可补挂,
+        // 造成双向黑屏。下一通电话的 VC attach 时会用新的 renderer 覆盖它们。
         isUsingFrontCamera = true
         // 必须复位:实例跨通话复用,留 true 会永久吞掉下一通的 onConnected。
         hasReportedConnected = false
