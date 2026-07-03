@@ -283,7 +283,7 @@ final class ReceiveMessageHandlerTests: XCTestCase {
     }
 
     func test_handle_byeSignalMessageSignalModify_allSkipPersistence() throws {
-        for wireType: Int32 in [401, 402, 403, 404] {
+        for wireType: Int32 in [401, 402, 403, 404, 405] {
             var message = Im_Message()
             message.messageID = Int64(600 + wireType)
             message.fromUser = "them"
@@ -301,6 +301,66 @@ final class ReceiveMessageHandlerTests: XCTestCase {
 
             XCTAssertNil(try storage.messages.message(uid: Int64(600 + wireType)), "type \(wireType) must not persist")
         }
+    }
+
+    func test_handle_answerTSignal405_firesOnCallSignal() throws {
+        var capturedType: Int32?
+        handler.onCallSignal = { capturedType = $0.content.type }
+
+        var message = Im_Message()
+        message.messageID = 504
+        message.fromUser = "me" // 自己其他端的 AnswerT 经服务器同步回来
+        message.conversation.type = 0
+        message.conversation.target = "them"
+        message.conversation.line = 0
+        var wireContent = Im_MessageContent()
+        wireContent.type = 405
+        wireContent.searchableContent = "call-1"
+        wireContent.data = Data("0".utf8)
+        message.content = wireContent
+        message.serverTimestamp = 1_000
+        let frame = try makePullResultFrame(messages: [message], head: 504)
+
+        handler.handle(frame: frame)
+
+        XCTAssertNil(try storage.messages.message(uid: 504)) // 透传,不落库
+        XCTAssertEqual(capturedType, 405)
+    }
+
+    func test_onCallSignal_firesAfterTheWriteTransactionCompletes() throws {
+        var insertedDuringCallback: StoredMessage?
+        handler.onCallSignal = { [storage] _ in
+            // 模拟 CallManager 在信令回调里同步写库(如收到 Bye 更新通话气泡)。
+            // 若回调仍在 ReceiveMessageHandler 的 write 事务内,GRDB 会因串行
+            // 队列重入直接 fatalError(测试进程崩溃即失败)。
+            insertedDuringCallback = try? storage!.messages.insert(StoredMessage(
+                localMessageId: 9_001,
+                conversationType: .single,
+                target: "them",
+                from: "me",
+                content: .text("written-from-callback"),
+                timestamp: 1,
+                status: .sending,
+                direction: .send
+            ))
+        }
+
+        var message = Im_Message()
+        message.messageID = 505
+        message.fromUser = "them"
+        message.conversation.type = 0
+        message.conversation.target = "them"
+        message.conversation.line = 0
+        var wireContent = Im_MessageContent()
+        wireContent.type = 402 // Bye
+        wireContent.searchableContent = "call-1"
+        message.content = wireContent
+        message.serverTimestamp = 1_000
+        let frame = try makePullResultFrame(messages: [message], head: 505)
+
+        handler.handle(frame: frame)
+
+        XCTAssertNotNil(insertedDuringCallback)
     }
 
     /// The regression this guards against: a first-login (or long-offline)

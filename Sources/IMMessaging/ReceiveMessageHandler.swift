@@ -71,10 +71,11 @@ public final class ReceiveMessageHandler: MessageHandler {
         suppressUnreadIncrement = false
         var groupNotificationTargets: Set<String> = []
         var callStartMessages: [StoredMessage] = []
+        var callSignalMessages: [Im_Message] = []
         let t0 = ProcessInfo.processInfo.systemUptime
         try? storage.write { db in
             for wireMessage in result.message {
-                persist(wireMessage, db: db, suppressUnread: shouldSuppressUnread, groupNotificationTargets: &groupNotificationTargets, callStartMessages: &callStartMessages)
+                persist(wireMessage, db: db, suppressUnread: shouldSuppressUnread, groupNotificationTargets: &groupNotificationTargets, callStartMessages: &callStartMessages, callSignalMessages: &callSignalMessages)
             }
             advanceSyncHead(to: result.head, db: db)
         }
@@ -93,9 +94,12 @@ public final class ReceiveMessageHandler: MessageHandler {
         for message in callStartMessages {
             onCallStartMessage?(message)
         }
+        for wireMessage in callSignalMessages {
+            onCallSignal?(wireMessage)
+        }
     }
 
-    /// Wire types 401/402/403/404 (Answer/Bye/Signal/Modify) are
+    /// Wire types 401-405 (Answer/Bye/Signal/Modify/AnswerT) are
     /// intentionally never persisted to `storage.messages` — on Android
     /// these are `PersistFlag.No_Persist`/`.Transparent`, and at the volume
     /// ICE candidates/SDP exchanges happen during call setup, writing each
@@ -105,14 +109,17 @@ public final class ReceiveMessageHandler: MessageHandler {
     /// conversation flow runs. Type 400 (CallStart) is the one call-related
     /// type that *does* persist — it's the call-record bubble — so it falls
     /// through to the same path as every other message type below.
-    private func persist(_ wireMessage: Im_Message, db: Database, suppressUnread: Bool, groupNotificationTargets: inout Set<String>, callStartMessages: inout [StoredMessage]) {
+    private func persist(_ wireMessage: Im_Message, db: Database, suppressUnread: Bool, groupNotificationTargets: inout Set<String>, callStartMessages: inout [StoredMessage], callSignalMessages: inout [Im_Message]) {
         guard wireMessage.messageID != 0 else { return }
         if (try? storage.messages.message(uid: wireMessage.messageID, db: db)) != nil {
             return // already have it via server uid — pull windows can overlap
         }
 
-        if [401, 402, 403, 404].contains(wireMessage.content.type) {
-            onCallSignal?(wireMessage)
+        if [401, 402, 403, 404, 405].contains(wireMessage.content.type) {
+            // 不能在这里(写事务内)直接回调 —— CallManager 的信令处理会同步
+            // 写库(更新通话气泡),GRDB 串行队列不可重入;与 callStartMessages
+            // 相同的"事务后再发"模式。
+            callSignalMessages.append(wireMessage)
             return
         }
 

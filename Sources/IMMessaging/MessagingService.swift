@@ -51,7 +51,7 @@ public final class MessagingService {
 
     /// Forwards to the internal `ReceiveMessageHandler`'s closure of the
     /// same name — see that type's doc comment. `IMCall.CallManager` wires
-    /// this to receive Answer/Bye/Signal/Modify.
+    /// this to receive Answer/Bye/Signal/Modify/AnswerT (401/402/403/404/405).
     public var onCallSignal: ((Im_Message) -> Void)? {
         get { receiveMessageHandler.onCallSignal }
         set { receiveMessageHandler.onCallSignal = newValue }
@@ -197,7 +197,7 @@ public final class MessagingService {
         return echo
     }
 
-    /// Sends one of 401/402/403/404 (Answer/Bye/Signal/Modify) directly on
+    /// Sends one of 401/402/403/404/405 (Answer/Bye/Signal/Modify/AnswerT) directly on
     /// the wire — deliberately bypassing `send(...)`'s local-echo insert
     /// and `OutgoingMessageTracker` ack tracking, because these are
     /// transient signaling with no corresponding stored row to update (see
@@ -372,7 +372,7 @@ public final class MessagingService {
         if (try? storage.messages.message(uid: wireMessage.messageID, db: db)) != nil {
             return false // already have it via server uid
         }
-        if [401, 402, 403, 404].contains(wireMessage.content.type) {
+        if [401, 402, 403, 404, 405].contains(wireMessage.content.type) {
             return false // transient call signaling never persists (see ReceiveMessageHandler)
         }
         guard var content = try? MessageContentCodec.decode(wireMessage.content) else { return false }
