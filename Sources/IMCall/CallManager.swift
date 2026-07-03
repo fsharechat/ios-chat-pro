@@ -182,6 +182,8 @@ public final class CallManager {
             mediaEngine.setRemoteAnswer(sdp)
         case .iceCandidate(_, let index, let mid, let candidate):
             mediaEngine.addRemoteCandidate(sdpMLineIndex: index, sdpMid: mid, candidate: candidate)
+        case .removeCandidates:
+            break // Task 3 接到 MediaEngine.removeRemoteCandidates
         case .modify(_, let newAudioOnly):
             // Mirrors `setAudioOnly`'s own gate — a peer asking to turn
             // video ON for a call *this device* started audio-only would
@@ -199,7 +201,7 @@ public final class CallManager {
     private func matchesCurrentCall(_ signal: IncomingCallSignal) -> Bool {
         guard let session else { return false }
         switch signal {
-        case .answer(let callId, _), .bye(let callId), .sdpOffer(let callId, _), .sdpAnswer(let callId, _), .iceCandidate(let callId, _, _, _), .modify(let callId, _):
+        case .answer(let callId, _), .bye(let callId), .sdpOffer(let callId, _), .sdpAnswer(let callId, _), .iceCandidate(let callId, _, _, _), .removeCandidates(let callId, _), .modify(let callId, _):
             return callId == session.callId
         }
     }

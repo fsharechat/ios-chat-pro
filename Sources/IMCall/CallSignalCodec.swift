@@ -1,6 +1,20 @@
 import IMProto
 import Foundation
 
+/// 一条远端 ICE 候选的三元组 — Android Signal JSON 的 {label,id,candidate}。
+/// 被 `IncomingCallSignal.removeCandidates` 与 `MediaEngine.removeRemoteCandidates` 共用。
+public struct RemoteIceCandidate: Equatable {
+    public var sdpMLineIndex: Int32
+    public var sdpMid: String
+    public var candidate: String
+
+    public init(sdpMLineIndex: Int32, sdpMid: String, candidate: String) {
+        self.sdpMLineIndex = sdpMLineIndex
+        self.sdpMid = sdpMid
+        self.candidate = candidate
+    }
+}
+
 /// Decoded shape of an incoming 401/402/403/404 wire message — see the
 /// Phase 3 design doc §2's field-mapping table. `searchableContent`=callId,
 /// `data`=either an ASCII "0"/"1" (Answer/Modify's audioOnly flag) or a JSON
@@ -13,6 +27,7 @@ public enum IncomingCallSignal: Equatable {
     case sdpAnswer(callId: String, sdp: String)
     case iceCandidate(callId: String, sdpMLineIndex: Int32, sdpMid: String, candidate: String)
     case modify(callId: String, audioOnly: Bool)
+    case removeCandidates(callId: String, candidates: [RemoteIceCandidate])
 }
 
 /// What `CallManager` wants to send — `CallSignalCodec.encode` turns this
@@ -26,6 +41,9 @@ public enum OutgoingCallSignal: Equatable {
     case sdpAnswer(callId: String, sdp: String)
     case iceCandidate(callId: String, sdpMLineIndex: Int32, sdpMid: String, candidate: String)
     case modify(callId: String, audioOnly: Bool)
+    /// 405 AnswerT — Android 端接听时先于 401 发送的透传消息,服务器把它
+    /// 同步给接听者自己的其他设备(多端"已被他端接听"信号);payload 与 401 相同。
+    case answerT(callId: String, audioOnly: Bool)
 }
 
 public enum CallSignalCodec {
@@ -38,6 +56,10 @@ public enum CallSignalCodec {
         let data = wireMessage.content.hasData ? wireMessage.content.data : Data()
         switch wireMessage.content.type {
         case 401:
+            return .answer(callId: callId, audioOnly: audioOnlyFlag(from: data))
+        case 405:
+            // AnswerT 与 Answer 同构 —— Android 引擎里 AnswerTMessage 继承
+            // AnswerMessage,接收侧按同一分支处理(多端接听同步就靠它)。
             return .answer(callId: callId, audioOnly: audioOnlyFlag(from: data))
         case 402:
             return .bye(callId: callId)
@@ -64,6 +86,8 @@ public enum CallSignalCodec {
             return (403, callId, try? JSONEncoder().encode(CandidateWireSignal(type: "candidate", label: sdpMLineIndex, id: sdpMid, candidate: candidate)))
         case .modify(let callId, let audioOnly):
             return (404, callId, Data((audioOnly ? "1" : "0").utf8))
+        case .answerT(let callId, let audioOnly):
+            return (405, callId, Data((audioOnly ? "1" : "0").utf8))
         }
     }
 
@@ -74,6 +98,8 @@ public enum CallSignalCodec {
     private struct SignalTypePeek: Codable { let type: String }
     private struct SDPWireSignal: Codable { let type: String; let sdp: String }
     private struct CandidateWireSignal: Codable { let type: String; let label: Int32; let id: String; let candidate: String }
+    private struct RemoveCandidatesWireSignal: Codable { let type: String; let candidates: [CandidateEntry] }
+    private struct CandidateEntry: Codable { let label: Int32; let id: String; let candidate: String }
 
     private static func decodeSignal(callId: String, data: Data) -> IncomingCallSignal? {
         guard let peek = try? JSONDecoder().decode(SignalTypePeek.self, from: data) else { return nil }
@@ -87,6 +113,11 @@ public enum CallSignalCodec {
         case "candidate":
             guard let parsed = try? JSONDecoder().decode(CandidateWireSignal.self, from: data) else { return nil }
             return .iceCandidate(callId: callId, sdpMLineIndex: parsed.label, sdpMid: parsed.id, candidate: parsed.candidate)
+        case "remove-candidates":
+            guard let parsed = try? JSONDecoder().decode(RemoveCandidatesWireSignal.self, from: data) else { return nil }
+            return .removeCandidates(callId: callId, candidates: parsed.candidates.map {
+                RemoteIceCandidate(sdpMLineIndex: $0.label, sdpMid: $0.id, candidate: $0.candidate)
+            })
         default:
             return nil
         }

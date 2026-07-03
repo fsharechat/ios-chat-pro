@@ -118,4 +118,31 @@ final class CallSignalCodecTests: XCTestCase {
             XCTAssertEqual(CallSignalCodec.decode(wire), expectedIncoming)
         }
     }
+
+    func test_encode_answerT_producesType405WithAudioOnlyFlag() {
+        let encoded = CallSignalCodec.encode(.answerT(callId: "call-1", audioOnly: true))
+        XCTAssertEqual(encoded.wireType, 405)
+        XCTAssertEqual(encoded.callId, "call-1")
+        XCTAssertEqual(encoded.data, Data("1".utf8))
+    }
+
+    func test_decode_type405_decodesAsAnswer() {
+        var wire = Im_Message()
+        wire.content.type = 405
+        wire.content.searchableContent = "call-1"
+        wire.content.data = Data("0".utf8)
+        XCTAssertEqual(CallSignalCodec.decode(wire), .answer(callId: "call-1", audioOnly: false))
+    }
+
+    func test_decode_removeCandidates_parsesCandidateList() {
+        let json = #"{"type":"remove-candidates","candidates":[{"label":0,"id":"audio","candidate":"candidate:1"},{"label":1,"id":"video","candidate":"candidate:2"}]}"#
+        var wire = Im_Message()
+        wire.content.type = 403
+        wire.content.searchableContent = "call-1"
+        wire.content.data = Data(json.utf8)
+        XCTAssertEqual(CallSignalCodec.decode(wire), .removeCandidates(callId: "call-1", candidates: [
+            RemoteIceCandidate(sdpMLineIndex: 0, sdpMid: "audio", candidate: "candidate:1"),
+            RemoteIceCandidate(sdpMLineIndex: 1, sdpMid: "video", candidate: "candidate:2"),
+        ]))
+    }
 }
