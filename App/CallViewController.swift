@@ -174,8 +174,12 @@ final class CallViewController: UIViewController {
         let isIncoming = state == .incoming
         incomingBar.isHidden = !isIncoming
         controlBar.isHidden = isIncoming
-        // 视频开关只在媒体已就绪、且这通电话以视频开局时才有意义。
-        toggleVideoButton.isHidden = !startedAsVideo || (state != .connecting && state != .connected)
+        // 视频开关只在通话已 Connected、且这通电话以视频开局时才有意义 ——
+        // 与 CallManager.setAudioOnly/入站 Modify 仅在 .connected 放行对齐
+        // (Android 仅在 Connected 处理/发送 Modify),connecting 阶段两端
+        // PeerConnection 还没建好,提前露出这个按钮会让用户在它其实是 no-op
+        // 的窗口期点了它。
+        toggleVideoButton.isHidden = !startedAsVideo || state != .connected
         switch state {
         case .idle:
             durationTimer?.invalidate()

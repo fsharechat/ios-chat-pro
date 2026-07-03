@@ -498,15 +498,43 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 
     /// 任何非 idle 状态都保证通话页在场(incoming 弹应用内来电页 ——
     /// 国行 iPhone 无系统级来电 UI 可用,这是唯一的来电 UI),回到 idle 收掉。
+    ///
+    /// **竞态场景(挂断后对方立即重拨):** idle 分支的 `dismiss` 有动画,
+    /// 动画播放期间一通新来电可能已经到达 —— `state` 从 idle 变回
+    /// `.incoming` 时,`presentCallViewControllerIfNeeded` 里的
+    /// `topmostPresentedViewController()` 拿到的还是那个正在消失的旧
+    /// `CallViewController`(`isBeingDismissed == true`),对它 `present`
+    /// 会被 UIKit 静默丢弃 —— 而 `presentedCallViewController` 若在
+    /// dismiss 发起时就同步置 nil,这次新来电的弹窗请求就彻底丢失,
+    /// 这通电话永远弹不出来。修法:`presentedCallViewController = nil`
+    /// 延后到 dismiss 的 completion 里做,并在 completion 里检查此时
+    /// `callManager.state` 是否已经不是 idle,是的话立即补弹一次
+    /// (那时旧的 CallViewController 已真正消失,`topmostPresentedViewController`
+    /// 能拿到正确的顶层)。
     private func handleCallStateChange(_ state: IMCall.CallState) {
         ringtonePlayer.update(for: state)
-        guard let callManager = environment.callManager else { return }
+        guard environment.callManager != nil else { return }
         if state == .idle {
-            presentedCallViewController?.dismiss(animated: true)
-            presentedCallViewController = nil
+            presentedCallViewController?.dismiss(animated: true) { [weak self] in
+                guard let self else { return }
+                self.presentedCallViewController = nil
+                if let latestState = self.environment.callManager?.state, latestState != .idle {
+                    self.presentCallViewControllerIfNeeded(for: latestState)
+                }
+            }
             return
         }
-        guard presentedCallViewController == nil, let webRTCClient = environment.webRTCClient, let peerUid = callManager.peerUid else { return }
+        presentCallViewControllerIfNeeded(for: state)
+    }
+
+    /// 按当前状态弹出通话页,若已有一个在场(`presentedCallViewController`
+    /// 非 nil)则什么都不做 —— 由 `handleCallStateChange` 在 idle→非 idle
+    /// 的每次转换点调用一次。
+    private func presentCallViewControllerIfNeeded(for state: IMCall.CallState) {
+        guard presentedCallViewController == nil,
+              let callManager = environment.callManager,
+              let webRTCClient = environment.webRTCClient,
+              let peerUid = callManager.peerUid else { return }
         let displayName = (try? environment.storage.users.user(uid: peerUid))?.displayName ?? peerUid
         let callViewController = CallViewController(callManager: callManager, webRTCClient: webRTCClient, peerDisplayName: displayName)
         presentedCallViewController = callViewController
@@ -516,7 +544,16 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         // already presented, or `UIKit` silently drops the presentation and
         // this VC would never appear despite `presentedCallViewController`
         // being set (permanently blocking this guard for the rest of the call).
-        topmostPresentedViewController()?.present(callViewController, animated: true)
+        guard let presenter = topmostPresentedViewController() else { return }
+        if presenter.isBeingDismissed {
+            // 顶层视图正处于消失动画中(上面提到的挂断后立即重拨竞态)——
+            // 直接对它 present 会被 UIKit 静默丢弃,改从它的
+            // presentingViewController(这次 dismiss 完成后仍然在场的那层)
+            // 弹出,保证新来电这次一定弹得出来。
+            presenter.presentingViewController?.present(callViewController, animated: true)
+        } else {
+            presenter.present(callViewController, animated: true)
+        }
     }
 
     private func topmostPresentedViewController() -> UIViewController? {
