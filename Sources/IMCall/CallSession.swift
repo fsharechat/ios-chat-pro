@@ -14,6 +14,9 @@ public enum CallEndReason: Equatable {
     case timeout
     case busy
     case mediaFailure
+    /// 自己账号的另一台设备接听了这通来电 —— 本端静默收场,不发 Bye
+    /// (对齐 Android CallEndReason.AcceptByOtherClient)。
+    case acceptedElsewhere
 }
 
 /// Plain data for the call currently in progress — `CallManager` is the

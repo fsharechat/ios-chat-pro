@@ -44,6 +44,11 @@ public enum OutgoingCallSignal: Equatable {
     /// 405 AnswerT — Android 端接听时先于 401 发送的透传消息,服务器把它
     /// 同步给接听者自己的其他设备(多端"已被他端接听"信号);payload 与 401 相同。
     case answerT(callId: String, audioOnly: Bool)
+    /// 403 remove-candidates —— 与 `IncomingCallSignal.removeCandidates` 对称,
+    /// 目前仅供测试用 `CallSignalCodec.encode` 构造"对端发来的 remove-candidates"
+    /// 这条 wire message(`CallManagerTests.deliverSignal`);`CallManager` 本身
+    /// 尚不主动发送这一信令。
+    case removeCandidates(callId: String, candidates: [RemoteIceCandidate])
 }
 
 public enum CallSignalCodec {
@@ -88,6 +93,12 @@ public enum CallSignalCodec {
             return (404, callId, Data((audioOnly ? "1" : "0").utf8))
         case .answerT(let callId, let audioOnly):
             return (405, callId, Data((audioOnly ? "1" : "0").utf8))
+        case .removeCandidates(let callId, let candidates):
+            let payload = RemoveCandidatesWireSignal(
+                type: "remove-candidates",
+                candidates: candidates.map { CandidateEntry(label: $0.sdpMLineIndex, id: $0.sdpMid, candidate: $0.candidate) }
+            )
+            return (403, callId, try? JSONEncoder().encode(payload))
         }
     }
 

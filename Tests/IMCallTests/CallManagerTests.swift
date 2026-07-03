@@ -15,7 +15,9 @@ final class CallManagerTests: XCTestCase {
     private var messagingService: MessagingService!
     private var mediaEngine: FakeMediaEngine!
     private var manager: CallManager!
-    private var callKitAdapter: FakeCallKitAdapter!
+    /// 注入给 CallManager 的"当前时间"(毫秒)。deliverCallStart 默认
+    /// serverTimestamp=99_000,距 now 1 秒 → 新鲜;新鲜度用例单独调大 now。
+    private var now: Int64 = 100_000
 
     override func setUpWithError() throws {
         try super.setUpWithError()
@@ -33,44 +35,21 @@ final class CallManagerTests: XCTestCase {
         fakeTransport.completeOldestSend()
 
         mediaEngine = FakeMediaEngine()
-        manager = CallManager(messagingService: messagingService, storage: storage, mediaEngine: mediaEngine, scheduler: scheduler, myUserId: { "me" })
-        callKitAdapter = FakeCallKitAdapter()
-        manager.callKitAdapter = callKitAdapter
+        manager = makeManager()
     }
 
-    private func sentWireMessages() throws -> [Im_Message] {
-        // `try?` (not `try`) on the inner decode: `sentFrames` also contains
-        // non-`Im_Message` frames sent by `IMClient` itself (the JSON
-        // CONNECT handshake frame from `setUpWithError`, and any heartbeat
-        // PINGs) — those aren't valid protobuf and must be skipped rather
-        // than aborting the whole scan, exactly like `MessagingServiceTests`
-        // sidesteps the same frames by only ever looking at `sentFrames.last`.
-        fakeTransport.sentFrames.compactMap { data in
-            FrameDecoder().feed(data).first.flatMap { try? Im_Message(serializedBytes: $0.body) }
-        }
+    private func makeManager(myUserId: String = "me") -> CallManager {
+        CallManager(
+            messagingService: messagingService,
+            storage: storage,
+            mediaEngine: mediaEngine,
+            scheduler: scheduler,
+            myUserId: { myUserId },
+            nowMillis: { [unowned self] in self.now }
+        )
     }
 
-    private func deliverSignal(_ signal: OutgoingCallSignal, from: String) throws {
-        let encoded = CallSignalCodec.encode(signal)
-        var wireMessage = Im_Message()
-        wireMessage.messageID = Int64.random(in: 1_000_000...9_999_999)
-        wireMessage.fromUser = from
-        wireMessage.conversation.type = 0
-        wireMessage.conversation.target = "me"
-        wireMessage.conversation.line = 0
-        var content = Im_MessageContent()
-        content.type = encoded.wireType
-        content.searchableContent = encoded.callId
-        if let data = encoded.data { content.data = data }
-        wireMessage.content = content
-        wireMessage.serverTimestamp = 1_000
-        var result = Im_PullMessageResult()
-        result.message = [wireMessage]
-        result.current = wireMessage.messageID
-        result.head = wireMessage.messageID
-        let body = Data([0x00]) + (try result.serializedData())
-        fakeTransport.simulateReceivedData(FrameEncoder.encode(signal: .pubAck, subSignal: .mp, messageId: 1, body: body))
-    }
+    // MARK: - 主叫
 
     func test_startCall_transitionsToOutgoingAndSendsCallStart() throws {
         try manager.startCall(to: "them", audioOnly: false)
@@ -81,13 +60,14 @@ final class CallManagerTests: XCTestCase {
         XCTAssertEqual(messages.first?.content.type, 400)
     }
 
-    func test_startCall_startsMediaEngineAndSendsOfferAsSignal() throws {
+    func test_startCall_onlyStartsPreview_noConnectionNoOffer() throws {
+        // Android 协议:offer 由被叫在接听后发起,主叫此时只开本地预览。
         try manager.startCall(to: "them", audioOnly: false)
 
-        XCTAssertEqual(mediaEngine.startCalls, [false])
-        XCTAssertEqual(mediaEngine.createOfferCallCount, 1)
-        let messages = try sentWireMessages()
-        XCTAssertTrue(messages.contains { $0.content.type == 403 })
+        XCTAssertEqual(mediaEngine.startPreviewCalls, [false])
+        XCTAssertEqual(mediaEngine.connectCallCount, 0)
+        XCTAssertEqual(mediaEngine.createOfferCallCount, 0)
+        XCTAssertFalse(try sentWireMessages().contains { $0.content.type == 403 })
     }
 
     func test_startCall_whenNotIdle_isANoOp() throws {
@@ -96,17 +76,52 @@ final class CallManagerTests: XCTestCase {
 
         try manager.startCall(to: "someone-else", audioOnly: false)
 
-        XCTAssertEqual(manager.peerUid, "them") // unchanged
+        XCTAssertEqual(manager.peerUid, "them") // 不变
         XCTAssertEqual(try sentWireMessages().count, countBefore)
     }
 
-    func test_receivingAnswer_transitionsToConnecting() throws {
+    func test_receivingAnswer_transitionsToConnecting_andConnectsAsNonInitiator() throws {
         try manager.startCall(to: "them", audioOnly: false)
 
         try deliverSignal(.answer(callId: callIdFromLastCallStart(), audioOnly: false), from: "them")
 
         XCTAssertEqual(manager.state, .connecting)
+        XCTAssertEqual(mediaEngine.connectCallCount, 1)
+        XCTAssertEqual(mediaEngine.createOfferCallCount, 0) // 主叫等对方 offer
     }
+
+    func test_receivingAnswerWithAudioOnly_downgradesVideoCallToAudio() throws {
+        // Android answerCall 可以把视频来电按语音接听 —— 主叫侧要跟着降级。
+        try manager.startCall(to: "them", audioOnly: false)
+
+        try deliverSignal(.answer(callId: callIdFromLastCallStart(), audioOnly: true), from: "them")
+
+        XCTAssertEqual(manager.audioOnly, true)
+        XCTAssertEqual(mediaEngine.audioOnlyCalls, [true])
+    }
+
+    func test_callerReceivingOfferWhileConnecting_createsAndSendsAnswerSDP() throws {
+        try manager.startCall(to: "them", audioOnly: false)
+        let callId = callIdFromLastCallStart()
+        try deliverSignal(.answer(callId: callId, audioOnly: false), from: "them")
+
+        try deliverSignal(.sdpOffer(callId: callId, sdp: "their-offer"), from: "them")
+
+        XCTAssertEqual(mediaEngine.createAnswerCalls, ["their-offer"])
+        let messages = try sentWireMessages()
+        XCTAssertTrue(messages.contains { CallSignalCodec.decode($0) == .sdpAnswer(callId: callId, sdp: mediaEngine.answerSDPToReturn) })
+    }
+
+    func test_offerArrivingWhileStillOutgoing_isIgnored() throws {
+        // 新协议下 offer 不会先于 Answer 到达;若出现(旧版本 iOS 对端),丢弃。
+        try manager.startCall(to: "them", audioOnly: false)
+
+        try deliverSignal(.sdpOffer(callId: callIdFromLastCallStart(), sdp: "early-offer"), from: "them")
+
+        XCTAssertTrue(mediaEngine.createAnswerCalls.isEmpty)
+    }
+
+    // MARK: - 接通/挂断
 
     func test_mediaEngineConnected_transitionsToConnectedAndUpdatesBubble() throws {
         try manager.startCall(to: "them", audioOnly: false)
@@ -118,21 +133,23 @@ final class CallManagerTests: XCTestCase {
         let bubble = try storage.messages.messages(conversationType: .single, target: "them").first
         if case .callRecord(_, _, _, let status, let connectTime, _) = bubble?.content {
             XCTAssertEqual(status, 1)
-            XCTAssertGreaterThan(connectTime, 0)
+            XCTAssertEqual(connectTime, now)
         } else {
-            XCTFail("expected a callRecord bubble")
+            XCTFail("通话气泡应仍是 callRecord")
         }
     }
 
     func test_hangUp_sendsByeAndReturnsToIdle() throws {
         try manager.startCall(to: "them", audioOnly: false)
+        let callId = callIdFromLastCallStart()
 
         try manager.hangUp()
 
         XCTAssertEqual(manager.state, .idle)
         XCTAssertNil(manager.peerUid)
         let messages = try sentWireMessages()
-        XCTAssertTrue(messages.contains { $0.content.type == 402 })
+        XCTAssertTrue(messages.contains { CallSignalCodec.decode($0) == .bye(callId: callId) })
+        XCTAssertEqual(mediaEngine.closeCallCount, 1)
     }
 
     func test_hangUp_updatesBubbleToEndedStatus() throws {
@@ -145,10 +162,10 @@ final class CallManagerTests: XCTestCase {
         let bubble = try storage.messages.messages(conversationType: .single, target: "them").first
         if case .callRecord(_, _, _, let status, let connectTime, let endTime) = bubble?.content {
             XCTAssertEqual(status, 2)
-            XCTAssertGreaterThan(connectTime, 0) // preserved from the earlier .connected update
-            XCTAssertGreaterThan(endTime, 0)
+            XCTAssertEqual(connectTime, now) // 接通时间不能被挂断时丢掉
+            XCTAssertEqual(endTime, now)
         } else {
-            XCTFail("expected a callRecord bubble")
+            XCTFail("通话气泡应仍是 callRecord")
         }
     }
 
@@ -159,70 +176,101 @@ final class CallManagerTests: XCTestCase {
 
     func test_receivingBye_endsCallAndUpdatesBubble() throws {
         try manager.startCall(to: "them", audioOnly: false)
+        var endReason: CallEndReason?
+        manager.onCallEnded = { endReason = $0 }
 
         try deliverSignal(.bye(callId: callIdFromLastCallStart()), from: "them")
 
         XCTAssertEqual(manager.state, .idle)
+        XCTAssertEqual(endReason, .remoteBye)
         let bubble = try storage.messages.messages(conversationType: .single, target: "them").first
         if case .callRecord(_, _, _, let status, _, _) = bubble?.content {
             XCTAssertEqual(status, 2)
         } else {
-            XCTFail("expected a callRecord bubble")
+            XCTFail("通话气泡应仍是 callRecord")
         }
     }
 
+    // MARK: - 超时
+
     func test_answerTimeout_60Seconds_endsCallAsTimeoutAndSendsBye() throws {
         try manager.startCall(to: "them", audioOnly: false)
+        let callId = callIdFromLastCallStart()
+        var endReason: CallEndReason?
+        manager.onCallEnded = { endReason = $0 }
 
-        XCTAssertTrue(scheduler.scheduledDelays.contains(60))
-        var endedReason: CallEndReason?
-        manager.onCallEnded = { endedReason = $0 }
-        scheduler.fireNext()
+        scheduler.fireNext() // 60s 应答超时
 
         XCTAssertEqual(manager.state, .idle)
-        XCTAssertEqual(endedReason, .timeout)
+        XCTAssertEqual(endReason, .timeout)
         let messages = try sentWireMessages()
-        XCTAssertTrue(messages.contains { $0.content.type == 402 })
+        XCTAssertTrue(messages.contains { CallSignalCodec.decode($0) == .bye(callId: callId) })
     }
 
     func test_connectingTimeout_60SecondsAfterAnswer_endsCallAsTimeout() throws {
         try manager.startCall(to: "them", audioOnly: false)
+        // CallStart(400)本身走 `sendWireMessage`/`OutgoingMessageTracker`,
+        // 自带一个独立的 5s 送达超时(与 CallManager 的应答/连接超时无关,
+        // 但共享同一个 scheduler)。生产环境里服务器的 PUB_ACK 会在毫秒级
+        // 到达并早早解除它;这里显式模拟一次,让它不再赖在 pending 队列里
+        // 抢在真正要测的 60s 连接超时之前被 `fireNext()` 误触发。
+        try ackCallStartSend()
         try deliverSignal(.answer(callId: callIdFromLastCallStart(), audioOnly: false), from: "them")
-        scheduler.pendingCount > 0 ? () : XCTFail("expected the connecting timer to be scheduled")
+        var endReason: CallEndReason?
+        manager.onCallEnded = { endReason = $0 }
 
-        var endedReason: CallEndReason?
-        manager.onCallEnded = { endedReason = $0 }
-        scheduler.fireNext() // fires the connecting-timeout (the only thing pending after answer cancels the answer-timeout)
+        scheduler.fireNext() // 60s 连接超时(应答超时已在收到 Answer 时取消)
 
         XCTAssertEqual(manager.state, .idle)
-        XCTAssertEqual(endedReason, .timeout)
+        XCTAssertEqual(endReason, .timeout)
     }
 
-    func test_receivingSdpAnswer_forwardsToMediaEngine() throws {
-        try manager.startCall(to: "them", audioOnly: false)
+    // MARK: - 信令转发到 MediaEngine
 
-        try deliverSignal(.sdpAnswer(callId: callIdFromLastCallStart(), sdp: "remote-answer-sdp"), from: "them")
+    func test_receivingSdpAnswer_whileConnecting_forwardsToMediaEngine() throws {
+        try deliverCallStart(callId: "call-1", audioOnly: false, from: "them")
+        try manager.answer()
+
+        try deliverSignal(.sdpAnswer(callId: "call-1", sdp: "remote-answer-sdp"), from: "them")
 
         XCTAssertEqual(mediaEngine.remoteAnswers, ["remote-answer-sdp"])
     }
 
-    func test_receivingIceCandidate_forwardsToMediaEngine() throws {
-        try manager.startCall(to: "them", audioOnly: false)
+    func test_receivingIceCandidate_whileConnecting_forwardsToMediaEngine() throws {
+        try deliverCallStart(callId: "call-1", audioOnly: false, from: "them")
+        try manager.answer()
 
-        try deliverSignal(.iceCandidate(callId: callIdFromLastCallStart(), sdpMLineIndex: 1, sdpMid: "video", candidate: "candidate:9..."), from: "them")
+        try deliverSignal(.iceCandidate(callId: "call-1", sdpMLineIndex: 1, sdpMid: "video", candidate: "candidate:9..."), from: "them")
 
         XCTAssertEqual(mediaEngine.remoteCandidates.count, 1)
-        XCTAssertEqual(mediaEngine.remoteCandidates.first?.0, 1)
         XCTAssertEqual(mediaEngine.remoteCandidates.first?.1, "video")
+    }
+
+    func test_receivingIceCandidate_whileOutgoing_isIgnored() throws {
+        // Android 仅在 Connecting/Connected 处理 Signal —— 对齐。
+        try manager.startCall(to: "them", audioOnly: false)
+
+        try deliverSignal(.iceCandidate(callId: callIdFromLastCallStart(), sdpMLineIndex: 0, sdpMid: "audio", candidate: "candidate:1..."), from: "them")
+
+        XCTAssertTrue(mediaEngine.remoteCandidates.isEmpty)
+    }
+
+    func test_receivingRemoveCandidates_whileConnecting_forwardsToMediaEngine() throws {
+        try deliverCallStart(callId: "call-1", audioOnly: false, from: "them")
+        try manager.answer()
+        let candidates = [RemoteIceCandidate(sdpMLineIndex: 0, sdpMid: "audio", candidate: "candidate:1")]
+
+        try deliverSignal(.removeCandidates(callId: "call-1", candidates: candidates), from: "them")
+
+        XCTAssertEqual(mediaEngine.removedCandidateBatches, [candidates])
     }
 
     func test_mediaEngineLocalCandidate_sentAsSignal403() throws {
         try manager.startCall(to: "them", audioOnly: false)
 
-        mediaEngine.simulateLocalCandidate(sdpMLineIndex: 0, sdpMid: "audio", candidate: "candidate:1...")
+        mediaEngine.simulateLocalCandidate()
 
-        let messages = try sentWireMessages()
-        let signalMessages = messages.filter { $0.content.type == 403 }
+        let signalMessages = try sentWireMessages().filter { $0.content.type == 403 }
         XCTAssertTrue(signalMessages.contains { CallSignalCodec.decode($0) == .iceCandidate(callId: callIdFromLastCallStart(), sdpMLineIndex: 0, sdpMid: "audio", candidate: "candidate:1...") })
     }
 
@@ -230,152 +278,134 @@ final class CallManagerTests: XCTestCase {
         try manager.startCall(to: "them", audioOnly: false)
         try deliverSignal(.answer(callId: callIdFromLastCallStart(), audioOnly: false), from: "them")
         mediaEngine.simulateConnected()
+        var endReason: CallEndReason?
+        manager.onCallEnded = { endReason = $0 }
 
-        var endedReason: CallEndReason?
-        manager.onCallEnded = { endedReason = $0 }
         mediaEngine.simulateDisconnected()
 
         XCTAssertEqual(manager.state, .idle)
-        XCTAssertEqual(endedReason, .mediaFailure)
+        XCTAssertEqual(endReason, .mediaFailure)
     }
 
-    func test_receivingCallStartWhileIdle_transitionsToIncomingAndFiresCallback() throws {
-        var capturedPeer: String?
-        var capturedAudioOnly: Bool?
-        manager.onIncomingCall = { peer, audioOnly in capturedPeer = peer; capturedAudioOnly = audioOnly }
+    // MARK: - 被叫
 
+    func test_receivingCallStartWhileIdle_transitionsToIncoming() throws {
         try deliverCallStart(callId: "call-incoming-1", audioOnly: true, from: "them")
 
         XCTAssertEqual(manager.state, .incoming)
         XCTAssertEqual(manager.peerUid, "them")
-        XCTAssertEqual(capturedPeer, "them")
-        XCTAssertEqual(capturedAudioOnly, true)
+        XCTAssertEqual(manager.audioOnly, true)
+        XCTAssertTrue(scheduler.scheduledDelays.contains(60)) // 应答超时已启动
+        XCTAssertTrue(mediaEngine.startPreviewCalls.isEmpty) // 接听前不开摄像头
     }
 
-    func test_receivingCallStartWhileIdle_startsAnswerTimeoutTimer() throws {
-        try deliverCallStart(callId: "call-incoming-1", audioOnly: false, from: "them")
-        XCTAssertTrue(scheduler.scheduledDelays.contains(60))
+    func test_staleCallStart_olderThan90Seconds_doesNotRing() throws {
+        // 离线期间积压的 CallStart 重新同步时只落库,不能弹一个早就结束的来电。
+        try deliverCallStart(callId: "stale-call", audioOnly: false, from: "them", serverTimestamp: 5_000) // 95 秒前
+
+        XCTAssertEqual(manager.state, .idle)
+        // 气泡照常落库(由 ReceiveMessageHandler 负责,与弹不弹窗无关)
+        XCTAssertFalse(try storage.messages.messages(conversationType: .single, target: "them").isEmpty)
     }
 
-    func test_answer_onIncomingCall_sendsAnswerSignalAndTransitionsToConnecting() throws {
+    func test_answer_sendsAnswerTAndAnswer_connectsAsInitiator_andSendsOffer() throws {
         try deliverCallStart(callId: "call-incoming-1", audioOnly: false, from: "them")
 
         try manager.answer()
 
         XCTAssertEqual(manager.state, .connecting)
+        XCTAssertEqual(mediaEngine.startPreviewCalls, [false])
+        XCTAssertEqual(mediaEngine.connectCallCount, 1)
+        XCTAssertEqual(mediaEngine.createOfferCallCount, 1) // 被叫是 initiator
         let messages = try sentWireMessages()
+        XCTAssertTrue(messages.contains { $0.content.type == 405 }) // AnswerT 先行
         XCTAssertTrue(messages.contains { $0.content.type == 401 })
+        XCTAssertTrue(messages.contains { CallSignalCodec.decode($0) == .sdpOffer(callId: "call-incoming-1", sdp: mediaEngine.offerSDPToReturn) })
     }
 
-    func test_answer_withAlreadyBufferedOffer_createsAndSendsAnswerSDP() throws {
-        try deliverCallStart(callId: "call-incoming-1", audioOnly: false, from: "them")
-        try deliverSignal(.sdpOffer(callId: "call-incoming-1", sdp: "remote-offer-sdp"), from: "them")
-
-        try manager.answer()
-
-        XCTAssertEqual(mediaEngine.createAnswerCalls, ["remote-offer-sdp"])
-        let messages = try sentWireMessages()
-        XCTAssertTrue(messages.contains { CallSignalCodec.decode($0) == .sdpAnswer(callId: "call-incoming-1", sdp: mediaEngine.answerSDPToReturn) })
-    }
-
-    func test_offerArrivingAfterAnswer_createsAndSendsAnswerSDPImmediately() throws {
-        try deliverCallStart(callId: "call-incoming-1", audioOnly: false, from: "them")
-        try manager.answer() // no offer buffered yet
-
-        try deliverSignal(.sdpOffer(callId: "call-incoming-1", sdp: "late-offer-sdp"), from: "them")
-
-        XCTAssertEqual(mediaEngine.createAnswerCalls, ["late-offer-sdp"])
+    func test_answer_whenNotIncoming_isANoOp() throws {
+        XCTAssertNoThrow(try manager.answer())
+        XCTAssertEqual(manager.state, .idle)
+        XCTAssertTrue(mediaEngine.startPreviewCalls.isEmpty)
     }
 
     func test_secondCallStartWhileBusy_autoRejectsWithBye() throws {
         try deliverCallStart(callId: "call-1", audioOnly: false, from: "them")
         try manager.answer()
 
-        try deliverCallStart(callId: "call-2", audioOnly: false, from: "someone-else", target: "me")
+        try deliverCallStart(callId: "call-2", audioOnly: false, from: "someone-else")
 
-        XCTAssertEqual(manager.state, .connecting) // untouched — still the original call
+        XCTAssertEqual(manager.state, .connecting) // 原通话不受影响
         let messages = try sentWireMessages()
         XCTAssertTrue(messages.contains { CallSignalCodec.decode($0) == .bye(callId: "call-2") })
     }
 
+    // MARK: - 多端与无关信令
+
+    func test_ownAnswerFromOtherDevice_whileIncoming_endsAsAcceptedElsewhere_withoutBye() throws {
+        try deliverCallStart(callId: "call-1", audioOnly: false, from: "them")
+        var endReason: CallEndReason?
+        manager.onCallEnded = { endReason = $0 }
+        let countBefore = try sentWireMessages().count
+
+        try deliverSignal(.answer(callId: "call-1", audioOnly: false), from: "me")
+
+        XCTAssertEqual(manager.state, .idle)
+        XCTAssertEqual(endReason, .acceptedElsewhere)
+        XCTAssertEqual(try sentWireMessages().count, countBefore) // 没发 Bye
+    }
+
+    func test_signalForUnrelatedCallId_isRejectedWithBye() throws {
+        // Android rejectOtherCall:与当前通话无关的来电信令直接回 Bye。
+        try deliverCallStart(callId: "call-1", audioOnly: false, from: "them")
+
+        try deliverSignal(.answer(callId: "other-call", audioOnly: false), from: "someone-else")
+
+        XCTAssertEqual(manager.state, .incoming) // 当前来电不受影响
+        let messages = try sentWireMessages()
+        XCTAssertTrue(messages.contains { CallSignalCodec.decode($0) == .bye(callId: "other-call") })
+    }
+
+    // MARK: - glare(双方同时拨打)
+
     func test_glare_myUidSmaller_myOutgoingCallContinues_rejectsTheirs() throws {
-        // "me" < "them" lexicographically — I win.
+        // "me" < "them",按字典序我赢 —— 我的去电继续,拒掉对方的。
         try manager.startCall(to: "them", audioOnly: false)
-        let myCallId = callIdFromLastCallStart()
 
         try deliverCallStart(callId: "their-call-id", audioOnly: false, from: "them")
 
-        XCTAssertEqual(manager.state, .outgoing) // my call is untouched
+        XCTAssertEqual(manager.state, .outgoing)
         let messages = try sentWireMessages()
         XCTAssertTrue(messages.contains { CallSignalCodec.decode($0) == .bye(callId: "their-call-id") })
-        _ = myCallId
     }
 
     func test_glare_myUidLarger_abandonsMyOutgoingAndAcceptsTheirs() throws {
-        // "me" > "a" lexicographically — I lose, and accept their call instead.
-        let losingManager = CallManager(messagingService: messagingService, storage: storage, mediaEngine: mediaEngine, scheduler: scheduler, myUserId: { "me" })
-        let losingManagerCallKitAdapter = FakeCallKitAdapter()
-        losingManager.callKitAdapter = losingManagerCallKitAdapter
+        // "me" > "a",我输 —— 放弃自己的去电,把对方来电转入 incoming。
+        let losingManager = makeManager()
         try losingManager.startCall(to: "a", audioOnly: false)
-        let abandonedCallId = losingManagerCallKitAdapter.reportedOutgoingStarted.first!
-        var capturedPeer: String?
-        losingManager.onIncomingCall = { peer, _ in capturedPeer = peer }
 
-        try deliverCallStart(callId: "their-call-id", audioOnly: true, from: "a", target: "me", manager: losingManager)
+        try deliverCallStart(callId: "their-call-id", audioOnly: true, from: "a")
 
         XCTAssertEqual(losingManager.state, .incoming)
-        XCTAssertEqual(capturedPeer, "a")
+        XCTAssertEqual(losingManager.peerUid, "a")
+        XCTAssertGreaterThanOrEqual(mediaEngine.closeCallCount, 1) // 被弃去电的预览已撤
 
-        let abandonedBubble = try storage.messages.messages(conversationType: .single, target: "a").last
+        // `messages(...)` 按 timestamp DESC 排序;被弃去电的气泡走的是
+        // `messagingService` 的真实系统时钟(远大于本文件注入的假 `now`),
+        // 而 `deliverCallStart` 的 serverTimestamp 固定为较小的测试值 ——
+        // 所以"最新"(.first)才是被弃去电的气泡,而不是 .last。
+        let abandonedBubble = try storage.messages.messages(conversationType: .single, target: "a").first
         if case .callRecord(_, _, _, let status, let connectTime, _) = abandonedBubble?.content {
-            XCTAssertEqual(status, 2) // retired, not stuck at "calling..."
-            XCTAssertEqual(connectTime, 0) // never connected
+            XCTAssertEqual(status, 2) // 被弃去电的气泡已收场
+            XCTAssertEqual(connectTime, 0)
         } else {
-            XCTFail("expected the abandoned outgoing call's bubble to still be a callRecord")
+            XCTFail("被弃去电的气泡应仍是 callRecord")
         }
-
-        // The abandoned outgoing call must also be retired in CallKit's own
-        // ledger before the new incoming call overwrites the adapter's
-        // single-call tracking — otherwise it's left as a dangling,
-        // never-ended system call.
-        XCTAssertEqual(losingManagerCallKitAdapter.reportedEnded.first?.callId, abandonedCallId)
-        XCTAssertEqual(losingManagerCallKitAdapter.reportedEnded.first?.reason, .localHangup)
-        XCTAssertEqual(losingManagerCallKitAdapter.reportedIncomingCalls.first?.callId, "their-call-id")
     }
 
-    func test_startCall_reportsOutgoingCallStartedToCallKit() throws {
-        try manager.startCall(to: "them", audioOnly: false)
-        XCTAssertEqual(callKitAdapter.reportedOutgoingStarted, [callIdFromLastCallStart()])
-    }
+    // MARK: - 音视频切换
 
-    func test_incomingCallStart_reportsIncomingCallToCallKit() throws {
-        try deliverCallStart(callId: "call-incoming-1", audioOnly: true, from: "them")
-        XCTAssertEqual(callKitAdapter.reportedIncomingCalls.first?.callId, "call-incoming-1")
-        XCTAssertEqual(callKitAdapter.reportedIncomingCalls.first?.callerName, "them")
-        XCTAssertEqual(callKitAdapter.reportedIncomingCalls.first?.audioOnly, true)
-    }
-
-    func test_mediaEngineConnected_reportsConnectedToCallKit() throws {
-        try manager.startCall(to: "them", audioOnly: false)
-        let callId = callIdFromLastCallStart()
-        try deliverSignal(.answer(callId: callId, audioOnly: false), from: "them")
-
-        mediaEngine.simulateConnected()
-
-        XCTAssertEqual(callKitAdapter.reportedConnected, [callId])
-    }
-
-    func test_hangUp_reportsCallEndedToCallKit() throws {
-        try manager.startCall(to: "them", audioOnly: false)
-        let callId = callIdFromLastCallStart()
-
-        try manager.hangUp()
-
-        XCTAssertEqual(callKitAdapter.reportedEnded.first?.callId, callId)
-        XCTAssertEqual(callKitAdapter.reportedEnded.first?.reason, .localHangup)
-    }
-
-    func test_setAudioOnly_whileConnected_sendsModifySignalAndUpdatesLocalStateAndMediaEngine() throws {
+    func test_setAudioOnly_whileConnected_sendsModifyAndUpdatesEngine() throws {
         try manager.startCall(to: "them", audioOnly: false)
         let callId = callIdFromLastCallStart()
         try deliverSignal(.answer(callId: callId, audioOnly: false), from: "them")
@@ -389,66 +419,24 @@ final class CallManagerTests: XCTestCase {
         XCTAssertTrue(messages.contains { CallSignalCodec.decode($0) == .modify(callId: callId, audioOnly: true) })
     }
 
-    func test_setAudioOnly_whileConnecting_sendsModifySignal() throws {
-        try manager.startCall(to: "them", audioOnly: false)
-        let callId = callIdFromLastCallStart()
-        try deliverSignal(.answer(callId: callId, audioOnly: false), from: "them")
-
-        try manager.setAudioOnly(true)
-
-        XCTAssertEqual(manager.audioOnly, true)
-        let messages = try sentWireMessages()
-        XCTAssertTrue(messages.contains { CallSignalCodec.decode($0) == .modify(callId: callId, audioOnly: true) })
-    }
-
-    func test_setAudioOnly_whileIdle_isANoOp() throws {
-        XCTAssertNoThrow(try manager.setAudioOnly(true))
-        XCTAssertEqual(manager.audioOnly, false)
-        XCTAssertTrue(mediaEngine.audioOnlyCalls.isEmpty)
-    }
-
     func test_setAudioOnly_whileOutgoing_isANoOp() throws {
         try manager.startCall(to: "them", audioOnly: false)
 
         XCTAssertNoThrow(try manager.setAudioOnly(true))
 
-        XCTAssertEqual(manager.audioOnly, false) // unchanged — answer hasn't arrived yet
+        XCTAssertEqual(manager.audioOnly, false)
         XCTAssertTrue(mediaEngine.audioOnlyCalls.isEmpty)
     }
 
-    func test_setAudioOnly_turningVideoBackOn_whenCallStartedAsVideo_succeeds() throws {
-        // The call started with video (audioOnly: false), so WebRTCClient
-        // already created a video track/capturer to re-enable — turning
-        // it off then back on is just toggling that existing track.
-        try manager.startCall(to: "them", audioOnly: false)
-        let callId = callIdFromLastCallStart()
-        try deliverSignal(.answer(callId: callId, audioOnly: false), from: "them")
-        mediaEngine.simulateConnected()
-
-        try manager.setAudioOnly(true) // turn video off
-        try manager.setAudioOnly(false) // turn it back on
-
-        XCTAssertEqual(manager.audioOnly, false)
-        XCTAssertEqual(mediaEngine.audioOnlyCalls, [true, false])
-        let messages = try sentWireMessages()
-        XCTAssertTrue(messages.contains { CallSignalCodec.decode($0) == .modify(callId: callId, audioOnly: false) })
-    }
-
     func test_setAudioOnly_turningVideoOn_whenCallStartedAsAudioOnly_isANoOp() throws {
-        // The call started audio-only, so WebRTCClient never created a
-        // video track/capturer — there is nothing to re-enable, and
-        // upgrading to video would require SDP renegotiation this method
-        // doesn't do. Must no-op rather than flip `audioOnly`/notify the
-        // peer for a switch that wouldn't actually produce video.
         try manager.startCall(to: "them", audioOnly: true)
-        let callId = callIdFromLastCallStart()
-        try deliverSignal(.answer(callId: callId, audioOnly: true), from: "them")
+        try deliverSignal(.answer(callId: callIdFromLastCallStart(), audioOnly: true), from: "them")
         mediaEngine.simulateConnected()
         let countBefore = try sentWireMessages().count
 
         try manager.setAudioOnly(false)
 
-        XCTAssertEqual(manager.audioOnly, true) // unchanged
+        XCTAssertEqual(manager.audioOnly, true) // 音频通话没有可再启用的视频轨
         XCTAssertTrue(mediaEngine.audioOnlyCalls.isEmpty)
         XCTAssertEqual(try sentWireMessages().count, countBefore)
     }
@@ -466,11 +454,6 @@ final class CallManagerTests: XCTestCase {
     }
 
     func test_receivingModify_turnVideoOn_whenCallStartedAsAudioOnly_isIgnored() throws {
-        // Same gate as `setAudioOnly`, mirrored for the inbound direction:
-        // a peer asking this side to turn video on for a call *this
-        // device* started audio-only would hit the same nil-track no-op
-        // in `WebRTCClient` — ignore it rather than flipping `audioOnly`/
-        // the UI for a switch that wouldn't actually produce video.
         try manager.startCall(to: "them", audioOnly: true)
         let callId = callIdFromLastCallStart()
         try deliverSignal(.answer(callId: callId, audioOnly: true), from: "them")
@@ -478,22 +461,46 @@ final class CallManagerTests: XCTestCase {
 
         try deliverSignal(.modify(callId: callId, audioOnly: false), from: "them")
 
-        XCTAssertEqual(manager.audioOnly, true) // unchanged
+        XCTAssertEqual(manager.audioOnly, true) // 不变
         XCTAssertTrue(mediaEngine.audioOnlyCalls.isEmpty)
     }
 
     // MARK: - Helpers
 
+    private func sentWireMessages() throws -> [Im_Message] {
+        // `try?`(而非 `try`)解码:sentFrames 里还混着 IMClient 自己发的
+        // 非 Im_Message 帧(CONNECT 握手 JSON、心跳 PING),那些不是合法
+        // protobuf,跳过即可,不能让整个扫描失败。
+        fakeTransport.sentFrames.compactMap { data in
+            FrameDecoder().feed(data).first.flatMap { try? Im_Message(serializedBytes: $0.body) }
+        }
+    }
+
     private func callIdFromLastCallStart() -> String {
         guard let message = try? sentWireMessages().first(where: { $0.content.type == 400 }),
               case .callRecord(let callId, _, _, _, _, _) = try! MessageContentCodec.decode(message.content) else {
-            XCTFail("expected a sent CallStart")
+            XCTFail("应已发送 CallStart")
             return ""
         }
         return callId
     }
 
-    private func deliverSignal(_ signal: OutgoingCallSignal, from: String, target: String = "me", manager: CallManager? = nil) throws {
+    /// 显式解除最近一次已发送 CallStart(400)的 `OutgoingMessageTracker` 5s
+    /// 送达超时 —— 见调用点的注释。`fakeTransport`/`FrameDecoder` 只暴露原始
+    /// 帧,这里重新解出对应 `Frame.header.messageId` 才能拼出匹配的
+    /// PUB_ACK/MS 响应帧。
+    private func ackCallStartSend() throws {
+        guard let frame = fakeTransport.sentFrames.compactMap({ FrameDecoder().feed($0).first })
+            .first(where: { (try? Im_Message(serializedBytes: $0.body))?.content.type == 400 })
+        else {
+            XCTFail("应已发送 CallStart")
+            return
+        }
+        let ackBody = Data([0x00]) + Data(repeating: 0, count: 16) // messageUid=0, timestamp=0:CallManager 不关心这两个字段
+        fakeTransport.simulateReceivedData(FrameEncoder.encode(signal: .pubAck, subSignal: .ms, messageId: frame.header.messageId, body: ackBody))
+    }
+
+    private func deliverSignal(_ signal: OutgoingCallSignal, from: String, target: String = "me") throws {
         let encoded = CallSignalCodec.encode(signal)
         var wireMessage = Im_Message()
         wireMessage.messageID = Int64.random(in: 1_000_000...9_999_999)
@@ -506,7 +513,7 @@ final class CallManagerTests: XCTestCase {
         content.searchableContent = encoded.callId
         if let data = encoded.data { content.data = data }
         wireMessage.content = content
-        wireMessage.serverTimestamp = 1_000
+        wireMessage.serverTimestamp = 99_000
         var result = Im_PullMessageResult()
         result.message = [wireMessage]
         result.current = wireMessage.messageID
@@ -515,7 +522,7 @@ final class CallManagerTests: XCTestCase {
         fakeTransport.simulateReceivedData(FrameEncoder.encode(signal: .pubAck, subSignal: .mp, messageId: 1, body: body))
     }
 
-    private func deliverCallStart(callId: String, audioOnly: Bool, from: String, target: String = "me", manager: CallManager? = nil) throws {
+    private func deliverCallStart(callId: String, audioOnly: Bool, from: String, target: String = "me", serverTimestamp: Int64 = 99_000) throws {
         var wireMessage = Im_Message()
         wireMessage.messageID = Int64.random(in: 1_000_000...9_999_999)
         wireMessage.fromUser = from
@@ -523,7 +530,7 @@ final class CallManagerTests: XCTestCase {
         wireMessage.conversation.target = target
         wireMessage.conversation.line = 0
         wireMessage.content = MessageContentCodec.encode(.callRecord(callId: callId, targetId: target, audioOnly: audioOnly, status: 0, connectTime: 0, endTime: 0))
-        wireMessage.serverTimestamp = 1_000
+        wireMessage.serverTimestamp = serverTimestamp
         var result = Im_PullMessageResult()
         result.message = [wireMessage]
         result.current = wireMessage.messageID
