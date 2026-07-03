@@ -121,6 +121,38 @@ final class RemoteHistoryLoadTests: XCTestCase {
         XCTAssertEqual(try storage.messages.message(uid: 9)?.content, .text("already-here"))
     }
 
+    /// `persistHistory` mirrors `ReceiveMessageHandler.persist`'s call-signal
+    /// filter — a 405 AnswerT mixed into a history page (e.g. it happened to
+    /// land between two ordinary messages before the server-side history
+    /// query excluded it) must not be persisted nor counted as inserted.
+    func test_loadRemoteMessages_405AnswerTInPage_isNotPersistedOrCounted() throws {
+        var insertedCount: Int?
+        service.loadRemoteMessages(conversationType: .single, target: "them", line: 0, beforeUid: 10, count: 20) { insertedCount = $0 }
+        let sentFrame = try decodeOnlySentFrame()
+
+        var answerTMessage = Im_Message()
+        answerTMessage.messageID = 7
+        answerTMessage.fromUser = "them"
+        answerTMessage.conversation.type = 0
+        answerTMessage.conversation.target = "me"
+        answerTMessage.conversation.line = 0
+        var wireContent = Im_MessageContent()
+        wireContent.type = 405
+        wireContent.searchableContent = "call-1"
+        wireContent.data = Data("0".utf8)
+        answerTMessage.content = wireContent
+        answerTMessage.serverTimestamp = 700
+
+        try simulateLRMAck(messageId: sentFrame.header.messageId, messages: [
+            makeHistoryWireMessage(uid: 9, from: "them", text: "older-9", timestamp: 900),
+            answerTMessage,
+        ])
+
+        XCTAssertEqual(insertedCount, 1) // 只数了正常消息,405 被跳过
+        XCTAssertNil(try storage.messages.message(uid: 7))
+        XCTAssertEqual(try storage.messages.message(uid: 9)?.content, .text("older-9"))
+    }
+
     func test_loadRemoteMessages_errorAck_completesWithZero() throws {
         var insertedCount: Int?
         service.loadRemoteMessages(conversationType: .single, target: "them", line: 0, beforeUid: 10, count: 20) { insertedCount = $0 }

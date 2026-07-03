@@ -14,6 +14,17 @@ import GRDB
 /// **Threading contract:** like the rest of this codebase, this has no
 /// internal locking and must be called from a single consistent queue.
 public final class ReceiveMessageHandler: MessageHandler {
+    /// 同一批 pulled message 里,通话相关事件(400 落库 / 401-405 透传)必须
+    /// 按 wire 到达的原始顺序派发,而不是先发完所有 CallStart 再发完所有
+    /// Signal —— 否则同批 `[Bye(call-1), CallStart(call-2)]` 会被错误地
+    /// 颠倒成"先收到 CallStart(call-2)",这时本机可能仍以为在跟 call-1
+    /// 通话(Bye 还没处理),对新来的 call-2 误判忙线并回发 Bye,把对方刚
+    /// 发起的重拨挂断。
+    private enum CallEvent {
+        case callStart(StoredMessage)
+        case signal(Im_Message)
+    }
+
     private let storage: IMStorage
     private let myUserId: () -> String
 
@@ -70,12 +81,11 @@ public final class ReceiveMessageHandler: MessageHandler {
         let shouldSuppressUnread = suppressUnreadIncrement
         suppressUnreadIncrement = false
         var groupNotificationTargets: Set<String> = []
-        var callStartMessages: [StoredMessage] = []
-        var callSignalMessages: [Im_Message] = []
+        var callEvents: [CallEvent] = []
         let t0 = ProcessInfo.processInfo.systemUptime
         try? storage.write { db in
             for wireMessage in result.message {
-                persist(wireMessage, db: db, suppressUnread: shouldSuppressUnread, groupNotificationTargets: &groupNotificationTargets, callStartMessages: &callStartMessages, callSignalMessages: &callSignalMessages)
+                persist(wireMessage, db: db, suppressUnread: shouldSuppressUnread, groupNotificationTargets: &groupNotificationTargets, callEvents: &callEvents)
             }
             advanceSyncHead(to: result.head, db: db)
         }
@@ -91,11 +101,15 @@ public final class ReceiveMessageHandler: MessageHandler {
         for target in groupNotificationTargets {
             onGroupNotificationMessage?(target)
         }
-        for message in callStartMessages {
-            onCallStartMessage?(message)
-        }
-        for wireMessage in callSignalMessages {
-            onCallSignal?(wireMessage)
+        // 单循环按原始 wire 顺序派发 —— 见 CallEvent 的注释,不能拆成两个
+        // "先 callStart 全部、再 signal 全部"的循环。
+        for event in callEvents {
+            switch event {
+            case .callStart(let message):
+                onCallStartMessage?(message)
+            case .signal(let wireMessage):
+                onCallSignal?(wireMessage)
+            }
         }
     }
 
@@ -104,12 +118,15 @@ public final class ReceiveMessageHandler: MessageHandler {
     /// these are `PersistFlag.No_Persist`/`.Transparent`, and at the volume
     /// ICE candidates/SDP exchanges happen during call setup, writing each
     /// one as a chat message row would spam the conversation's last-message
-    /// preview. They're forwarded via `onCallSignal` instead and returned
-    /// from early, before this method's normal persist-and-update-
+    /// preview. They're appended to `callEvents` (as `.signal`) instead and
+    /// returned from early, before this method's normal persist-and-update-
     /// conversation flow runs. Type 400 (CallStart) is the one call-related
     /// type that *does* persist — it's the call-record bubble — so it falls
-    /// through to the same path as every other message type below.
-    private func persist(_ wireMessage: Im_Message, db: Database, suppressUnread: Bool, groupNotificationTargets: inout Set<String>, callStartMessages: inout [StoredMessage], callSignalMessages: inout [Im_Message]) {
+    /// through to the same path as every other message type below, and its
+    /// resulting `StoredMessage` is appended to `callEvents` as `.callStart`.
+    /// Both are appended to the **same** array, in wire order, so a mixed
+    /// batch replays in the order it arrived (see `CallEvent`'s doc comment).
+    private func persist(_ wireMessage: Im_Message, db: Database, suppressUnread: Bool, groupNotificationTargets: inout Set<String>, callEvents: inout [CallEvent]) {
         guard wireMessage.messageID != 0 else { return }
         if (try? storage.messages.message(uid: wireMessage.messageID, db: db)) != nil {
             return // already have it via server uid — pull windows can overlap
@@ -117,9 +134,9 @@ public final class ReceiveMessageHandler: MessageHandler {
 
         if [401, 402, 403, 404, 405].contains(wireMessage.content.type) {
             // 不能在这里(写事务内)直接回调 —— CallManager 的信令处理会同步
-            // 写库(更新通话气泡),GRDB 串行队列不可重入;与 callStartMessages
+            // 写库(更新通话气泡),GRDB 串行队列不可重入;与 callStart 事件
             // 相同的"事务后再发"模式。
-            callSignalMessages.append(wireMessage)
+            callEvents.append(.signal(wireMessage))
             return
         }
 
@@ -204,7 +221,7 @@ public final class ReceiveMessageHandler: MessageHandler {
                 groupNotificationTargets.insert(target)
             }
             if case .callRecord = content, direction == .receive {
-                callStartMessages.append(inserted)
+                callEvents.append(.callStart(inserted))
             }
         } catch {
             // Best-effort: one malformed/unexpected row shouldn't abort the rest of the batch.

@@ -363,6 +363,50 @@ final class ReceiveMessageHandlerTests: XCTestCase {
         XCTAssertNotNil(insertedDuringCallback)
     }
 
+    /// Regression: 同一批里 `[Bye(call-1), CallStart(call-2)]` 必须按 wire
+    /// 顺序派发 —— 之前实现先把所有 400 落库回调发完、再发所有 401-405 信号,
+    /// 会把这批颠倒成"先收到 CallStart(call-2)"。这时 `CallManager` 仍以为
+    /// 自己在跟 call-1 通话(还没处理 Bye),会误判忙线对 call-2 回发 Bye,
+    /// 把对方刚发起的重拨挂断。
+    func test_handle_byeThenCallStartInSameBatch_dispatchesInWireOrder() throws {
+        var events: [String] = []
+        handler.onCallSignal = { message in
+            events.append("signal(\(message.content.type),\(message.content.searchableContent))")
+        }
+        handler.onCallStartMessage = { message in
+            if case .callRecord(let callId, _, _, _, _, _) = message.content {
+                events.append("callStart(\(callId))")
+            }
+        }
+
+        var byeMessage = Im_Message()
+        byeMessage.messageID = 800
+        byeMessage.fromUser = "them"
+        byeMessage.conversation.type = 0
+        byeMessage.conversation.target = "them"
+        byeMessage.conversation.line = 0
+        var byeContent = Im_MessageContent()
+        byeContent.type = 402 // Bye
+        byeContent.searchableContent = "call-1"
+        byeMessage.content = byeContent
+        byeMessage.serverTimestamp = 1_000
+
+        var callStartMessage = Im_Message()
+        callStartMessage.messageID = 801
+        callStartMessage.fromUser = "them"
+        callStartMessage.conversation.type = 0
+        callStartMessage.conversation.target = "them"
+        callStartMessage.conversation.line = 0
+        callStartMessage.content = MessageContentCodec.encode(.callRecord(callId: "call-2", targetId: "me", audioOnly: false, status: 0, connectTime: 0, endTime: 0))
+        callStartMessage.serverTimestamp = 1_100
+
+        let frame = try makePullResultFrame(messages: [byeMessage, callStartMessage], head: 801)
+
+        handler.handle(frame: frame)
+
+        XCTAssertEqual(events, ["signal(402,call-1)", "callStart(call-2)"])
+    }
+
     /// The regression this guards against: a first-login (or long-offline)
     /// pull can return hundreds of messages across many distinct
     /// conversations in a single `MP` response. Before batching, each
