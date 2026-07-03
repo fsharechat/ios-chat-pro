@@ -27,6 +27,11 @@ final class CallViewController: UIViewController {
     private let switchCameraButton = CallControlButton(systemImageName: "camera.rotate.fill")
     private let toggleVideoButton = CallControlButton(systemImageName: "video.fill")
     private let hangUpButton = CallControlButton(systemImageName: "phone.down.fill", backgroundColor: .systemRed)
+    private let controlBar = UIStackView()
+    // 来电操作区:接听前只显示 拒绝/接听 两个大按钮(对齐 Android 来电页)。
+    private let incomingBar = UIStackView()
+    private let acceptButton = CallControlButton(systemImageName: "phone.fill", backgroundColor: .systemGreen)
+    private let rejectButton = CallControlButton(systemImageName: "phone.down.fill", backgroundColor: .systemRed)
     private var isMuted = false
     private var isSpeakerOn = false
     /// Captured once at construction time, before any toggle could have
@@ -64,6 +69,8 @@ final class CallViewController: UIViewController {
         view.backgroundColor = .black
         layoutViews()
         bindCallManager()
+        // pending-renderer:轨道尚未创建也没关系,WebRTCClient 会在轨道
+        // 出现时自动补挂(本地:startPreview;远端:didAdd rtpReceiver)。
         webRTCClient.attachRemoteRenderer(remoteVideoView)
         webRTCClient.attachLocalRenderer(localVideoView)
         addLocalPreviewDragGesture()
@@ -90,17 +97,24 @@ final class CallViewController: UIViewController {
         toggleVideoButton.addTarget(self, action: #selector(toggleVideoTapped), for: .touchUpInside)
         hangUpButton.addTarget(self, action: #selector(hangUpTapped), for: .touchUpInside)
 
-        let controlBar = UIStackView(arrangedSubviews: [muteButton, switchCameraButton, toggleVideoButton, hangUpButton, speakerButton])
+        [muteButton, switchCameraButton, toggleVideoButton, hangUpButton, speakerButton].forEach { controlBar.addArrangedSubview($0) }
         controlBar.axis = .horizontal
         controlBar.distribution = .equalSpacing
         controlBar.alignment = .center
+
+        acceptButton.addTarget(self, action: #selector(acceptTapped), for: .touchUpInside)
+        rejectButton.addTarget(self, action: #selector(rejectTapped), for: .touchUpInside)
+        [rejectButton, acceptButton].forEach { incomingBar.addArrangedSubview($0) }
+        incomingBar.axis = .horizontal
+        incomingBar.distribution = .equalSpacing
+        incomingBar.alignment = .center
 
         let centerStack = UIStackView(arrangedSubviews: [avatarView, nameLabel, statusLabel])
         centerStack.axis = .vertical
         centerStack.alignment = .center
         centerStack.spacing = 12
 
-        [remoteVideoView, centerStack, localVideoView, controlBar].forEach {
+        [remoteVideoView, centerStack, localVideoView, controlBar, incomingBar].forEach {
             $0.translatesAutoresizingMaskIntoConstraints = false
             view.addSubview($0)
         }
@@ -134,6 +148,10 @@ final class CallViewController: UIViewController {
             controlBar.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 32),
             controlBar.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -32),
             controlBar.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -24),
+
+            incomingBar.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 64),
+            incomingBar.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -64),
+            incomingBar.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -24),
         ])
     }
 
@@ -153,9 +171,10 @@ final class CallViewController: UIViewController {
     }
 
     private func applyState(_ state: CallState) {
-        // `toggleVideoButton` only ever does something once media is live
-        // (`CallManager.setAudioOnly`'s own state gate), and only for a
-        // call that started with video — see `startedAsVideo`'s doc comment.
+        let isIncoming = state == .incoming
+        incomingBar.isHidden = !isIncoming
+        controlBar.isHidden = isIncoming
+        // 视频开关只在媒体已就绪、且这通电话以视频开局时才有意义。
         toggleVideoButton.isHidden = !startedAsVideo || (state != .connecting && state != .connected)
         switch state {
         case .idle:
@@ -163,7 +182,7 @@ final class CallViewController: UIViewController {
         case .outgoing:
             statusLabel.text = "正在呼叫…"
         case .incoming:
-            statusLabel.text = "邀请你通话"
+            statusLabel.text = callManager.audioOnly ? "邀请你进行语音通话" : "邀请你进行视频通话"
         case .connecting:
             statusLabel.text = "连接中…"
         case .connected:
@@ -215,6 +234,23 @@ final class CallViewController: UIViewController {
 
     @objc private func hangUpTapped() {
         try? callManager.hangUp()
+    }
+
+    @objc private func acceptTapped() {
+        // 与已移除的系统级来电接听路径同语义:权限不足时自动拒接,而不是
+        // 接进一个没声音/没画面的通话。
+        CallPermissions.ensureAuthorized(audioOnly: callManager.audioOnly) { [weak self] authorized in
+            guard let self else { return }
+            guard authorized else {
+                try? self.callManager.reject()
+                return
+            }
+            try? self.callManager.answer()
+        }
+    }
+
+    @objc private func rejectTapped() {
+        try? callManager.reject()
     }
 }
 

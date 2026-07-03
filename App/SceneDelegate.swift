@@ -10,8 +10,11 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     var window: UIWindow?
     private var environment: AppEnvironment!
     private var cancellables = Set<AnyCancellable>()
-    private var callKitProvider: CallKitProvider?
     private var presentedCallViewController: CallViewController?
+    /// environment.callManager 为 nil(未登录)时 no-op,登录成功回调里会再
+    /// 调一次;用 cancellables 里已有订阅做幂等门(callManager 重建仅发生在
+    /// 重新登录,那时 SceneDelegate 也会重走这里)。
+    private var callManagerWired = false
     private let themePreferenceStore = ThemePreferenceStore()
 
     func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
@@ -109,15 +112,15 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     /// Tears down the current session and switches back to the login
     /// screen — the reverse of `makeLoginViewController`'s
     /// `onLoginSucceeded`. Drops every `cancellables` subscription (the
-    /// contact-list unread badge, the call-state sink) and
-    /// `callKitProvider` before switching root: those were bound to view
+    /// contact-list unread badge, the call-state sink) and resets
+    /// `callManagerWired` before switching root: those were bound to view
     /// models / a `CallManager` that `environment.logOut()` is about to
-    /// tear down, and `wireCallManagerIfReady()`'s `callKitProvider == nil`
-    /// guard must see a clean slate so it actually rebuilds a fresh
-    /// `CXProvider` against the next login's new `CallManager`.
+    /// tear down, and `wireCallManagerIfReady()`'s `callManagerWired`
+    /// guard must see a clean slate so it actually re-subscribes to the
+    /// next login's new `CallManager`.
     private func performLogout() {
         cancellables.removeAll()
-        callKitProvider = nil
+        callManagerWired = false
         environment.logOut()
         window?.rootViewController = makeLoginViewController()
     }
@@ -483,39 +486,17 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         return LoginViewController(viewModel: viewModel)
     }
 
-    /// No-ops if `environment.callManager` is still `nil` (no stored
-    /// credentials yet, login screen showing) — called again from
-    /// `makeLoginViewController`'s `onLoginSucceeded` once it exists.
-    /// Idempotent: a second call after `callKitProvider` already exists
-    /// just re-runs harmlessly (re-creating a fresh `CallKitProvider` would
-    /// be wrong — `CXProvider` is meant to be a singleton-ish per-app
-    /// object — so this guards against that).
     private func wireCallManagerIfReady() {
-        guard let callManager = environment.callManager, callKitProvider == nil else { return }
-        let provider = CallKitProvider(callManager: callManager)
-        callKitProvider = provider
-        callManager.callKitAdapter = provider
-
+        guard let callManager = environment.callManager, !callManagerWired else { return }
+        callManagerWired = true
         callManager.$state
             .removeDuplicates()
             .sink { [weak self] state in self?.handleCallStateChange(state) }
             .store(in: &cancellables)
     }
 
-    /// Presents `CallViewController` full-screen once a call is actually
-    /// answered, and dismisses it once the call returns to `.idle`. One
-    /// screen for the whole call lifecycle — see `CallViewController`'s own
-    /// header comment for why.
-    ///
-    /// Deliberately does **not** present on `.incoming` — `CallManager.state`
-    /// flips to `.incoming` synchronously (this `sink` runs) before
-    /// `CallKitAdapting.reportIncomingCall` even calls
-    /// `CXProvider.reportNewIncomingCall`, so presenting here would race the
-    /// system incoming-call UI, or briefly show our screen first. `.outgoing`
-    /// has no competing system UI (`CallKitProvider.reportOutgoingCallStarted`
-    /// reports no ringing UI), so it presents immediately; `.connecting`
-    /// covers the incoming-call case — by the time a call reaches it, the
-    /// user has already answered via the system UI, which is dismissing.
+    /// 任何非 idle 状态都保证通话页在场(incoming 弹应用内来电页 ——
+    /// 国行 iPhone 无系统级来电 UI 可用,这是唯一的来电 UI),回到 idle 收掉。
     private func handleCallStateChange(_ state: IMCall.CallState) {
         guard let callManager = environment.callManager else { return }
         if state == .idle {
@@ -523,7 +504,6 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             presentedCallViewController = nil
             return
         }
-        guard state == .outgoing || state == .connecting else { return }
         guard presentedCallViewController == nil, let webRTCClient = environment.webRTCClient, let peerUid = callManager.peerUid else { return }
         let displayName = (try? environment.storage.users.user(uid: peerUid))?.displayName ?? peerUid
         let callViewController = CallViewController(callManager: callManager, webRTCClient: webRTCClient, peerDisplayName: displayName)
