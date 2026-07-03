@@ -16,6 +16,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     /// 重新登录,那时 SceneDelegate 也会重走这里)。
     private var callManagerWired = false
     private let themePreferenceStore = ThemePreferenceStore()
+    private let ringtonePlayer = CallRingtonePlayer()
 
     func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
         guard let windowScene = scene as? UIWindowScene else { return }
@@ -498,6 +499,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     /// 任何非 idle 状态都保证通话页在场(incoming 弹应用内来电页 ——
     /// 国行 iPhone 无系统级来电 UI 可用,这是唯一的来电 UI),回到 idle 收掉。
     private func handleCallStateChange(_ state: IMCall.CallState) {
+        ringtonePlayer.update(for: state)
         guard let callManager = environment.callManager else { return }
         if state == .idle {
             presentedCallViewController?.dismiss(animated: true)
