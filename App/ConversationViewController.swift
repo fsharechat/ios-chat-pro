@@ -386,6 +386,18 @@ final class ConversationViewController: UIViewController {
         }
     }
 
+    /// cell 分派 switch 兜底到 ImageMessageCell 的判定条件（非语音/文件/位置/
+    /// 文本/视频消息）。configureDataSource 里的 switch 依次用 where 子句排除
+    /// 语音（"[语音]" 前缀）、文件（"[文件]" 前缀）、位置（locationLat != nil）、
+    /// 文本（text != nil）、视频（videoDuration != nil），落到最后一个无 where
+    /// 的 .message case 即为图片消息——那个兜底分支就是本方法条件的逻辑补集，
+    /// 是 switch 自身已经保证的权威定义，不需要（也不能）反过来调用本方法。
+    /// presentImageGallery 复用同一判定，避免两处独立维护而在未来新增消息类型
+    /// 时静默失配。
+    private static func isImageMessage(_ message: StoredMessageRow) -> Bool {
+        message.text == nil && message.videoDuration == nil && message.locationLat == nil
+    }
+
     private func scrollToBottom(animated: Bool) {
         let rowCount = dataSource.snapshot().itemIdentifiers.count
         guard rowCount > 0 else { return }
@@ -509,16 +521,16 @@ final class ConversationViewController: UIViewController {
     }
 
     /// 从当前 rows 收集全部图片消息组成画廊（含发送中的 pending 图），
-    /// 用 rowIdentity 定位被点击的那张作为起始页。图片行的判定与
-    /// configureDataSource 的 cell 分派规则一致：.message 且非语音/文件
-    /// （text == nil 已排除）、非位置、非视频。
+    /// 用 rowIdentity 定位被点击的那张作为起始页。图片行的判定统一由
+    /// isImageMessage(_:) 定义，与 configureDataSource 的 cell 分派规则
+    /// （兜底到 ImageMessageCell 的那个 case）保持一致。
     private func presentImageGallery(from tappedRow: ChatMessageRow) {
         var items: [GalleryItem] = []
         var startIndex: Int?
         for row in viewModel.rows {
             let item: GalleryItem
             switch row {
-            case .message(let message) where message.text == nil && message.videoDuration == nil && message.locationLat == nil:
+            case .message(let message) where Self.isImageMessage(message):
                 item = GalleryItem(thumbnail: message.imageThumbnail, remoteURL: message.imageRemoteURL)
             case .pendingImage(let pending):
                 item = GalleryItem(thumbnail: pending.fullImageData, remoteURL: nil)
