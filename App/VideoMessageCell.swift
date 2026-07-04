@@ -27,6 +27,10 @@ final class VideoMessageCell: UITableViewCell {
     private let bubbleColumn = UIStackView()
     private let rowStack = UIStackView()
     private let spacer = UIView()
+    /// 气泡宽高按原图比例算出后写回这两个约束的 constant（layoutViews 里
+    /// 激活一次，之后每次 configure 只改 constant，不重新创建约束）。
+    private var bubbleWidthConstraint: NSLayoutConstraint!
+    private var bubbleHeightConstraint: NSLayoutConstraint!
 
     var onTapped: (() -> Void)?
     var onRetryTapped: (() -> Void)?
@@ -112,6 +116,9 @@ final class VideoMessageCell: UITableViewCell {
         contentView.addSubview(rowStack)
         rowStack.addArrangedSubview(bubbleColumn)
 
+        bubbleWidthConstraint = bubbleContainer.widthAnchor.constraint(equalToConstant: ImageBubbleSizing.fallbackSize.width)
+        bubbleHeightConstraint = bubbleContainer.heightAnchor.constraint(equalToConstant: ImageBubbleSizing.fallbackSize.height)
+
         NSLayoutConstraint.activate([
             senderAvatarImageView.widthAnchor.constraint(equalToConstant: 36),
             senderAvatarImageView.heightAnchor.constraint(equalToConstant: 36),
@@ -121,8 +128,8 @@ final class VideoMessageCell: UITableViewCell {
             rowStack.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 4),
             rowStack.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -4),
 
-            bubbleContainer.widthAnchor.constraint(equalToConstant: 160),
-            bubbleContainer.heightAnchor.constraint(equalToConstant: 160),
+            bubbleWidthConstraint,
+            bubbleHeightConstraint,
 
             thumbnailView.topAnchor.constraint(equalTo: bubbleContainer.topAnchor),
             thumbnailView.bottomAnchor.constraint(equalTo: bubbleContainer.bottomAnchor),
@@ -150,7 +157,14 @@ final class VideoMessageCell: UITableViewCell {
     }
 
     func configure(with data: VideoBubbleData) {
-        thumbnailView.image = data.thumbnail.flatMap { UIImage(data: $0) }
+        let thumbnailImage = data.thumbnail.flatMap { UIImage(data: $0) }
+        thumbnailView.image = thumbnailImage
+
+        let displaySize = thumbnailImage.map { ImageBubbleSizing.displaySize(forNaturalSize: $0.size) }
+            ?? ImageBubbleSizing.fallbackSize
+        bubbleWidthConstraint.constant = displaySize.width
+        bubbleHeightConstraint.constant = displaySize.height
+
         durationLabel.text = " \(formatDuration(data.duration)) "
         playCircle.isHidden = data.isUploading
         durationLabel.isHidden = data.isUploading
