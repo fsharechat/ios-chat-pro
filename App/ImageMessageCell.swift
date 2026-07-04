@@ -38,6 +38,10 @@ final class ImageMessageCell: UITableViewCell {
     var onRetryTapped: (() -> Void)?
     /// 复用竞态防护：异步原图回来时若 cell 已被复用绑定到别的 URL，丢弃结果。
     private var currentRemoteURL: String?
+    /// 气泡宽高按原图比例算出后写回这两个约束的 constant（layoutViews 里
+    /// 激活一次，之后每次 configure 只改 constant，不重新创建约束）。
+    private var bubbleWidthConstraint: NSLayoutConstraint!
+    private var bubbleHeightConstraint: NSLayoutConstraint!
 
     override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
         super.init(style: style, reuseIdentifier: reuseIdentifier)
@@ -92,6 +96,9 @@ final class ImageMessageCell: UITableViewCell {
         // width constraint that references contentView.
         rowStack.addArrangedSubview(bubbleColumn)
 
+        bubbleWidthConstraint = bubbleImageView.widthAnchor.constraint(equalToConstant: ImageBubbleSizing.fallbackSize.width)
+        bubbleHeightConstraint = bubbleImageView.heightAnchor.constraint(equalToConstant: ImageBubbleSizing.fallbackSize.height)
+
         NSLayoutConstraint.activate([
             senderAvatarImageView.widthAnchor.constraint(equalToConstant: 36),
             senderAvatarImageView.heightAnchor.constraint(equalToConstant: 36),
@@ -101,8 +108,8 @@ final class ImageMessageCell: UITableViewCell {
             rowStack.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 4),
             rowStack.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -4),
 
-            bubbleImageView.widthAnchor.constraint(equalToConstant: 160),
-            bubbleImageView.heightAnchor.constraint(equalToConstant: 160),
+            bubbleWidthConstraint,
+            bubbleHeightConstraint,
 
             activityIndicator.centerXAnchor.constraint(equalTo: bubbleImageView.centerXAnchor),
             activityIndicator.centerYAnchor.constraint(equalTo: bubbleImageView.centerYAnchor),
@@ -115,8 +122,14 @@ final class ImageMessageCell: UITableViewCell {
         senderNameLabel.isHidden = !showsSender
         senderNameLabel.text = showsSender ? data.senderDisplayName : nil
 
-        bubbleImageView.image = data.thumbnail.flatMap { UIImage(data: $0) }
+        let thumbnailImage = data.thumbnail.flatMap { UIImage(data: $0) }
+        bubbleImageView.image = thumbnailImage
         currentRemoteURL = data.remoteURL
+
+        let displaySize = thumbnailImage.map { ImageBubbleSizing.displaySize(forNaturalSize: $0.size) }
+            ?? ImageBubbleSizing.fallbackSize
+        bubbleWidthConstraint.constant = displaySize.width
+        bubbleHeightConstraint.constant = displaySize.height
         if let remoteURL = data.remoteURL {
             Task { [weak self] in
                 guard let original = await ImageLoader.shared.loadImageData(from: remoteURL),
