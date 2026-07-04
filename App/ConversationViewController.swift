@@ -205,13 +205,13 @@ final class ConversationViewController: UIViewController {
                 let cell = tableView.dequeueReusableCell(withIdentifier: ImageMessageCell.reuseIdentifier, for: indexPath) as! ImageMessageCell
                 cell.configure(with: ImageBubbleData(thumbnail: message.imageThumbnail, remoteURL: message.imageRemoteURL, isOutgoing: message.isOutgoing, isUploading: message.status == .sending, isFailed: message.status == .sendFailure, senderDisplayName: message.senderDisplayName, senderAvatarURL: message.senderAvatarURL))
                 cell.onRetryTapped = { [weak self] in self?.viewModel.retry(row: row) }
-                cell.onTapped = { [weak self] in self?.presentImagePreview(thumbnail: message.imageThumbnail, remoteURL: message.imageRemoteURL) }
+                cell.onTapped = { [weak self] in self?.presentImageGallery(from: row) }
                 return cell
             case .pendingImage(let pending):
                 let cell = tableView.dequeueReusableCell(withIdentifier: ImageMessageCell.reuseIdentifier, for: indexPath) as! ImageMessageCell
                 cell.configure(with: ImageBubbleData(thumbnail: pending.thumbnail, isOutgoing: true, isUploading: pending.state == .uploading, isFailed: pending.state == .failed))
                 cell.onRetryTapped = { [weak self] in self?.viewModel.retry(row: row) }
-                cell.onTapped = { [weak self] in self?.presentImagePreview(thumbnail: pending.thumbnail, remoteURL: nil) }
+                cell.onTapped = { [weak self] in self?.presentImageGallery(from: row) }
                 return cell
             case .pendingVideo(let pending):
                 let cell = tableView.dequeueReusableCell(withIdentifier: VideoMessageCell.reuseIdentifier, for: indexPath) as! VideoMessageCell
@@ -508,8 +508,28 @@ final class ConversationViewController: UIViewController {
         return scaled.jpegData(compressionQuality: 0.1)
     }
 
-    private func presentImagePreview(thumbnail: Data?, remoteURL: String?) {
-        present(ImagePreviewViewController(localThumbnail: thumbnail, remoteURL: remoteURL), animated: true)
+    /// 从当前 rows 收集全部图片消息组成画廊（含发送中的 pending 图），
+    /// 用 rowIdentity 定位被点击的那张作为起始页。图片行的判定与
+    /// configureDataSource 的 cell 分派规则一致：.message 且非语音/文件
+    /// （text == nil 已排除）、非位置、非视频。
+    private func presentImageGallery(from tappedRow: ChatMessageRow) {
+        var items: [GalleryItem] = []
+        var startIndex: Int?
+        for row in viewModel.rows {
+            let item: GalleryItem
+            switch row {
+            case .message(let message) where message.text == nil && message.videoDuration == nil && message.locationLat == nil:
+                item = GalleryItem(thumbnail: message.imageThumbnail, remoteURL: message.imageRemoteURL)
+            case .pendingImage(let pending):
+                item = GalleryItem(thumbnail: pending.fullImageData, remoteURL: nil)
+            default:
+                continue
+            }
+            if Self.rowIdentity(row) == Self.rowIdentity(tappedRow) { startIndex = items.count }
+            items.append(item)
+        }
+        guard !items.isEmpty else { return }
+        present(ImageGalleryViewController(items: items, startIndex: startIndex ?? 0), animated: true)
     }
 
     private func presentVideoPlayer(urlString: String?) {
