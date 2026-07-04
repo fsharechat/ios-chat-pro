@@ -4,14 +4,16 @@ import IMKit
 
 struct ImageBubbleData: Equatable {
     let thumbnail: Data?
+    let remoteURL: String?
     let isOutgoing: Bool
     let isUploading: Bool
     let isFailed: Bool
     let senderDisplayName: String?
     let senderAvatarURL: String?
 
-    init(thumbnail: Data?, isOutgoing: Bool, isUploading: Bool, isFailed: Bool, senderDisplayName: String? = nil, senderAvatarURL: String? = nil) {
+    init(thumbnail: Data?, remoteURL: String? = nil, isOutgoing: Bool, isUploading: Bool, isFailed: Bool, senderDisplayName: String? = nil, senderAvatarURL: String? = nil) {
         self.thumbnail = thumbnail
+        self.remoteURL = remoteURL
         self.isOutgoing = isOutgoing
         self.isUploading = isUploading
         self.isFailed = isFailed
@@ -34,6 +36,8 @@ final class ImageMessageCell: UITableViewCell {
 
     var onTapped: (() -> Void)?
     var onRetryTapped: (() -> Void)?
+    /// 复用竞态防护：异步原图回来时若 cell 已被复用绑定到别的 URL，丢弃结果。
+    private var currentRemoteURL: String?
 
     override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
         super.init(style: style, reuseIdentifier: reuseIdentifier)
@@ -51,6 +55,7 @@ final class ImageMessageCell: UITableViewCell {
         onRetryTapped = nil
         bubbleImageView.image = nil
         activityIndicator.stopAnimating()
+        currentRemoteURL = nil
     }
 
     private func layoutViews() {
@@ -111,6 +116,17 @@ final class ImageMessageCell: UITableViewCell {
         senderNameLabel.text = showsSender ? data.senderDisplayName : nil
 
         bubbleImageView.image = data.thumbnail.flatMap { UIImage(data: $0) }
+        currentRemoteURL = data.remoteURL
+        if let remoteURL = data.remoteURL {
+            Task { [weak self] in
+                guard let original = await ImageLoader.shared.loadImageData(from: remoteURL),
+                      let image = UIImage(data: original) else { return }
+                guard let self, self.currentRemoteURL == remoteURL else { return }
+                UIView.transition(with: self.bubbleImageView, duration: 0.2, options: .transitionCrossDissolve) {
+                    self.bubbleImageView.image = image
+                }
+            }
+        }
         activityIndicator.isHidden = !data.isUploading
         if data.isUploading { activityIndicator.startAnimating() } else { activityIndicator.stopAnimating() }
 
