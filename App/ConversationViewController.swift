@@ -91,6 +91,10 @@ final class ConversationViewController: UIViewController {
         }
     }
 
+    @objc private func messageAreaTapped() {
+        inputBar.collapseInput()
+    }
+
     @objc private func refreshTriggered() {
         if tableView.isDragging {
             pendingHistoryRefresh = true
@@ -130,6 +134,12 @@ final class ConversationViewController: UIViewController {
         tableView.refreshControl = refreshControl
         tableView.translatesAutoresizingMaskIntoConstraints = false
         tableView.alpha = 0
+        // 点消息区域收起键盘/面板；cancelsTouchesInView 保持 false，
+        // 气泡上的点按（看图、播放语音等）不受影响。
+        let tap = UITapGestureRecognizer(target: self, action: #selector(messageAreaTapped))
+        tap.cancelsTouchesInView = false
+        tableView.addGestureRecognizer(tap)
+        tableView.keyboardDismissMode = .onDrag
 
         inputBar.translatesAutoresizingMaskIntoConstraints = false
 
@@ -410,6 +420,7 @@ final class ConversationViewController: UIViewController {
             self?.viewModel.sendVoice(audioData: audioData, duration: duration, fileName: fileName)
         }
         inputBar.onMentionTriggered = { [weak self] in self?.presentMentionPicker() }
+        inputBar.onPanelShown = { [weak self] in self?.scrollToBottom(animated: true) }
     }
 
     private func presentMentionPicker() {
@@ -587,7 +598,11 @@ final class ConversationViewController: UIViewController {
               let duration = notification.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double else { return }
         let keyboardHeight = max(0, view.bounds.maxY - endFrame.minY - view.safeAreaInsets.bottom)
         inputBarBottomConstraint.constant = -keyboardHeight
-        UIView.animate(withDuration: duration) { self.view.layoutIfNeeded() }
+        UIView.animate(withDuration: duration) {
+            self.view.layoutIfNeeded()
+            // 键盘弹出时跟随滚到底部，最新消息不被键盘盖住。
+            if keyboardHeight > 0 { self.scrollToBottom(animated: false) }
+        }
     }
 
     private func buildContextMenu(for message: StoredMessageRow) -> UIMenu {

@@ -13,6 +13,9 @@ final class MessageInputBar: UIView {
     var onVideoCall: (() -> Void)?
     var onSendVoice: ((_ audioData: Data, _ duration: Int, _ fileName: String, _ localM4AURL: URL?) -> Void)?
     var onMentionTriggered: (() -> Void)?
+    /// 表情/扩展面板弹出时回调（键盘弹出走系统通知，面板弹出没有系统信号），
+    /// 会话页借此把消息列表滚到底部，避免面板盖住最新消息。
+    var onPanelShown: (() -> Void)?
 
     // MARK: - Mention state
     private var mentionedType: Int32 = 0
@@ -68,6 +71,12 @@ final class MessageInputBar: UIView {
         guard textView.text.hasSuffix("@") else { return }
         textView.text.removeLast()
         textViewDidChange(textView)
+    }
+
+    /// 收起键盘和表情/扩展面板，输入栏回到最小高度。
+    func collapseInput() {
+        textView.resignFirstResponder()
+        if panelState != .none { setPanelState(.none, animated: true) }
     }
 
     // MARK: - Layout
@@ -333,6 +342,7 @@ final class MessageInputBar: UIView {
         if animated {
             UIView.animate(withDuration: 0.25) { self.window?.layoutIfNeeded() }
         }
+        if state != .none { onPanelShown?() }
     }
 
     private func updateSendExtVisibility() {
