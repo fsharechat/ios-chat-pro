@@ -1,5 +1,6 @@
 import XCTest
 import Foundation
+import Combine
 import IMClient
 import IMTransport
 import IMProto
@@ -529,6 +530,68 @@ final class CallManagerTests: XCTestCase {
         fakeTransport.simulateReceivedData(FrameEncoder.encode(signal: .pubAck, subSignal: .ms, messageId: frame.header.messageId, body: ackBody))
     }
 
+    /// 回归:信令经服务器可能重复投递,且对端(Android Plan B)收到重复
+    /// offer 会重协商并发出第二个 answer —— Unified Plan 在 stable 状态
+    /// 重复应用 answer 会报 "Called in wrong state: stable",一通电话只能
+    /// 认第一个 answer。
+    func test_secondRemoteAnswer_isIgnored() throws {
+        try deliverCallStart(callId: "call-1", audioOnly: false, from: "them")
+        try manager.answer()
+
+        try deliverSignal(.sdpAnswer(callId: "call-1", sdp: "answer-1"), from: "them")
+        try deliverSignal(.sdpAnswer(callId: "call-1", sdp: "answer-2"), from: "them")
+
+        XCTAssertEqual(mediaEngine.remoteAnswers, ["answer-1"])
+    }
+
+    // MARK: - 状态发布时序
+
+    /// 回归:SceneDelegate 在 state sink 里同步 present 来电页,
+    /// CallViewController 随即订阅同一 publisher —— 订阅发生在本次发射的
+    /// 派发过程中,必须回放到已更新的新状态。@Published 在 willSet 发射
+    /// (属性存储仍是旧值),这个时机的新订阅者会回放到 .idle 且错过本次
+    /// .incoming,来电页因此永远显示不出接听按钮。
+    func test_statePublisher_subscriberAttachedDuringIncomingEmission_replaysIncoming() throws {
+        let manager = self.manager!
+        var cancellables = Set<AnyCancellable>()
+        var lateSubscriberFirstValue: CallState?
+        var propertyValueDuringEmission: CallState?
+        manager.statePublisher
+            .sink { state in
+                guard state == .incoming, lateSubscriberFirstValue == nil else { return }
+                propertyValueDuringEmission = manager.state
+                manager.statePublisher
+                    .sink { if lateSubscriberFirstValue == nil { lateSubscriberFirstValue = $0 } }
+                    .store(in: &cancellables)
+            }
+            .store(in: &cancellables)
+
+        try deliverCallStart(callId: "call-1", audioOnly: false, from: "them")
+
+        XCTAssertEqual(propertyValueDuringEmission, .incoming, "发射派发中读属性必须已是新值(didSet 语义)")
+        XCTAssertEqual(lateSubscriberFirstValue, .incoming, "发射派发中的新订阅者必须回放新状态")
+    }
+
+    /// audioOnly 与 state 同机制 —— CallViewController 的 audioOnly 绑定
+    /// 同样是在 state sink 触发的 present 流程里建立的。
+    func test_audioOnlyPublisher_subscriberAttachedDuringStateEmission_replaysCurrentAudioOnly() throws {
+        let manager = self.manager!
+        var cancellables = Set<AnyCancellable>()
+        var lateSubscriberFirstValue: Bool?
+        manager.statePublisher
+            .sink { state in
+                guard state == .incoming, lateSubscriberFirstValue == nil else { return }
+                manager.audioOnlyPublisher
+                    .sink { if lateSubscriberFirstValue == nil { lateSubscriberFirstValue = $0 } }
+                    .store(in: &cancellables)
+            }
+            .store(in: &cancellables)
+
+        try deliverCallStart(callId: "call-1", audioOnly: true, from: "them")
+
+        XCTAssertEqual(lateSubscriberFirstValue, true)
+    }
+
     private func deliverSignal(_ signal: OutgoingCallSignal, from: String, target: String = "me") throws {
         let encoded = CallSignalCodec.encode(signal)
         var wireMessage = Im_Message()
@@ -539,7 +602,8 @@ final class CallManagerTests: XCTestCase {
         wireMessage.conversation.line = 0
         var content = Im_MessageContent()
         content.type = encoded.wireType
-        content.searchableContent = encoded.callId
+        // 对齐 Android:callId 走 wire 的 content 字段。
+        content.content = encoded.callId
         if let data = encoded.data { content.data = data }
         wireMessage.content = content
         wireMessage.serverTimestamp = 99_000

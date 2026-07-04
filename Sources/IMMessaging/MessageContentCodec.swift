@@ -87,7 +87,9 @@ public enum MessageContentCodec {
             wire.type = Int32(type.rawValue)
         case .callRecord(let callId, let targetId, let audioOnly, let status, let connectTime, let endTime):
             wire.type = 400
-            wire.searchableContent = callId
+            // Android CallStartMessageContent.decode 从 payload.content 读
+            // callId(searchableContent 它不看)。
+            wire.content = callId
             let payload = CallStartWireContent(
                 t: targetId,
                 a: audioOnly ? 1 : 0,
@@ -250,7 +252,15 @@ public enum MessageContentCodec {
     }
 
     private static func decodeCallStart(wire: Im_MessageContent) -> MessageContent {
-        let callId = wire.hasSearchableContent ? wire.searchableContent : ""
+        // callId 在 content 字段(Android CallStartMessageContent.encode 的
+        // payload.content);回退 searchableContent 兼容修字段错位前的旧版
+        // iOS 写进服务器历史的消息。
+        let callId: String
+        if wire.hasContent, !wire.content.isEmpty {
+            callId = wire.content
+        } else {
+            callId = wire.hasSearchableContent ? wire.searchableContent : ""
+        }
         guard wire.hasData, let parsed = try? JSONDecoder().decode(CallStartWireContent.self, from: wire.data) else {
             return .callRecord(callId: callId, targetId: "", audioOnly: false, status: 0, connectTime: 0, endTime: 0)
         }

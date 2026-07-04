@@ -9,7 +9,9 @@ final class CallSignalCodecTests: XCTestCase {
         message.fromUser = "them"
         var content = Im_MessageContent()
         content.type = type
-        content.searchableContent = callId
+        // Android 引擎(AnswerMessage/ByeMessage/SignalMessage 等)把 callId
+        // 编在 MessagePayload.content → wire 的 content 字段,不是 searchableContent。
+        content.content = callId
         if let data { content.data = data }
         message.content = content
         return message
@@ -112,7 +114,7 @@ final class CallSignalCodecTests: XCTestCase {
             wire.fromUser = "them"
             var content = Im_MessageContent()
             content.type = encoded.wireType
-            content.searchableContent = encoded.callId
+            content.content = encoded.callId
             if let data = encoded.data { content.data = data }
             wire.content = content
             XCTAssertEqual(CallSignalCodec.decode(wire), expectedIncoming)
@@ -129,7 +131,7 @@ final class CallSignalCodecTests: XCTestCase {
     func test_decode_type405_decodesAsAnswer() {
         var wire = Im_Message()
         wire.content.type = 405
-        wire.content.searchableContent = "call-1"
+        wire.content.content = "call-1"
         wire.content.data = Data("0".utf8)
         XCTAssertEqual(CallSignalCodec.decode(wire), .answer(callId: "call-1", audioOnly: false))
     }
@@ -138,7 +140,7 @@ final class CallSignalCodecTests: XCTestCase {
         let json = #"{"type":"remove-candidates","candidates":[{"label":0,"id":"audio","candidate":"candidate:1"},{"label":1,"id":"video","candidate":"candidate:2"}]}"#
         var wire = Im_Message()
         wire.content.type = 403
-        wire.content.searchableContent = "call-1"
+        wire.content.content = "call-1"
         wire.content.data = Data(json.utf8)
         XCTAssertEqual(CallSignalCodec.decode(wire), .removeCandidates(callId: "call-1", candidates: [
             RemoteIceCandidate(sdpMLineIndex: 0, sdpMid: "audio", candidate: "candidate:1"),

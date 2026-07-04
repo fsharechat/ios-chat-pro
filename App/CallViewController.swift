@@ -4,6 +4,7 @@ import Combine
 import AVFoundation
 import WebRTC
 import IMCall
+import IMKit
 
 /// One continuous screen covering `.outgoing`/`.incoming`/`.connecting`/
 /// `.connected` — see this task's header for why this isn't split into two
@@ -13,13 +14,14 @@ final class CallViewController: UIViewController {
     private let callManager: CallManager
     private let webRTCClient: WebRTCClient
     private let peerDisplayName: String
+    private let peerPortrait: String?
     private var cancellables = Set<AnyCancellable>()
     private var callConnectedAt: Date?
     private var durationTimer: Timer?
 
     private let remoteVideoView = RTCMTLVideoView()
     private let localVideoView = RTCMTLVideoView()
-    private let avatarView = UIImageView()
+    private let avatarView = AvatarImageView(loader: AvatarLoader.shared)
     private let nameLabel = UILabel()
     private let statusLabel = UILabel()
     private let muteButton = CallControlButton(systemImageName: "mic.slash.fill")
@@ -34,6 +36,10 @@ final class CallViewController: UIViewController {
     private let rejectButton = CallControlButton(systemImageName: "phone.down.fill", backgroundColor: .systemRed)
     private var isMuted = false
     private var isSpeakerOn = false
+    // 信息区(头像/名字/计时)的两套竖向位置:语音通话居中(头像是主视觉);
+    // 视频通话时远端画面占满全屏,居中会压在画面正中,改挪到底部控制条上方。
+    private var centerStackCenterYConstraint: NSLayoutConstraint?
+    private var centerStackBottomConstraint: NSLayoutConstraint?
     /// Captured once at construction time, before any toggle could have
     /// happened — `callManager.audioOnly` at this instant is still the
     /// call's original mode. `toggleVideoButton` only ever does anything
@@ -43,10 +49,11 @@ final class CallViewController: UIViewController {
     /// shows it at all — there'd be nothing for the user to tap into.
     private let startedAsVideo: Bool
 
-    init(callManager: CallManager, webRTCClient: WebRTCClient, peerDisplayName: String) {
+    init(callManager: CallManager, webRTCClient: WebRTCClient, peerDisplayName: String, peerPortrait: String?) {
         self.callManager = callManager
         self.webRTCClient = webRTCClient
         self.peerDisplayName = peerDisplayName
+        self.peerPortrait = peerPortrait
         self.startedAsVideo = !callManager.audioOnly
         super.init(nibName: nil, bundle: nil)
         modalPresentationStyle = .fullScreen
@@ -82,9 +89,7 @@ final class CallViewController: UIViewController {
         nameLabel.font = .systemFont(ofSize: 22, weight: .semibold)
         statusLabel.textColor = UIColor.white.withAlphaComponent(0.7)
         statusLabel.font = .systemFont(ofSize: 14)
-        avatarView.backgroundColor = Theme.backgroundTertiary
-        avatarView.layer.cornerRadius = 48
-        avatarView.clipsToBounds = true
+        avatarView.setAvatar(urlString: peerPortrait, displayName: peerDisplayName)
 
         localVideoView.layer.cornerRadius = 8
         localVideoView.clipsToBounds = true
@@ -131,7 +136,6 @@ final class CallViewController: UIViewController {
             remoteVideoView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
 
             centerStack.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            centerStack.centerYAnchor.constraint(equalTo: view.centerYAnchor),
             avatarView.widthAnchor.constraint(equalToConstant: 96),
             avatarView.heightAnchor.constraint(equalToConstant: 96),
 
@@ -153,19 +157,33 @@ final class CallViewController: UIViewController {
             incomingBar.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -64),
             incomingBar.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -24),
         ])
+
+        centerStackCenterYConstraint = centerStack.centerYAnchor.constraint(equalTo: view.centerYAnchor)
+        centerStackBottomConstraint = centerStack.bottomAnchor.constraint(equalTo: controlBar.topAnchor, constant: -24)
+        // 初始位置由 bindCallManager 的 audioOnly sink 立即设定(Combine 对
+        // @Published 的订阅同步回放当前值),这里不用先激活任何一条。
     }
 
     private func bindCallManager() {
-        callManager.$state
+        callManager.statePublisher
             .sink { [weak self] state in self?.applyState(state) }
             .store(in: &cancellables)
-        callManager.$audioOnly
+        callManager.audioOnlyPublisher
             .sink { [weak self] audioOnly in
-                self?.remoteVideoView.isHidden = audioOnly
-                self?.localVideoView.isHidden = audioOnly
-                self?.avatarView.isHidden = !audioOnly
-                self?.switchCameraButton.isHidden = audioOnly
-                self?.toggleVideoButton.setImage(UIImage(systemName: audioOnly ? "video.fill" : "video.slash.fill"), for: .normal)
+                guard let self else { return }
+                self.remoteVideoView.isHidden = audioOnly
+                self.localVideoView.isHidden = audioOnly
+                self.avatarView.isHidden = !audioOnly
+                self.switchCameraButton.isHidden = audioOnly
+                self.toggleVideoButton.setImage(UIImage(systemName: audioOnly ? "video.fill" : "video.slash.fill"), for: .normal)
+                // 先撤旧约束再上新约束,避免瞬时双激活冲突。
+                if audioOnly {
+                    self.centerStackBottomConstraint?.isActive = false
+                    self.centerStackCenterYConstraint?.isActive = true
+                } else {
+                    self.centerStackCenterYConstraint?.isActive = false
+                    self.centerStackBottomConstraint?.isActive = true
+                }
             }
             .store(in: &cancellables)
     }

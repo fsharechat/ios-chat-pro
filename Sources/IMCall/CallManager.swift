@@ -1,7 +1,7 @@
 import Foundation
 import Combine
 import IMClient
-// 消歧义:`Scheduler` 同时存在于 IMClient 与 Combine(@Published 引入)——
+// 消歧义:`Scheduler` 同时存在于 IMClient 与 Combine ——
 // 见 `AppCore.LoginViewModel` 同款 import 的说明。
 import protocol IMClient.Scheduler
 import IMProto
@@ -17,8 +17,23 @@ import IMMessaging
 ///
 /// **线程契约:** 与整个代码库一致,无内部锁,必须固定从主队列驱动。
 public final class CallManager {
-    @Published public private(set) var state: CallState = .idle
-    @Published public private(set) var audioOnly: Bool = false
+    // state/audioOnly 用"didSet 后经 CurrentValueSubject 发射"而不是
+    // @Published:@Published 在 willSet 发射,属性存储还是旧值 —— 而
+    // SceneDelegate 正是在 state sink 里同步 present CallViewController,
+    // VC 随即订阅同一 publisher,此刻回放到的是旧值(.idle)且错过本次
+    // 发射,来电页会永远停在 idle 视觉、显示不出接听按钮。didSet 发射则
+    // 保证发射派发期间属性与订阅回放都已是新值。
+    public private(set) var state: CallState = .idle {
+        didSet { stateSubject.send(state) }
+    }
+    public private(set) var audioOnly: Bool = false {
+        didSet { audioOnlySubject.send(audioOnly) }
+    }
+    private let stateSubject = CurrentValueSubject<CallState, Never>(.idle)
+    private let audioOnlySubject = CurrentValueSubject<Bool, Never>(false)
+    /// 订阅即回放当前值,语义同 @Published 的 projected publisher。
+    public var statePublisher: AnyPublisher<CallState, Never> { stateSubject.eraseToAnyPublisher() }
+    public var audioOnlyPublisher: AnyPublisher<Bool, Never> { audioOnlySubject.eraseToAnyPublisher() }
     public private(set) var peerUid: String?
 
     /// 每次通话结束(任何原因)触发 —— UI 收掉通话页。
@@ -139,6 +154,7 @@ public final class CallManager {
     // MARK: - 来电信令分发(401-405 via MessagingService.onCallSignal)
 
     private func handleIncomingSignal(_ wireMessage: Im_Message) {
+        print("[DEBUG-CALL] recv signal type=\(wireMessage.content.type) from=\(wireMessage.fromUser) state=\(state)")
         guard let signal = CallSignalCodec.decode(wireMessage) else { return }
         guard let session else { return }
         let sender = wireMessage.fromUser
@@ -188,6 +204,9 @@ public final class CallManager {
 
         case .sdpAnswer(_, let sdp):
             guard state == .connecting || state == .connected else { return }
+            // 只认第一个 answer —— 见 CallSession.hasAppliedRemoteAnswer。
+            guard !session.hasAppliedRemoteAnswer else { return }
+            self.session?.hasAppliedRemoteAnswer = true
             mediaEngine.setRemoteAnswer(sdp)
 
         case .iceCandidate(_, let index, let mid, let candidate):
@@ -253,7 +272,7 @@ public final class CallManager {
         session = CallSession(callId: callId, peerUid: callerUid, audioOnly: audioOnly, localMessageRowId: localMessageRowId)
         self.audioOnly = audioOnly
         peerUid = callerUid
-        state = .incoming // UI(SceneDelegate)监听 $state 弹出来电页
+        state = .incoming // UI(SceneDelegate)监听 statePublisher 弹出来电页
         startAnswerTimeoutTimer()
     }
 
@@ -295,6 +314,7 @@ public final class CallManager {
     // MARK: - 收场
 
     private func endSession(reason: CallEndReason) {
+        print("[DEBUG-CALL] endSession reason=\(reason) state=\(state)")
         answerTimeoutToken?.cancel()
         connectingTimeoutToken?.cancel()
         updateCallBubble(status: 2, endTime: nowMillis())
@@ -320,6 +340,7 @@ public final class CallManager {
 
     private func sendSignal(_ signal: OutgoingCallSignal, to peerUid: String) throws {
         let encoded = CallSignalCodec.encode(signal)
+        print("[DEBUG-CALL] send signal type=\(encoded.wireType) to=\(peerUid) state=\(state)")
         try messagingService.sendCallControlMessage(to: peerUid, wireType: encoded.wireType, callId: encoded.callId, dataPayload: encoded.data)
     }
 }

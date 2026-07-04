@@ -179,11 +179,13 @@ final class MessageContentCodecTests: XCTestCase {
         XCTAssertEqual(content, .groupNotification(type: .addGroupMember, operatorUid: "", memberUids: [], value: nil))
     }
 
-    func test_encodeCallRecord_setsTypeSearchableContentAndDataJSON() throws {
+    func test_encodeCallRecord_setsTypeContentAndDataJSON() throws {
         let wire = MessageContentCodec.encode(.callRecord(callId: "call-1", targetId: "u2", audioOnly: false, status: 0, connectTime: 0, endTime: 0))
 
         XCTAssertEqual(wire.type, 400)
-        XCTAssertEqual(wire.searchableContent, "call-1")
+        // Android CallStartMessageContent.decode 从 payload.content 读 callId,
+        // 所以必须编在 wire 的 content 字段(searchableContent 它不看)。
+        XCTAssertEqual(wire.content, "call-1")
         let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: wire.data) as? [String: Any])
         XCTAssertEqual(json["t"] as? String, "u2")
         XCTAssertEqual(json["a"] as? Int, 0)
@@ -204,8 +206,8 @@ final class MessageContentCodecTests: XCTestCase {
 
     func test_decodeCallRecord_parsesAllFields() throws {
         var wire = Im_MessageContent()
-        wire.type = 600
-        wire.searchableContent = "call-1"
+        wire.type = 400
+        wire.content = "call-1"
         wire.data = Data("""
         {"t":"u2","a":1,"c":5000,"e":65000,"s":2}
         """.utf8)
@@ -217,8 +219,8 @@ final class MessageContentCodecTests: XCTestCase {
 
     func test_decodeCallRecord_missingOptionalFields_defaultToZero() throws {
         var wire = Im_MessageContent()
-        wire.type = 600
-        wire.searchableContent = "call-1"
+        wire.type = 400
+        wire.content = "call-1"
         wire.data = Data("""
         {"t":"u2","a":0}
         """.utf8)
@@ -226,6 +228,21 @@ final class MessageContentCodecTests: XCTestCase {
         let content = try MessageContentCodec.decode(wire)
 
         XCTAssertEqual(content, .callRecord(callId: "call-1", targetId: "u2", audioOnly: false, status: 0, connectTime: 0, endTime: 0))
+    }
+
+    func test_decodeCallRecord_fallsBackToSearchableContentForLegacyIOSMessages() throws {
+        // 修 callId 字段错位之前的 iOS 版本把 callId 写在 searchableContent ——
+        // 服务器历史里的这批消息拉回来仍要能解出 callId。
+        var wire = Im_MessageContent()
+        wire.type = 400
+        wire.searchableContent = "call-legacy"
+        wire.data = Data("""
+        {"t":"u2","a":0}
+        """.utf8)
+
+        let content = try MessageContentCodec.decode(wire)
+
+        XCTAssertEqual(content, .callRecord(callId: "call-legacy", targetId: "u2", audioOnly: false, status: 0, connectTime: 0, endTime: 0))
     }
 
     func test_encodeThenDecodeCallRecord_roundTrips() throws {

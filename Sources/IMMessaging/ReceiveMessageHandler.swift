@@ -27,6 +27,11 @@ public final class ReceiveMessageHandler: MessageHandler {
 
     private let storage: IMStorage
     private let myUserId: () -> String
+    /// 已转发过的 401-405 信令 messageUid(去重用,见 persist 内注释)。
+    /// FIFO 上限 256 —— 一通视频通话全部信令实测 ~30 条,绰绰有余。
+    private var seenCallSignalUids: Set<Int64> = []
+    private var seenCallSignalUidOrder: [Int64] = []
+    private static let seenCallSignalCapacity = 256
 
     /// Fired after persisting any message whose decoded content is
     /// `.groupNotification`, with the conversation `target` (the group id)
@@ -133,6 +138,17 @@ public final class ReceiveMessageHandler: MessageHandler {
         }
 
         if [401, 402, 403, 404, 405].contains(wireMessage.content.type) {
+            // pull 窗口重叠会把同一条信令重复投递:持久化消息靠上面的 DB
+            // messageUid 查询挡掉了,信令不落库,必须在这里用内存集合去重。
+            // 重复的 offer 会让 Plan B 对端(Android)误判重协商并发出第二个
+            // answer,重复的 answer 会让本端 setRemoteDescription 报
+            // "wrong state: stable" —— 视频通话建立期直接被打死。
+            guard !seenCallSignalUids.contains(wireMessage.messageID) else { return }
+            seenCallSignalUids.insert(wireMessage.messageID)
+            seenCallSignalUidOrder.append(wireMessage.messageID)
+            if seenCallSignalUidOrder.count > Self.seenCallSignalCapacity {
+                seenCallSignalUids.remove(seenCallSignalUidOrder.removeFirst())
+            }
             // 不能在这里(写事务内)直接回调 —— CallManager 的信令处理会同步
             // 写库(更新通话气泡),GRDB 串行队列不可重入;与 callStart 事件
             // 相同的"事务后再发"模式。

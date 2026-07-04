@@ -275,7 +275,8 @@ final class MessagingServiceTests: XCTestCase {
         XCTAssertEqual(wireMessage.fromUser, "me")
         XCTAssertEqual(wireMessage.conversation.target, "them")
         XCTAssertEqual(wireMessage.content.type, 403)
-        XCTAssertEqual(wireMessage.content.searchableContent, "call-1")
+        // Android SignalMessage.decode 从 payload.content 读 callId。
+        XCTAssertEqual(wireMessage.content.content, "call-1")
         XCTAssertTrue(wireMessage.content.data.starts(with: Data("{\"type\":\"offer\"".utf8)))
     }
 
@@ -315,7 +316,7 @@ final class MessagingServiceTests: XCTestCase {
         wireMessage.conversation.line = 0
         var wireContent = Im_MessageContent()
         wireContent.type = 402
-        wireContent.searchableContent = "call-3"
+        wireContent.content = "call-3"
         wireMessage.content = wireContent
         wireMessage.serverTimestamp = 1_000
         var result = Im_PullMessageResult()

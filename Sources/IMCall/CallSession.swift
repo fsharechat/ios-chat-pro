@@ -38,4 +38,8 @@ struct CallSession {
     /// call ends so the final bubble update can report the same
     /// `connectTime` rather than losing it.
     var connectTime: Int64 = 0
+    /// 每通电话只应用第一个远端 answer:对端(Android Plan B)收到重复投递
+    /// 的 offer 会误判重协商并发出第二个 answer,Unified Plan 在 stable
+    /// 状态重复应用 answer 会报 "Called in wrong state: stable"。
+    var hasAppliedRemoteAnswer = false
 }

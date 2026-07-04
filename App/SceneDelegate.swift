@@ -490,7 +490,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     private func wireCallManagerIfReady() {
         guard let callManager = environment.callManager, !callManagerWired else { return }
         callManagerWired = true
-        callManager.$state
+        callManager.statePublisher
             .removeDuplicates()
             .sink { [weak self] state in self?.handleCallStateChange(state) }
             .store(in: &cancellables)
@@ -535,8 +535,13 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
               let callManager = environment.callManager,
               let webRTCClient = environment.webRTCClient,
               let peerUid = callManager.peerUid else { return }
-        let displayName = (try? environment.storage.users.user(uid: peerUid))?.displayName ?? peerUid
-        let callViewController = CallViewController(callManager: callManager, webRTCClient: webRTCClient, peerDisplayName: displayName)
+        let peerUser = try? environment.storage.users.user(uid: peerUid)
+        let callViewController = CallViewController(
+            callManager: callManager,
+            webRTCClient: webRTCClient,
+            peerDisplayName: peerUser?.displayName ?? peerUid,
+            peerPortrait: peerUser?.portrait
+        )
         presentedCallViewController = callViewController
         // Present from whatever's actually on top, not blindly from the
         // root — a call must be able to interrupt any other modal flow

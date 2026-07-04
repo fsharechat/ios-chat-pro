@@ -142,9 +142,18 @@ public final class WebRTCClient: NSObject, MediaEngine {
     public func createOffer(completion: @escaping (String) -> Void) {
         guard let connection = peerConnection else { return }
         let constraints = RTCMediaConstraints(mandatoryConstraints: nil, optionalConstraints: nil)
-        connection.offer(for: constraints) { sdp, _ in
-            guard let sdp else { return }
-            connection.setLocalDescription(sdp) { _ in
+        connection.offer(for: constraints) { [weak self] sdp, error in
+            guard let sdp else {
+                print("[DEBUG-CALL] createOffer failed: \(error?.localizedDescription ?? "nil sdp")")
+                self?.failCall()
+                return
+            }
+            connection.setLocalDescription(sdp) { [weak self] error in
+                if let error {
+                    print("[DEBUG-CALL] setLocalDescription(offer) failed: \(error.localizedDescription)")
+                    self?.failCall()
+                    return
+                }
                 DispatchQueue.main.async { completion(sdp.sdp) } // 回主队列,守 CallManager 契约
             }
         }
@@ -153,11 +162,25 @@ public final class WebRTCClient: NSObject, MediaEngine {
     public func createAnswer(forRemoteOffer sdp: String, completion: @escaping (String) -> Void) {
         guard let connection = peerConnection else { return }
         let remoteDescription = RTCSessionDescription(type: .offer, sdp: sdp)
-        connection.setRemoteDescription(remoteDescription) { _ in
+        connection.setRemoteDescription(remoteDescription) { [weak self] error in
+            if let error {
+                print("[DEBUG-CALL] setRemoteDescription(offer) failed: \(error.localizedDescription)")
+                self?.failCall()
+                return
+            }
             let constraints = RTCMediaConstraints(mandatoryConstraints: nil, optionalConstraints: nil)
-            connection.answer(for: constraints) { answerSDP, _ in
-                guard let answerSDP else { return }
-                connection.setLocalDescription(answerSDP) { _ in
+            connection.answer(for: constraints) { [weak self] answerSDP, error in
+                guard let answerSDP else {
+                    print("[DEBUG-CALL] createAnswer failed: \(error?.localizedDescription ?? "nil sdp")")
+                    self?.failCall()
+                    return
+                }
+                connection.setLocalDescription(answerSDP) { [weak self] error in
+                    if let error {
+                        print("[DEBUG-CALL] setLocalDescription(answer) failed: \(error.localizedDescription)")
+                        self?.failCall()
+                        return
+                    }
                     DispatchQueue.main.async { completion(answerSDP.sdp) }
                 }
             }
@@ -166,7 +189,21 @@ public final class WebRTCClient: NSObject, MediaEngine {
 
     public func setRemoteAnswer(_ sdp: String) {
         let remoteDescription = RTCSessionDescription(type: .answer, sdp: sdp)
-        peerConnection?.setRemoteDescription(remoteDescription) { _ in }
+        peerConnection?.setRemoteDescription(remoteDescription) { [weak self] error in
+            guard let error else {
+                print("[DEBUG-CALL] setRemoteAnswer ok")
+                return
+            }
+            print("[DEBUG-CALL] setRemoteAnswer failed: \(error.localizedDescription)")
+            self?.failCall()
+        }
+    }
+
+    /// SDP 协商任一步失败,这通电话都已无法继续 —— 立刻按媒体失败上抛
+    /// (CallManager 的 handleMediaDisconnected 在 connecting/connected 都会
+    /// 收场并发 Bye),而不是静默卡在"连接中"直到 60 秒超时。
+    private func failCall() {
+        DispatchQueue.main.async { [weak self] in self?.onDisconnected?() }
     }
 
     public func addRemoteCandidate(sdpMLineIndex: Int32, sdpMid: String, candidate: String) {
@@ -224,6 +261,7 @@ public final class WebRTCClient: NSObject, MediaEngine {
 
 extension WebRTCClient: RTCPeerConnectionDelegate {
     public func peerConnection(_ peerConnection: RTCPeerConnection, didChange newState: RTCIceConnectionState) {
+        print("[DEBUG-CALL] iceConnectionState -> \(newState.rawValue)")
         // WebRTC 内部线程 → 主队列,维持 CallManager 的主队列契约。
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }

@@ -57,7 +57,15 @@ public enum CallSignalCodec {
     /// has already filtered to call-signal types, but this stays
     /// total/safe rather than assuming that filtering happened.
     public static func decode(_ wireMessage: Im_Message) -> IncomingCallSignal? {
-        let callId = wireMessage.content.hasSearchableContent ? wireMessage.content.searchableContent : ""
+        // Android 引擎(AnswerMessage/ByeMessage/SignalMessage/ModifyMessage)
+        // 把 callId 编在 MessagePayload.content → wire 的 content 字段;旧版
+        // iOS 曾错放在 searchableContent,保留回退以兼容混跑的旧客户端。
+        let callId: String
+        if wireMessage.content.hasContent, !wireMessage.content.content.isEmpty {
+            callId = wireMessage.content.content
+        } else {
+            callId = wireMessage.content.hasSearchableContent ? wireMessage.content.searchableContent : ""
+        }
         let data = wireMessage.content.hasData ? wireMessage.content.data : Data()
         switch wireMessage.content.type {
         case 401:

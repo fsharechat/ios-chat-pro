@@ -269,7 +269,7 @@ final class ReceiveMessageHandlerTests: XCTestCase {
         message.conversation.line = 0
         var wireContent = Im_MessageContent()
         wireContent.type = 401 // Answer
-        wireContent.searchableContent = "call-1"
+        wireContent.content = "call-1"
         wireContent.data = Data("1".utf8)
         message.content = wireContent
         message.serverTimestamp = 1_000
@@ -279,7 +279,34 @@ final class ReceiveMessageHandlerTests: XCTestCase {
 
         XCTAssertNil(try storage.messages.message(uid: 502)) // never persisted
         XCTAssertEqual(capturedWireMessage?.content.type, 401)
-        XCTAssertEqual(capturedWireMessage?.content.searchableContent, "call-1")
+        XCTAssertEqual(capturedWireMessage?.content.content, "call-1")
+    }
+
+    /// 回归:pull 窗口重叠会把同一条信令重复投递。持久化消息靠 DB 的
+    /// messageUid 去重挡掉了,401-405 不落库 —— 重复的 answer/offer 转发给
+    /// CallManager 会打死正在建立的视频通话(见 CallManager 对应用例),
+    /// 必须在这里按 messageUid 去重。
+    func test_handle_sameSignalDeliveredTwice_firesOnCallSignalOnce() throws {
+        var firedCount = 0
+        handler.onCallSignal = { _ in firedCount += 1 }
+
+        var message = Im_Message()
+        message.messageID = 506
+        message.fromUser = "them"
+        message.conversation.type = 0
+        message.conversation.target = "them"
+        message.conversation.line = 0
+        var wireContent = Im_MessageContent()
+        wireContent.type = 403
+        wireContent.content = "call-1"
+        wireContent.data = Data(#"{"type":"answer","sdp":"v=0..."}"#.utf8)
+        message.content = wireContent
+        message.serverTimestamp = 1_000
+
+        handler.handle(frame: try makePullResultFrame(messages: [message], head: 506))
+        handler.handle(frame: try makePullResultFrame(messages: [message], head: 506))
+
+        XCTAssertEqual(firedCount, 1)
     }
 
     func test_handle_byeSignalMessageSignalModify_allSkipPersistence() throws {
@@ -292,7 +319,7 @@ final class ReceiveMessageHandlerTests: XCTestCase {
             message.conversation.line = 0
             var wireContent = Im_MessageContent()
             wireContent.type = wireType
-            wireContent.searchableContent = "call-1"
+            wireContent.content = "call-1"
             message.content = wireContent
             message.serverTimestamp = 1_000
             let frame = try makePullResultFrame(messages: [message], head: Int64(600 + wireType))
@@ -315,7 +342,7 @@ final class ReceiveMessageHandlerTests: XCTestCase {
         message.conversation.line = 0
         var wireContent = Im_MessageContent()
         wireContent.type = 405
-        wireContent.searchableContent = "call-1"
+        wireContent.content = "call-1"
         wireContent.data = Data("0".utf8)
         message.content = wireContent
         message.serverTimestamp = 1_000
@@ -353,7 +380,7 @@ final class ReceiveMessageHandlerTests: XCTestCase {
         message.conversation.line = 0
         var wireContent = Im_MessageContent()
         wireContent.type = 402 // Bye
-        wireContent.searchableContent = "call-1"
+        wireContent.content = "call-1"
         message.content = wireContent
         message.serverTimestamp = 1_000
         let frame = try makePullResultFrame(messages: [message], head: 505)
@@ -371,7 +398,7 @@ final class ReceiveMessageHandlerTests: XCTestCase {
     func test_handle_byeThenCallStartInSameBatch_dispatchesInWireOrder() throws {
         var events: [String] = []
         handler.onCallSignal = { message in
-            events.append("signal(\(message.content.type),\(message.content.searchableContent))")
+            events.append("signal(\(message.content.type),\(message.content.content))")
         }
         handler.onCallStartMessage = { message in
             if case .callRecord(let callId, _, _, _, _, _) = message.content {
@@ -387,7 +414,7 @@ final class ReceiveMessageHandlerTests: XCTestCase {
         byeMessage.conversation.line = 0
         var byeContent = Im_MessageContent()
         byeContent.type = 402 // Bye
-        byeContent.searchableContent = "call-1"
+        byeContent.content = "call-1"
         byeMessage.content = byeContent
         byeMessage.serverTimestamp = 1_000
 
@@ -493,7 +520,7 @@ final class ReceiveMessageHandlerTests: XCTestCase {
         message.conversation.line = 0
         var wireContent = Im_MessageContent()
         wireContent.type = 402 // Bye
-        wireContent.searchableContent = "call-1"
+        wireContent.content = "call-1"
         message.content = wireContent
         message.serverTimestamp = 1_000
         let frame = try makePullResultFrame(messages: [message], head: 503)

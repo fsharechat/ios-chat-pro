@@ -202,8 +202,10 @@ public final class MessagingService {
     /// and `OutgoingMessageTracker` ack tracking, because these are
     /// transient signaling with no corresponding stored row to update (see
     /// the Phase 3 design doc §2's persist-flag table). `callId` goes in
-    /// `searchableContent` and `dataPayload` in `data`, mirroring every
-    /// other content type's wire-field mapping in this codebase.
+    /// `content` and `dataPayload` in `data` — Android 引擎的 AnswerMessage/
+    /// ByeMessage/SignalMessage 都从 `MessagePayload.content`(= wire 的
+    /// content 字段)读 callId,写错字段对端会解出空 callId,把整通电话当
+    /// 无关信令拒掉。
     public func sendCallControlMessage(to target: String, wireType: Int32, callId: String, dataPayload: Data?) throws {
         var wireMessage = Im_Message()
         wireMessage.conversation.type = Int32(ConversationType.single.rawValue)
@@ -212,7 +214,7 @@ public final class MessagingService {
         wireMessage.fromUser = imClient.userId
         var content = Im_MessageContent()
         content.type = wireType
-        content.searchableContent = callId
+        content.content = callId
         if let dataPayload {
             content.data = dataPayload
         }
