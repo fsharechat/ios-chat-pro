@@ -7,31 +7,54 @@ final class ExtPanelView: UIView {
     var onCamera: (() -> Void)?
     var onFile: (() -> Void)?
     var onLocation: (() -> Void)?
+    var onAudioCall: (() -> Void)?
+    var onVideoCall: (() -> Void)?
+
+    /// 音视频通话仅单聊可用(与 CallManager 一对一通话的能力一致)——
+    /// 群聊会话把整行隐藏。
+    var showsCallItems: Bool {
+        get { !callRow.isHidden }
+        set { callRow.isHidden = !newValue }
+    }
+
+    private let callRow = UIStackView()
 
     override init(frame: CGRect) {
         super.init(frame: frame)
         backgroundColor = Theme.backgroundSecondary
-        let items: [(icon: String, title: String, action: Selector)] = [
+
+        let firstRow = UIStackView()
+        for row in [firstRow, callRow] {
+            row.axis = .horizontal
+            row.distribution = .fillEqually
+        }
+        let firstRowItems: [(icon: String, title: String, action: Selector)] = [
             ("photo.on.rectangle", "相册", #selector(albumTapped)),
             ("camera", "拍摄", #selector(cameraTapped)),
             ("doc", "文件", #selector(fileTapped)),
             ("location.fill", "位置", #selector(locationTapped)),
         ]
-        let stack = UIStackView()
-        stack.axis = .horizontal
-        stack.distribution = .fillEqually
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(stack)
-        NSLayoutConstraint.activate([
-            stack.topAnchor.constraint(equalTo: topAnchor, constant: 20),
-            stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
-            stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -16),
-            stack.heightAnchor.constraint(equalToConstant: 100),
-        ])
-        for item in items {
-            let btn = makeButton(icon: item.icon, title: item.title, action: item.action)
-            stack.addArrangedSubview(btn)
+        for item in firstRowItems {
+            firstRow.addArrangedSubview(makeButton(icon: item.icon, title: item.title, action: item.action))
         }
+        callRow.addArrangedSubview(makeButton(icon: "phone.fill", title: "语音通话", action: #selector(audioCallTapped)))
+        callRow.addArrangedSubview(makeButton(icon: "video.fill", title: "视频通话", action: #selector(videoCallTapped)))
+        // 占位:保持与第一行相同的 4 等分,让两个通话按钮左对齐同宽。
+        callRow.addArrangedSubview(UIView())
+        callRow.addArrangedSubview(UIView())
+
+        let grid = UIStackView(arrangedSubviews: [firstRow, callRow])
+        grid.axis = .vertical
+        grid.spacing = 16
+        grid.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(grid)
+        NSLayoutConstraint.activate([
+            grid.topAnchor.constraint(equalTo: topAnchor, constant: 20),
+            grid.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
+            grid.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -16),
+            firstRow.heightAnchor.constraint(equalToConstant: 100),
+            callRow.heightAnchor.constraint(equalToConstant: 100),
+        ])
     }
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
@@ -81,4 +104,6 @@ final class ExtPanelView: UIView {
     @objc private func cameraTapped() { onCamera?() }
     @objc private func fileTapped() { onFile?() }
     @objc private func locationTapped() { onLocation?() }
+    @objc private func audioCallTapped() { onAudioCall?() }
+    @objc private func videoCallTapped() { onVideoCall?() }
 }

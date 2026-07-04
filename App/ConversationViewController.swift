@@ -78,13 +78,9 @@ final class ConversationViewController: UIViewController {
             style: .plain, target: self, action: #selector(infoTapped)
         )
 
-        if row.conversationType == .single {
-            let videoItem = UIBarButtonItem(image: UIImage(systemName: "video.fill"), style: .plain, target: self, action: #selector(videoCallTapped))
-            let audioItem = UIBarButtonItem(image: UIImage(systemName: "phone.fill"), style: .plain, target: self, action: #selector(audioCallTapped))
-            navigationItem.rightBarButtonItems = [infoItem, videoItem, audioItem]
-        } else {
-            navigationItem.rightBarButtonItems = [infoItem]
-        }
+        // 音视频通话入口在输入框 "+" 扩展面板里(仅单聊,见 bindInputBar),
+        // 导航栏只保留信息按钮。
+        navigationItem.rightBarButtonItems = [infoItem]
     }
 
     @objc private func infoTapped() {
@@ -94,8 +90,6 @@ final class ConversationViewController: UIViewController {
             onContactInfoTapped?()
         }
     }
-    @objc private func videoCallTapped() { onCallTapped?(false) }
-    @objc private func audioCallTapped() { onCallTapped?(true) }
 
     @objc private func refreshTriggered() {
         if tableView.isDragging {
@@ -395,6 +389,9 @@ final class ConversationViewController: UIViewController {
         inputBar.onPickImage = { [weak self] in self?.presentImagePicker() }
         inputBar.onCamera = { [weak self] in self?.presentCamera() }
         inputBar.onPickFile = { [weak self] in self?.presentFilePicker() }
+        inputBar.showsCallItems = row.conversationType == .single
+        inputBar.onAudioCall = { [weak self] in self?.onCallTapped?(true) }
+        inputBar.onVideoCall = { [weak self] in self?.onCallTapped?(false) }
         inputBar.onPickLocation = { [weak self] in
             guard let self else { return }
             let picker = LocationPickerViewController()

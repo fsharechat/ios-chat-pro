@@ -9,6 +9,8 @@ final class MessageInputBar: UIView {
     var onCamera: (() -> Void)?
     var onPickFile: (() -> Void)?
     var onPickLocation: (() -> Void)?
+    var onAudioCall: (() -> Void)?
+    var onVideoCall: (() -> Void)?
     var onSendVoice: ((_ audioData: Data, _ duration: Int, _ fileName: String, _ localM4AURL: URL?) -> Void)?
     var onMentionTriggered: (() -> Void)?
 
@@ -198,6 +200,14 @@ final class MessageInputBar: UIView {
         extPanel.onCamera = { [weak self] in self?.onCamera?() }
         extPanel.onFile = { [weak self] in self?.onPickFile?() }
         extPanel.onLocation = { [weak self] in self?.onPickLocation?() }
+        extPanel.onAudioCall = { [weak self] in self?.onAudioCall?() }
+        extPanel.onVideoCall = { [weak self] in self?.onVideoCall?() }
+    }
+
+    /// 音视频通话入口仅单聊显示 —— 由 ConversationViewController 按会话类型设置。
+    var showsCallItems: Bool {
+        get { extPanel.showsCallItems }
+        set { extPanel.showsCallItems = newValue }
     }
 
     // MARK: - Button Actions
