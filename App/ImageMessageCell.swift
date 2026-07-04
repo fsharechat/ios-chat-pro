@@ -88,7 +88,7 @@ final class ImageMessageCell: UITableViewCell {
         bubbleColumn.addArrangedSubview(bubbleImageView)
 
         rowStack.axis = .horizontal
-        rowStack.alignment = .bottom
+        rowStack.alignment = .top
         rowStack.spacing = 8
         rowStack.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(rowStack)

@@ -110,7 +110,7 @@ final class VideoMessageCell: UITableViewCell {
         bubbleColumn.addArrangedSubview(bubbleContainer)
 
         rowStack.axis = .horizontal
-        rowStack.alignment = .bottom
+        rowStack.alignment = .top
         rowStack.spacing = 8
         rowStack.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(rowStack)
