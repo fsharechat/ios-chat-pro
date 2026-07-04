@@ -40,6 +40,13 @@ final class CallViewController: UIViewController {
     // 视频通话时远端画面占满全屏,居中会压在画面正中,改挪到底部控制条上方。
     private var centerStackCenterYConstraint: NSLayoutConstraint?
     private var centerStackBottomConstraint: NSLayoutConstraint?
+    // 视频画面的槽位分配(对齐微信):接通前本地预览铺满全屏、小窗不显示;
+    // 接通后远端全屏、本地进右上角小窗;点小窗交换大小画面(swapped)。
+    // 交换的是两个 RTCMTLVideoView 的布局槽位,不动 renderer 与轨道的绑定,
+    // 避免换绑期间黑屏。
+    private var swapped = false
+    private var remoteVideoConstraints: [NSLayoutConstraint] = []
+    private var localVideoConstraints: [NSLayoutConstraint] = []
     /// Captured once at construction time, before any toggle could have
     /// happened — `callManager.audioOnly` at this instant is still the
     /// call's original mode. `toggleVideoButton` only ever does anything
@@ -80,7 +87,7 @@ final class CallViewController: UIViewController {
         // 出现时自动补挂(本地:startPreview;远端:didAdd rtpReceiver)。
         webRTCClient.attachRemoteRenderer(remoteVideoView)
         webRTCClient.attachLocalRenderer(localVideoView)
-        addLocalPreviewDragGesture()
+        addVideoViewGestures()
     }
 
     private func layoutViews() {
@@ -91,10 +98,8 @@ final class CallViewController: UIViewController {
         statusLabel.font = .systemFont(ofSize: 14)
         avatarView.setAvatar(urlString: peerPortrait, displayName: peerDisplayName)
 
-        localVideoView.layer.cornerRadius = 8
         localVideoView.clipsToBounds = true
-        localVideoView.layer.borderWidth = 1
-        localVideoView.layer.borderColor = UIColor.white.withAlphaComponent(0.3).cgColor
+        remoteVideoView.clipsToBounds = true
 
         muteButton.addTarget(self, action: #selector(muteTapped), for: .touchUpInside)
         speakerButton.addTarget(self, action: #selector(speakerTapped), for: .touchUpInside)
@@ -130,19 +135,9 @@ final class CallViewController: UIViewController {
         view.insertSubview(controlBarBackground, belowSubview: controlBar)
 
         NSLayoutConstraint.activate([
-            remoteVideoView.topAnchor.constraint(equalTo: view.topAnchor),
-            remoteVideoView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            remoteVideoView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            remoteVideoView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
-
             centerStack.centerXAnchor.constraint(equalTo: view.centerXAnchor),
             avatarView.widthAnchor.constraint(equalToConstant: 96),
             avatarView.heightAnchor.constraint(equalToConstant: 96),
-
-            localVideoView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 16),
-            localVideoView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
-            localVideoView.widthAnchor.constraint(equalToConstant: 90),
-            localVideoView.heightAnchor.constraint(equalToConstant: 135),
 
             controlBarBackground.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             controlBarBackground.trailingAnchor.constraint(equalTo: view.trailingAnchor),
@@ -171,8 +166,7 @@ final class CallViewController: UIViewController {
         callManager.audioOnlyPublisher
             .sink { [weak self] audioOnly in
                 guard let self else { return }
-                self.remoteVideoView.isHidden = audioOnly
-                self.localVideoView.isHidden = audioOnly
+                self.updateVideoLayout()
                 self.avatarView.isHidden = !audioOnly
                 self.switchCameraButton.isHidden = audioOnly
                 self.toggleVideoButton.setImage(UIImage(systemName: audioOnly ? "video.fill" : "video.slash.fill"), for: .normal)
@@ -211,6 +205,77 @@ final class CallViewController: UIViewController {
             callConnectedAt = Date()
             startDurationTimer()
         }
+        if state != .connected { swapped = false } // 大小画面交换只在通话中有意义
+        updateVideoLayout()
+    }
+
+    // MARK: - 视频画面槽位
+
+    /// 当前占小窗槽位的画面(仅接通后有意义,接通前小窗不显示)。
+    private var pipVideoView: UIView { swapped ? remoteVideoView : localVideoView }
+
+    private func updateVideoLayout() {
+        NSLayoutConstraint.deactivate(remoteVideoConstraints + localVideoConstraints)
+        let audioOnly = callManager.audioOnly
+        let connected = callManager.state == .connected
+
+        let fullscreenView: RTCMTLVideoView
+        let pipView: RTCMTLVideoView
+        if connected && !swapped {
+            fullscreenView = remoteVideoView
+            pipView = localVideoView
+        } else if connected {
+            fullscreenView = localVideoView
+            pipView = remoteVideoView
+        } else {
+            // 接通前:本地预览铺满全屏(拨出/接听等待期都是),远端还没画面,
+            // 小窗槽位闲置(隐藏)。
+            fullscreenView = localVideoView
+            pipView = remoteVideoView
+        }
+
+        // 接通前小窗槽位闲置:占位其中的视图直接隐藏(pipView 此时必是远端)。
+        remoteVideoView.isHidden = audioOnly || (!connected && remoteVideoView == pipView)
+        localVideoView.isHidden = audioOnly || (!connected && localVideoView == pipView)
+
+        let assignFullscreen = fullscreenConstraints(for: fullscreenView)
+        let assignPip = pipConstraints(for: pipView)
+        if fullscreenView == remoteVideoView {
+            remoteVideoConstraints = assignFullscreen
+            localVideoConstraints = assignPip
+        } else {
+            localVideoConstraints = assignFullscreen
+            remoteVideoConstraints = assignPip
+        }
+        NSLayoutConstraint.activate(remoteVideoConstraints + localVideoConstraints)
+
+        // 全屏画面垫底(信息区/控制条都在其上),小窗浮在最上层。
+        view.sendSubviewToBack(fullscreenView)
+        view.bringSubviewToFront(pipView)
+
+        fullscreenView.layer.cornerRadius = 0
+        fullscreenView.layer.borderWidth = 0
+        pipView.layer.cornerRadius = 8
+        pipView.layer.borderWidth = 1
+        pipView.layer.borderColor = UIColor.white.withAlphaComponent(0.3).cgColor
+    }
+
+    private func fullscreenConstraints(for videoView: UIView) -> [NSLayoutConstraint] {
+        [
+            videoView.topAnchor.constraint(equalTo: view.topAnchor),
+            videoView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            videoView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            videoView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+        ]
+    }
+
+    private func pipConstraints(for videoView: UIView) -> [NSLayoutConstraint] {
+        [
+            videoView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 16),
+            videoView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
+            videoView.widthAnchor.constraint(equalToConstant: 110),
+            videoView.heightAnchor.constraint(equalToConstant: 165),
+        ]
     }
 
     private func startDurationTimer() {
@@ -222,15 +287,27 @@ final class CallViewController: UIViewController {
         }
     }
 
-    private func addLocalPreviewDragGesture() {
-        let pan = UIPanGestureRecognizer(target: self, action: #selector(handleLocalPreviewPan))
-        localVideoView.isUserInteractionEnabled = true
-        localVideoView.addGestureRecognizer(pan)
+    /// 拖动与点击都装在两个视频视图上,手势回调里按"谁正占着小窗槽位"过滤 ——
+    /// 交换大小画面后小窗可能是本地也可能是远端。
+    private func addVideoViewGestures() {
+        for videoView in [localVideoView, remoteVideoView] {
+            videoView.isUserInteractionEnabled = true
+            videoView.addGestureRecognizer(UIPanGestureRecognizer(target: self, action: #selector(handlePipPan)))
+            videoView.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(handlePipTap)))
+        }
     }
 
-    @objc private func handleLocalPreviewPan(_ gesture: UIPanGestureRecognizer) {
+    @objc private func handlePipTap(_ gesture: UITapGestureRecognizer) {
+        // 对齐微信:接通后点小窗交换大小画面;接通前小窗不存在,不响应。
+        guard callManager.state == .connected, gesture.view == pipVideoView else { return }
+        swapped.toggle()
+        updateVideoLayout()
+    }
+
+    @objc private func handlePipPan(_ gesture: UIPanGestureRecognizer) {
+        guard callManager.state == .connected, let videoView = gesture.view, videoView == pipVideoView else { return }
         let translation = gesture.translation(in: view)
-        localVideoView.center = CGPoint(x: localVideoView.center.x + translation.x, y: localVideoView.center.y + translation.y)
+        videoView.center = CGPoint(x: videoView.center.x + translation.x, y: videoView.center.y + translation.y)
         gesture.setTranslation(.zero, in: view)
     }
 
