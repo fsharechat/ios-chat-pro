@@ -231,12 +231,15 @@ public final class ConversationViewModel {
     }
 
     /// The `beforeUid` cursor for a remote-history request: the uid of the
-    /// oldest loaded real message. `.systemTip`/pending rows carry no uid and
-    /// are skipped; 0 (an empty conversation) means "from the newest",
-    /// matching Android's `loadMoreOldMessages` seeding.
+    /// oldest loaded persisted message, whatever it renders as — a recall or
+    /// group-notification `.systemTip` line counts too, or a conversation
+    /// whose oldest rows are all tips would page "from the newest" and never
+    /// reach real history. Pending/unacked rows carry no uid and are skipped;
+    /// 0 (an empty conversation) means "from the newest", matching Android's
+    /// `loadMoreOldMessages` seeding.
     private func oldestKnownMessageUid() -> Int64 {
         for row in olderRows + liveRows {
-            if case .message(let message) = row, message.messageUid != 0 { return message.messageUid }
+            if let uid = row.messageUid { return uid }
         }
         return 0
     }
@@ -388,6 +391,7 @@ public final class ConversationViewModel {
         case .groupNotification(let type, let operatorUid, let memberUids, let value):
             return .systemTip(SystemTipRow(
                 storageId: message.id ?? -1,
+                messageUid: message.messageUid,
                 text: renderSystemTipText(type: type, operatorUid: operatorUid, memberUids: memberUids, value: value),
                 timestamp: message.timestamp
             ))
@@ -406,6 +410,7 @@ public final class ConversationViewModel {
             let displayName = resolveDisplayName(operatorId)
             return .systemTip(SystemTipRow(
                 storageId: message.id ?? -1,
+                messageUid: message.messageUid,
                 text: "\(displayName)撤回了一条消息",
                 timestamp: message.timestamp
             ))

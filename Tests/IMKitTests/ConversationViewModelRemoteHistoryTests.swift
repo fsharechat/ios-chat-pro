@@ -123,6 +123,20 @@ final class ConversationViewModelRemoteHistoryTests: XCTestCase {
         XCTAssertEqual(rowTexts(), ["remote-old", "msg0", "msg1"])
     }
 
+    /// Regression: a first-login sync can leave a conversation whose only
+    /// rows render as `.systemTip` (a recalled message, a group notification).
+    /// The remote cursor must still use that row's real messageUid — sending
+    /// 0 makes the server page "from the newest", skipping actual history.
+    func test_loadMoreHistory_onlySystemTipRows_usesTheirUidAsCursor() throws {
+        try storage.messages.insert(StoredMessage(localMessageId: 1, messageUid: 562_596_170_937_926_434, conversationType: .single, target: "them", from: "them", content: .recalled(operatorId: "them"), timestamp: 1_000, status: .read, direction: .receive))
+        waitForFirstNonEmptyRows()
+
+        viewModel.loadMoreHistory {}
+
+        XCTAssertEqual(remote.calls.count, 1)
+        XCTAssertEqual(remote.calls.first?.beforeUid, 562_596_170_937_926_434)
+    }
+
     func test_loadMoreHistory_withoutRemoteFetcher_stillCompletes() throws {
         let localOnly = ConversationViewModel(storage: storage, messageSending: nil, imageUploading: nil, target: "them", pageSize: 3, currentUserId: "me")
         var completed = false

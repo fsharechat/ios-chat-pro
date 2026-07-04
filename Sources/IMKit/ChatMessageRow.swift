@@ -121,11 +121,13 @@ public struct StoredMessageRow: Equatable, Hashable {
 /// Chinese wording already resolved by `ConversationViewModel`.
 public struct SystemTipRow: Equatable, Hashable {
     public let storageId: Int64
+    public let messageUid: Int64          // server-assigned uid; 0 until acked
     public let text: String
     public let timestamp: Int64
 
-    public init(storageId: Int64, text: String, timestamp: Int64) {
+    public init(storageId: Int64, messageUid: Int64 = 0, text: String, timestamp: Int64) {
         self.storageId = storageId
+        self.messageUid = messageUid
         self.text = text
         self.timestamp = timestamp
     }
@@ -162,6 +164,19 @@ extension ChatMessageRow {
         switch self {
         case .message(let row): return row.timestamp
         case .systemTip(let row): return row.timestamp
+        case .pendingImage, .pendingVideo, .timeHeader: return nil
+        }
+    }
+
+    /// The server-assigned uid of the underlying persisted message — non-nil
+    /// for any row backed by an acked `StoredMessage`, whatever it renders
+    /// as (`.message` bubble or `.systemTip` recall/group-notification line).
+    /// `ConversationViewModel.oldestKnownMessageUid` pages remote history
+    /// from this, so it must not depend on the row's presentation.
+    public var messageUid: Int64? {
+        switch self {
+        case .message(let row): return row.messageUid == 0 ? nil : row.messageUid
+        case .systemTip(let row): return row.messageUid == 0 ? nil : row.messageUid
         case .pendingImage, .pendingVideo, .timeHeader: return nil
         }
     }
