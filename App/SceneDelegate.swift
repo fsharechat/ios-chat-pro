@@ -172,17 +172,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             )
             let createGroupViewController = CreateGroupViewController(viewModel: createGroupViewModel)
             createGroupViewController.onSinglePicked = { [weak self, weak listViewController] uid in
-                guard let self else { return }
-                let user = try? self.environment.storage.users.user(uid: uid)
-                let row = ConversationRow(
-                    conversationType: .single, target: uid, line: 0,
-                    displayName: user?.displayName ?? user?.name ?? uid,
-                    avatarURL: user?.portrait, previewText: "",
-                    timestamp: 0, unreadCount: 0, hasUnreadMention: false,
-                    isTop: false, isMuted: false, lastMessageStatus: nil
-                )
-                listViewController?.navigationController?.popToRootViewController(animated: false)
-                listViewController?.onConversationSelected?(row)
+                self?.openSingleConversation(uid: uid, via: listViewController)
             }
             createGroupViewController.onGroupCreated = { [weak self, weak listViewController] groupId, name in
                 guard let self else { return }
@@ -224,13 +214,65 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             guard let self else { return }
             listViewController?.navigationController?.pushViewController(self.makeSearchUserViewController(), animated: true)
         }
-        listViewController.onScanTapped = { [weak listViewController] in
-            // Placeholder until the scan screen lands (plan Task 4).
-            let alert = UIAlertController(title: "扫一扫", message: "功能开发中", preferredStyle: .alert)
-            alert.addAction(UIAlertAction(title: "好", style: .default))
-            listViewController?.present(alert, animated: true)
+        listViewController.onScanTapped = { [weak self, weak listViewController] in
+            guard let self else { return }
+            let scanViewController = ScanQRCodeViewController()
+            scanViewController.hidesBottomBarWhenPushed = true
+            scanViewController.onScanned = { [weak self, weak scanViewController, weak listViewController] raw in
+                guard let self, let scanViewController else { return }
+                self.dispatchScannedCode(raw, from: scanViewController, via: listViewController)
+            }
+            listViewController?.navigationController?.pushViewController(scanViewController, animated: true)
         }
         return UINavigationController(rootViewController: listViewController)
+    }
+
+    /// Routes a scanned QR payload the same way Android's
+    /// `MainActivity.onScanPcQrCode` does for the code types iOS supports;
+    /// anything unrecognized is surfaced as raw text and scanning resumes.
+    private func dispatchScannedCode(
+        _ raw: String,
+        from scanViewController: ScanQRCodeViewController,
+        via listViewController: ConversationListViewController?
+    ) {
+        switch QRCodeContent.parse(raw) {
+        case .user(let uid):
+            environment.contactSyncService?.fetchUserInfo(uids: [uid], forceRefresh: true)
+            let userInfoViewController = UserInfoViewController(userId: uid, storage: environment.storage)
+            userInfoViewController.onSendMessage = { [weak self, weak listViewController] in
+                self?.openSingleConversation(uid: uid, via: listViewController)
+            }
+            userInfoViewController.onVideoCall = { [weak self] in
+                self?.startCallIfAuthorized(to: uid, audioOnly: false)
+            }
+            scanViewController.navigationController?.pushViewController(userInfoViewController, animated: true)
+        case .group(let groupId):
+            // 双态群资料页在后续 Task 落地,先提示群 id。
+            let alert = UIAlertController(title: "群二维码", message: groupId, preferredStyle: .alert)
+            alert.addAction(UIAlertAction(title: "好", style: .default) { [weak scanViewController] _ in
+                scanViewController?.resumeScanning()
+            })
+            scanViewController.present(alert, animated: true)
+        case nil:
+            let alert = UIAlertController(title: "扫描结果", message: raw, preferredStyle: .alert)
+            alert.addAction(UIAlertAction(title: "好", style: .default) { [weak scanViewController] _ in
+                scanViewController?.resumeScanning()
+            })
+            scanViewController.present(alert, animated: true)
+        }
+    }
+
+    private func openSingleConversation(uid: String, via listViewController: ConversationListViewController?) {
+        let user = try? environment.storage.users.user(uid: uid)
+        let row = ConversationRow(
+            conversationType: .single, target: uid, line: 0,
+            displayName: user?.displayName ?? user?.name ?? uid,
+            avatarURL: user?.portrait, previewText: "",
+            timestamp: 0, unreadCount: 0, hasUnreadMention: false,
+            isTop: false, isMuted: false, lastMessageStatus: nil
+        )
+        listViewController?.navigationController?.popToRootViewController(animated: false)
+        listViewController?.onConversationSelected?(row)
     }
 
     private func makeSearchUserViewController() -> SearchUserViewController {
