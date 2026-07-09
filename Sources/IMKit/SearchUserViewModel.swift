@@ -17,12 +17,14 @@ public final class SearchUserViewModel {
     private let userSearching: UserSearching?
     private let friendRequestSending: FriendRequestSending?
     private let storage: IMStorage
+    private let currentUserId: String
     private var searchGeneration = 0
 
-    public init(userSearching: UserSearching?, friendRequestSending: FriendRequestSending?, storage: IMStorage) {
+    public init(userSearching: UserSearching?, friendRequestSending: FriendRequestSending?, storage: IMStorage, currentUserId: String) {
         self.userSearching = userSearching
         self.friendRequestSending = friendRequestSending
         self.storage = storage
+        self.currentUserId = currentUserId
     }
 
     /// An empty keyword clears `results` without sending a request — the
@@ -40,8 +42,13 @@ public final class SearchUserViewModel {
             guard let self, self.searchGeneration == generation else { return }
             switch result {
             case .success(let uids):
-                self.results = uids.map { uid in
+                // Existing friends have no business on the "add friend"
+                // screen — they're already in the contact list. Nor does
+                // the current user: you can't friend yourself.
+                self.results = uids.compactMap { uid in
+                    if uid == self.currentUserId { return nil }
                     let user = try? self.storage.users.user(uid: uid)
+                    if user?.isFriend == true { return nil }
                     let displayName = user?.displayName ?? user?.name ?? uid
                     return ContactRow(uid: uid, displayName: displayName, avatarURL: user?.portrait, sectionLetter: "")
                 }
@@ -49,6 +56,15 @@ public final class SearchUserViewModel {
                 self.results = []
             }
         }
+    }
+
+    /// Prefilled verification message, matching Android's
+    /// `InviteFriendActivity`: "我是 <my display name>". Empty when the
+    /// local profile hasn't synced yet — the UI just shows its placeholder.
+    public var defaultRequestReason: String {
+        let me = try? storage.users.user(uid: currentUserId)
+        guard let name = me?.displayName ?? me?.name, !name.isEmpty else { return "" }
+        return "我是 \(name)"
     }
 
     public func sendFriendRequest(to uid: String, reason: String, completion: @escaping (Result<Void, Error>) -> Void) {

@@ -246,6 +246,11 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             userInfoViewController.sendFriendRequest = { [weak self] reason, completion in
                 self?.environment.contactSyncService?.sendFriendRequest(to: uid, reason: reason, completion: completion)
             }
+            if let myUid = environment.imClient?.userId,
+               let me = try? environment.storage.users.user(uid: myUid),
+               let myName = me.displayName ?? me.name, !myName.isEmpty {
+                userInfoViewController.friendRequestDefaultReason = "我是 \(myName)"
+            }
             userInfoViewController.onSendMessage = { [weak self, weak listViewController] in
                 self?.openSingleConversation(uid: uid, via: listViewController)
             }
@@ -305,7 +310,8 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         let searchUserViewModel = SearchUserViewModel(
             userSearching: environment.contactSyncService,
             friendRequestSending: environment.contactSyncService,
-            storage: environment.storage
+            storage: environment.storage,
+            currentUserId: environment.imClient?.userId ?? ""
         )
         return SearchUserViewController(viewModel: searchUserViewModel)
     }

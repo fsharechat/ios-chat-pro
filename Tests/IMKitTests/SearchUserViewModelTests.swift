@@ -46,7 +46,7 @@ final class SearchUserViewModelTests: XCTestCase {
         storage = try IMStorage.openInMemory()
         userSearching = FakeUserSearching()
         friendRequestSending = FakeFriendRequestSending()
-        viewModel = SearchUserViewModel(userSearching: userSearching, friendRequestSending: friendRequestSending, storage: storage)
+        viewModel = SearchUserViewModel(userSearching: userSearching, friendRequestSending: friendRequestSending, storage: storage, currentUserId: "me")
     }
 
     func test_search_emptyKeyword_clearsResultsWithoutSendingRequest() {
@@ -82,6 +82,27 @@ final class SearchUserViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.results.first?.displayName, "zz9")
     }
 
+    func test_search_excludesExistingFriends() throws {
+        try storage.users.upsertProfile(uid: "friend1", name: nil, displayName: "老朋友", portrait: nil, mobile: nil, gender: 0, updateDt: 0)
+        try storage.users.upsertProfile(uid: "stranger1", name: nil, displayName: "新面孔", portrait: nil, mobile: nil, gender: 0, updateDt: 0)
+        try storage.users.replaceFriendList(uids: ["friend1"])
+        userSearching.stubbedResult = .success(["friend1", "stranger1"])
+
+        viewModel.search(keyword: "朋友")
+
+        XCTAssertEqual(viewModel.results.map(\.uid), ["stranger1"], "已是好友的用户不应出现在添加朋友的搜索结果里")
+    }
+
+    func test_search_excludesSelf() throws {
+        try storage.users.upsertProfile(uid: "me", name: nil, displayName: "我自己", portrait: nil, mobile: nil, gender: 0, updateDt: 0)
+        try storage.users.upsertProfile(uid: "stranger1", name: nil, displayName: "新面孔", portrait: nil, mobile: nil, gender: 0, updateDt: 0)
+        userSearching.stubbedResult = .success(["me", "stranger1"])
+
+        viewModel.search(keyword: "我")
+
+        XCTAssertEqual(viewModel.results.map(\.uid), ["stranger1"], "搜索结果不应包含自己,自己不能加自己")
+    }
+
     func test_search_failure_clearsResults() {
         userSearching.stubbedResult = .failure(NSError(domain: "test", code: 1))
 
@@ -94,7 +115,7 @@ final class SearchUserViewModelTests: XCTestCase {
         try storage.users.upsertProfile(uid: "u_old", name: nil, displayName: "Old", portrait: nil, mobile: nil, gender: 0, updateDt: 0)
         try storage.users.upsertProfile(uid: "u_new", name: nil, displayName: "New", portrait: nil, mobile: nil, gender: 0, updateDt: 0)
         let queuing = QueuingUserSearching()
-        let vm = SearchUserViewModel(userSearching: queuing, friendRequestSending: friendRequestSending, storage: storage)
+        let vm = SearchUserViewModel(userSearching: queuing, friendRequestSending: friendRequestSending, storage: storage, currentUserId: "me")
 
         vm.search(keyword: "old")
         vm.search(keyword: "new")
@@ -107,6 +128,16 @@ final class SearchUserViewModelTests: XCTestCase {
         // Older (stale) search's network call resolves after — must be discarded, not overwrite.
         queuing.pendingCompletions[0].completion(.success(["u_old"]))
         XCTAssertEqual(vm.results.map(\.uid), ["u_new"], "stale completion must not overwrite newer results")
+    }
+
+    func test_defaultRequestReason_usesMyDisplayName() throws {
+        try storage.users.upsertProfile(uid: "me", name: nil, displayName: "云朵爸爸", portrait: nil, mobile: nil, gender: 0, updateDt: 0)
+
+        XCTAssertEqual(viewModel.defaultRequestReason, "我是 云朵爸爸")
+    }
+
+    func test_defaultRequestReason_emptyWhenProfileMissing() {
+        XCTAssertEqual(viewModel.defaultRequestReason, "")
     }
 
     func test_sendFriendRequest_delegatesToFriendRequestSending() {

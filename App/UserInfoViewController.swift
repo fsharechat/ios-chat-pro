@@ -18,6 +18,9 @@ final class UserInfoViewController: UIViewController {
     /// actual friend-request send. The add button only shows when non-nil.
     var sendFriendRequest: ((_ reason: String, _ completion: @escaping (Result<Void, Error>) -> Void) -> Void)?
 
+    /// Prefilled verification message ("我是 xxx"), aligned with Android.
+    var friendRequestDefaultReason = ""
+
     private let userId: String
     private let storage: IMStorage
     private let isSelf: Bool
@@ -168,8 +171,9 @@ final class UserInfoViewController: UIViewController {
 
     @objc private func addFriendTapped() {
         let alert = UIAlertController(title: "添加朋友", message: "向 \(nameLabel.text ?? userId) 发送好友请求", preferredStyle: .alert)
-        alert.addTextField { textField in
+        alert.addTextField { [weak self] textField in
             textField.placeholder = "验证消息（可选）"
+            textField.text = self?.friendRequestDefaultReason
         }
         alert.addAction(UIAlertAction(title: "取消", style: .cancel))
         alert.addAction(UIAlertAction(title: "发送", style: .default) { [weak self, weak alert] _ in
