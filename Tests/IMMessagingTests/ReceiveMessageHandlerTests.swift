@@ -66,6 +66,30 @@ final class ReceiveMessageHandlerTests: XCTestCase {
         XCTAssertEqual(try storage.messages.message(uid: 101)?.direction, .send)
     }
 
+    /// 用户正停留在会话详情页时(`activeConversation` 命中),该会话的新消息
+    /// 照常落库,但不递增未读数 —— 否则退回会话列表时会对刚看过的消息重复计数。
+    func test_handle_messageForActiveConversation_persistsButDoesNotIncrementUnread() throws {
+        handler.activeConversation = (conversationType: .single, target: "them", line: 0)
+        let frame = try makePullResultFrame(messages: [makeWireMessage(uid: 110, from: "them", target: "them", text: "reading now")], head: 110)
+
+        handler.handle(frame: frame)
+
+        XCTAssertEqual(try storage.messages.message(uid: 110)?.content, .text("reading now"))
+        let conversation = try storage.conversations.conversation(conversationType: .single, target: "them")
+        XCTAssertEqual(conversation?.unreadCount, 0)
+    }
+
+    /// `activeConversation` 只豁免命中的那一个会话,其他会话照常计数。
+    func test_handle_messageForOtherConversationWhileOneIsActive_stillIncrementsUnread() throws {
+        handler.activeConversation = (conversationType: .single, target: "them", line: 0)
+        let frame = try makePullResultFrame(messages: [makeWireMessage(uid: 111, from: "other", target: "other")], head: 111)
+
+        handler.handle(frame: frame)
+
+        let conversation = try storage.conversations.conversation(conversationType: .single, target: "other")
+        XCTAssertEqual(conversation?.unreadCount, 1)
+    }
+
     func test_handle_duplicateByUid_doesNotInsertTwiceOrDoubleCountUnread() throws {
         let frame = try makePullResultFrame(messages: [makeWireMessage(uid: 102, from: "them", target: "them")], head: 102)
         handler.handle(frame: frame)

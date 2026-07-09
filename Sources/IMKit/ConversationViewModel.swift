@@ -15,6 +15,7 @@ public final class ConversationViewModel {
     private let fileUploading: FileUploading?
     private let videoUploading: VideoUploading?
     private let remoteHistory: RemoteHistoryFetching?
+    private let activeTracking: ActiveConversationTracking?
     /// Set once the server confirms there's nothing older than what's
     /// stored locally — stops `loadMoreHistory` from re-asking every pull.
     private var remoteHistoryExhausted = false
@@ -45,6 +46,7 @@ public final class ConversationViewModel {
         fileUploading: FileUploading? = nil,
         videoUploading: VideoUploading? = nil,
         remoteHistory: RemoteHistoryFetching? = nil,
+        activeTracking: ActiveConversationTracking? = nil,
         target: String,
         conversationType: ConversationType = .single,
         line: Int = 0,
@@ -58,6 +60,7 @@ public final class ConversationViewModel {
         self.fileUploading = fileUploading
         self.videoUploading = videoUploading
         self.remoteHistory = remoteHistory
+        self.activeTracking = activeTracking
         self.target = target
         self.conversationType = conversationType
         self.line = line
@@ -177,6 +180,16 @@ public final class ConversationViewModel {
 
     public func clearUnread() {
         try? storage.conversations.clearUnread(conversationType: conversationType, target: target, line: line)
+    }
+
+    /// 会话详情页可见期间调用(viewWillAppear)——期间到达的新消息不计未读。
+    public func markActive() {
+        activeTracking?.markConversationActive(conversationType: conversationType, target: target, line: line)
+    }
+
+    /// 会话详情页离开时调用(viewWillDisappear),与 `markActive` 成对。
+    public func markInactive() {
+        activeTracking?.markConversationInactive(conversationType: conversationType, target: target, line: line)
     }
 
     /// Loads one older page of history before the currently-oldest loaded

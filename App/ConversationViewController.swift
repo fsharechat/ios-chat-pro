@@ -58,7 +58,15 @@ final class ConversationViewController: UIViewController {
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         viewModel.clearUnread()
+        viewModel.markActive()
         viewModel.reprocessMessages()
+    }
+
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        // 离开(pop、push 出资料页等)即恢复计数;回来时 viewWillAppear
+        // 会重新标记并 clearUnread,覆盖期间产生的未读。
+        viewModel.markInactive()
     }
 
 

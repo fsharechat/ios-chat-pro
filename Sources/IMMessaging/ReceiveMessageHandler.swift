@@ -62,6 +62,11 @@ public final class ReceiveMessageHandler: MessageHandler {
     /// Automatically reset to `false` after the first batch is processed.
     public var suppressUnreadIncrement = false
 
+    /// 用户正停留在哪个会话详情页(离开时置回 nil)。命中的会话收到新消息
+    /// 不递增未读数/@提醒数 —— 用户正在看,不算未读;否则退回会话列表时
+    /// 该会话和「消息」tab 角标会对刚看过的消息重复计数。
+    public var activeConversation: (conversationType: ConversationType, target: String, line: Int)?
+
     public init(storage: IMStorage, myUserId: @escaping () -> String) {
         self.storage = storage
         self.myUserId = myUserId
@@ -223,14 +228,17 @@ public final class ReceiveMessageHandler: MessageHandler {
                 mentionedType: mentionedType,
                 mentionedTargets: mentionedTargets
             ), db: db)
+            let isActiveConversation = activeConversation.map {
+                $0.conversationType == conversationType && $0.target == target && $0.line == line
+            } ?? false
             try storage.conversations.recordIncomingMessage(
                 conversationType: conversationType,
                 target: target,
                 line: line,
                 messageUid: wireMessage.messageID,
                 timestamp: wireMessage.serverTimestamp,
-                incrementUnread: direction == .receive && !suppressUnread,
-                incrementMention: isMentioned && !suppressUnread,
+                incrementUnread: direction == .receive && !suppressUnread && !isActiveConversation,
+                incrementMention: isMentioned && !suppressUnread && !isActiveConversation,
                 db: db
             )
             if case .groupNotification = content {

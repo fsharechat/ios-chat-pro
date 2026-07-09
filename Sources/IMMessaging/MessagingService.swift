@@ -57,6 +57,15 @@ public final class MessagingService {
         set { receiveMessageHandler.onCallSignal = newValue }
     }
 
+    /// Forwards to the internal `ReceiveMessageHandler`'s property of the
+    /// same name — see that type's doc comment. `IMKit` 的
+    /// `ActiveConversationTracking` conformance 通过它标记/清除用户当前
+    /// 停留的会话。
+    public var activeConversation: (conversationType: ConversationType, target: String, line: Int)? {
+        get { receiveMessageHandler.activeConversation }
+        set { receiveMessageHandler.activeConversation = newValue }
+    }
+
     /// Forwards to the internal `RecallNotifyMessageHandler`'s closure.
     /// Wire this to any UI that needs to react when a message is recalled
     /// (e.g. to scroll to the updated row or dismiss a reply composer).
