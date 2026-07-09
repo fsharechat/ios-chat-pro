@@ -46,10 +46,10 @@
 - 新增 `QRCodeContent.groupQRCodeString(groupId:) -> String` → `wildfirechat://group/<groupId>`
 - 新增 `QRCodeContent.parse(_ raw: String) -> ParsedQRCode?`，`public enum ParsedQRCode: Equatable { case user(uid: String), group(groupId: String) }`；识别标准前缀 + 旧 `group:<id>` 格式；其余返回 `nil`（调用方按未知码处理）。
 
-- [ ] Step 1: 写失败测试：标准 user/group 码、旧 `group:` 码、空 uid/groupId 视为无效、未知前缀返回 nil。
-- [ ] Step 2: 实现 `groupQRCodeString` 与 `parse`，`swift test --filter IMKitTests` 通过。
-- [ ] Step 3: `GroupQRCodeViewController` 生成内容改为 `QRCodeContent.groupQRCodeString(groupId:)`。
-- [ ] Step 4: 编译 App target 验证，提交。
+- [x] Step 1: 写失败测试：标准 user/group 码、旧 `group:` 码、空 uid/groupId 视为无效、未知前缀返回 nil。
+- [x] Step 2: 实现 `groupQRCodeString` 与 `parse`，`swift test --filter IMKitTests` 通过。
+- [x] Step 3: `GroupQRCodeViewController` 生成内容改为 `QRCodeContent.groupQRCodeString(groupId:)`。
+- [x] Step 4: 编译 App target 验证，提交。
 
 ### Task 2: `PlusMenuView` 自绘弹层 + 接线
 
@@ -61,9 +61,9 @@
 
 **样式（对齐微信/Android 截图）:** 全屏透明遮罩 + 右上角圆角卡片（约 160pt 宽，锚在导航栏 + 按钮下方），三行图标+文字（SF Symbols 近似：`ellipsis.message` 发起聊天、`person.badge.plus` 添加朋友、`qrcode.viewfinder` 扫一扫），行间分隔线；从右上角锚点缩放+淡入弹出，点遮罩或选项后收起；颜色走 `Theme`（深色模式自动适配）。
 
-- [ ] Step 1: 实现 `PlusMenuView`（show(in:anchor:items:) / dismiss，动画）。
-- [ ] Step 2: `ConversationListViewController` 替换 + 按钮行为；"添加朋友"接 `SearchUserViewController`（复用 SceneDelegate 462 行既有构造逻辑，抽成私有工厂方法避免重复）。
-- [ ] Step 3: 重跑 XcodeGen、编译验证，提交（此时发起聊天/扫一扫两项可先弹占位或留空闭包，下两个 Task 补上）。
+- [x] Step 1: 实现 `PlusMenuView`（show(in:anchor:items:) / dismiss，动画）。
+- [x] Step 2: `ConversationListViewController` 替换 + 按钮行为；"添加朋友"接 `SearchUserViewController`（复用 SceneDelegate 462 行既有构造逻辑，抽成私有工厂方法避免重复）。
+- [x] Step 3: 重跑 XcodeGen、编译验证，提交（此时发起聊天/扫一扫两项可先弹占位或留空闭包，下两个 Task 补上）。
 
 ### Task 3: 发起聊天（1 人单聊 / 多人建群）
 
@@ -72,9 +72,9 @@
 - Modify: `App/CreateGroupViewController.swift`（标题按入口变化："发起聊天"；选 1 人不再建群）
 - Modify: `App/SceneDelegate.swift`（新回调：单人 → 构造单聊 `ConversationViewController` 并 push；多人建群成功 → push 群聊会话，行为对齐 Android `CreateConversationActivity`）
 
-- [ ] Step 1: ViewModel 增加"完成选择"出口：`selectedUids.count == 1` 时不调 `createGroup`，回调单聊；≥2 走既有建群（若 IMKit 有可测逻辑则补单测）。
-- [ ] Step 2: VC/SceneDelegate 接线：单聊直接打开与该 uid 的 Single 会话；建群成功打开群会话（复用现有会话打开路径）。
-- [ ] Step 3: 原有其他入口（如仍有直接"创建群聊"入口）行为不回归；编译验证，提交。
+- [x] Step 1: ViewModel 增加"完成选择"出口：`selectedUids.count == 1` 时不调 `createGroup`，回调单聊；≥2 走既有建群（若 IMKit 有可测逻辑则补单测）。
+- [x] Step 2: VC/SceneDelegate 接线：单聊直接打开与该 uid 的 Single 会话；建群成功打开群会话（复用现有会话打开路径）。
+- [x] Step 3: 原有其他入口（如仍有直接"创建群聊"入口）行为不回归；编译验证，提交。
 
 ### Task 4: `ScanQRCodeViewController` 扫一扫页
 
@@ -92,9 +92,9 @@
   - `.group(groupId)` → push 双态群资料页（Task 6）。
   - `nil`（未知码）→ Alert 展示原始文本，确认后恢复扫描。
 
-- [ ] Step 1: 实现扫码页（相机 + 取景框 + 权限态 + 相册识码）。
-- [ ] Step 2: SceneDelegate 分发接线（Task 5/6 未完成前可先以 Alert 占位显示解析结果）。
-- [ ] Step 3: 重跑 XcodeGen、编译验证，提交。
+- [x] Step 1: 实现扫码页（相机 + 取景框 + 权限态 + 相册识码）。
+- [x] Step 2: SceneDelegate 分发接线（Task 5/6 未完成前可先以 Alert 占位显示解析结果）。
+- [x] Step 3: 重跑 XcodeGen、编译验证，提交。
 
 ### Task 5: 双态 `UserInfoViewController`（非好友态）
 
@@ -107,8 +107,8 @@
 - 好友（或自己）：现状不变（发消息/视频聊天）。
 - 非好友：隐藏两按钮，显示"添加到通讯录"→ 弹输入申请理由的 Alert（对齐 `SearchUserViewController` 既有交互）→ `sendFriendRequest` → 成功提示"申请已发送"。
 
-- [ ] Step 1: 双态 UI + isFriend 驱动刷新。
-- [ ] Step 2: 接线扫码入口；既有好友入口回归检查；编译验证，提交。
+- [x] Step 1: 双态 UI + isFriend 驱动刷新。
+- [x] Step 2: 接线扫码入口；既有好友入口回归检查；编译验证，提交。
 
 ### Task 6: 双态 `GroupInfoViewController`（非成员态 + 加入群聊）
 
@@ -122,12 +122,12 @@
 - 非成员："加入群聊"→ `GroupSyncService.addMembers(groupId:, memberIds:[myUid])` → 成功后打开群会话；失败 Alert。
 - 非成员本地无群数据：进入即远程拉取，ValueObservation 驱动渲染；拉不到（群不存在）显示错误态。
 
-- [ ] Step 1: ViewModel 增加 isMember 与非成员拉取逻辑（可测部分补单测）。
-- [ ] Step 2: VC 双态 UI + 加入流程；既有成员入口回归检查。
-- [ ] Step 3: 编译验证，提交。
+- [x] Step 1: ViewModel 增加 isMember 与非成员拉取逻辑（可测部分补单测）。
+- [x] Step 2: VC 双态 UI + 加入流程；既有成员入口回归检查。
+- [x] Step 3: 编译验证，提交。
 
 ### Task 7: 收尾验证
 
-- [ ] `swift test`（新增 IMKitTests 全过，基线外无新失败）。
-- [ ] `xcodebuild` App scheme 编译通过。
-- [ ] 自查清单给用户人工验证：+ 菜单弹出样式/深色模式、1 人单聊、多人建群、搜索加好友、扫 Android 生成的用户码与群码、iOS 新群码 Android 可扫、旧 `group:` 码兼容、相册识码、相机拒权提示。
+- [x] `swift test`（新增 IMKitTests 全过，基线外无新失败）。
+- [x] `xcodebuild` App scheme 编译通过。
+- [x] 自查清单给用户人工验证：+ 菜单弹出样式/深色模式、1 人单聊、多人建群、搜索加好友、扫 Android 生成的用户码与群码、iOS 新群码 Android 可扫、旧 `group:` 码兼容、相册识码、相机拒权提示。
