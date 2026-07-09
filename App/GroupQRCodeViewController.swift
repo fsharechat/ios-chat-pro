@@ -29,7 +29,7 @@ final class GroupQRCodeViewController: UIViewController {
         layoutViews()
         avatarView.setAvatar(urlString: portraitURL, displayName: groupName)
         nameLabel.text = groupName
-        qrImageView.image = generateQRCode(from: "group:\(groupId)")
+        qrImageView.image = generateQRCode(from: QRCodeContent.groupQRCodeString(groupId: groupId))
     }
 
     private func layoutViews() {
