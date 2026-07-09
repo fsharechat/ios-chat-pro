@@ -16,6 +16,7 @@ final class SearchUserViewController: UIViewController {
         self.viewModel = viewModel
         super.init(nibName: nil, bundle: nil)
         title = "添加朋友"
+        hidesBottomBarWhenPushed = true
     }
 
     @available(*, unavailable)

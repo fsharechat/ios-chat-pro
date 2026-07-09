@@ -24,6 +24,7 @@ final class CreateGroupViewController: UIViewController {
         self.viewModel = viewModel
         super.init(nibName: nil, bundle: nil)
         title = "发起聊天"
+        hidesBottomBarWhenPushed = true
     }
 
     @available(*, unavailable)
