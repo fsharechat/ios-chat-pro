@@ -316,12 +316,18 @@ public final class MessagingService {
         let wireMessageId = imClient.sendFrame(signal: .publish, subSignal: .ms, body: body)
         tracker.track(wireMessageId: wireMessageId, localMessageId: localMessageId) { [weak self] localId, result in
             guard let self else { return }
-            switch result {
-            case .acked(let messageUid, _):
-                try? self.storage.messages.updateMessageUid(localMessageId: localId, messageUid: messageUid)
-                try? self.storage.messages.updateStatus(localMessageId: localId, status: .sent)
-            case .failed:
-                try? self.storage.messages.updateStatus(localMessageId: localId, status: .sendFailure)
+            // 状态更新只写 messages 表,但会话列表的「发送中/发送失败」前缀
+            // 由 conversationsPublisher 驱动 —— 必须同事务 touch 一下会话行,
+            // 否则列表停留在旧状态(与 recall 的 touchConversation 同一模式)。
+            try? self.storage.write { db in
+                switch result {
+                case .acked(let messageUid, _):
+                    try self.storage.messages.updateMessageUid(localMessageId: localId, messageUid: messageUid, db: db)
+                    try self.storage.messages.updateStatus(localMessageId: localId, status: .sent, db: db)
+                case .failed:
+                    try self.storage.messages.updateStatus(localMessageId: localId, status: .sendFailure, db: db)
+                }
+                try self.storage.conversations.touchConversation(conversationType: conversationType, target: target, line: line, db: db)
             }
         }
     }

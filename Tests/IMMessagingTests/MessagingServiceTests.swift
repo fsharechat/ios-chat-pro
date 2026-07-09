@@ -1,4 +1,5 @@
 import XCTest
+import Combine
 import IMClient
 import IMTransport
 import IMProto
@@ -11,6 +12,7 @@ final class MessagingServiceTests: XCTestCase {
     private var imClient: IMClient!
     private var storage: IMStorage!
     private var service: MessagingService!
+    private var cancellables: Set<AnyCancellable> = []
 
     override func setUpWithError() throws {
         try super.setUpWithError()
@@ -65,6 +67,36 @@ final class MessagingServiceTests: XCTestCase {
         let updated = try storage.messages.messages(conversationType: .single, target: "them").first
         XCTAssertEqual(updated?.status, .sent)
         XCTAssertEqual(updated?.messageUid, 999)
+    }
+
+    /// 会话列表的「发送中.../发送失败」前缀由 conversationsPublisher 驱动;
+    /// ack 只更新 messages 表的话该 publisher 不会再发布,列表就永远停在
+    /// 「发送中...」(本用例守护的回归)—— ack 落地必须同事务 touch 会话行。
+    func test_sendText_ackArrival_touchesConversationRowSoTheListPublisherFires() throws {
+        try service.sendText(to: "them", text: "hello")
+        let sentFrame = try decodeOnlySentFrame()
+
+        let initialSnapshot = expectation(description: "initial conversations snapshot")
+        let postAckEmission = expectation(description: "conversations re-published after ack")
+        var emissions = 0
+        storage.conversations.conversationsPublisher()
+            .replaceError(with: [])
+            .sink { _ in
+                emissions += 1
+                if emissions == 1 { initialSnapshot.fulfill() }
+                if emissions == 2 { postAckEmission.fulfill() }
+            }
+            .store(in: &cancellables)
+        wait(for: [initialSnapshot], timeout: 2)
+
+        var ackBody: [UInt8] = [0x00]
+        ackBody += (0..<8).map { UInt8((UInt64(bitPattern: 999) >> (8 * (7 - $0))) & 0xFF) }
+        ackBody += (0..<8).map { UInt8((UInt64(bitPattern: 1_234) >> (8 * (7 - $0))) & 0xFF) }
+        let ackFrameBytes = FrameEncoder.encode(signal: .pubAck, subSignal: .ms, messageId: sentFrame.header.messageId, body: Data(ackBody))
+        fakeTransport.simulateReceivedData(ackFrameBytes)
+
+        wait(for: [postAckEmission], timeout: 2)
+        XCTAssertEqual(try storage.messages.messages(conversationType: .single, target: "them").first?.status, .sent)
     }
 
     func test_sendText_timeout_marksSendFailure() throws {
