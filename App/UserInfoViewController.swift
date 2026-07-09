@@ -1,25 +1,39 @@
 // App/UserInfoViewController.swift
 import UIKit
+import Combine
 import IMStorage
 import IMKit
 
+/// Dual-state profile page, aligned with Android's `UserInfoActivity`:
+/// friends get "发消息/视频聊天", strangers (e.g. reached via QR scan) get
+/// "添加到通讯录" instead. State follows `StoredUser.isFriend` reactively,
+/// so a remote `fetchUserInfo` refresh or an accepted friend request
+/// re-renders the page in place.
 final class UserInfoViewController: UIViewController {
 
     var onSendMessage: (() -> Void)?
     var onVideoCall: (() -> Void)?
 
+    /// Set by `SceneDelegate` for stranger-reachable contexts — performs the
+    /// actual friend-request send. The add button only shows when non-nil.
+    var sendFriendRequest: ((_ reason: String, _ completion: @escaping (Result<Void, Error>) -> Void) -> Void)?
+
     private let userId: String
     private let storage: IMStorage
+    private let isSelf: Bool
+    private var cancellables = Set<AnyCancellable>()
 
     private let avatarImageView = AvatarImageView(loader: AvatarLoader())
     private let nameLabel = UILabel()
     private let mobileLabel = UILabel()
     private let sendMessageButton = UIButton(type: .system)
     private let videoCallButton = UIButton(type: .system)
+    private let addFriendButton = UIButton(type: .system)
 
-    init(userId: String, storage: IMStorage) {
+    init(userId: String, storage: IMStorage, isSelf: Bool = false) {
         self.userId = userId
         self.storage = storage
+        self.isSelf = isSelf
         super.init(nibName: nil, bundle: nil)
         title = "用户信息"
         hidesBottomBarWhenPushed = true
@@ -32,7 +46,7 @@ final class UserInfoViewController: UIViewController {
         super.viewDidLoad()
         view.backgroundColor = Theme.backgroundPrimary
         layoutViews()
-        populateUser()
+        observeUser()
     }
 
     private func layoutViews() {
@@ -65,6 +79,14 @@ final class UserInfoViewController: UIViewController {
         videoCallButton.translatesAutoresizingMaskIntoConstraints = false
         videoCallButton.addTarget(self, action: #selector(videoCallTapped), for: .touchUpInside)
 
+        addFriendButton.setTitle("添加到通讯录", for: .normal)
+        addFriendButton.setTitleColor(.white, for: .normal)
+        addFriendButton.backgroundColor = Theme.accent
+        addFriendButton.layer.cornerRadius = 6
+        addFriendButton.titleLabel?.font = .systemFont(ofSize: 16)
+        addFriendButton.translatesAutoresizingMaskIntoConstraints = false
+        addFriendButton.addTarget(self, action: #selector(addFriendTapped), for: .touchUpInside)
+
         let infoStack = UIStackView(arrangedSubviews: [nameLabel, mobileLabel])
         infoStack.axis = .vertical
         infoStack.spacing = 4
@@ -84,6 +106,7 @@ final class UserInfoViewController: UIViewController {
         view.addSubview(separator)
         view.addSubview(sendMessageButton)
         view.addSubview(videoCallButton)
+        view.addSubview(addFriendButton)
 
         NSLayoutConstraint.activate([
             avatarImageView.widthAnchor.constraint(equalToConstant: 80),
@@ -107,19 +130,74 @@ final class UserInfoViewController: UIViewController {
             videoCallButton.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
             videoCallButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
             videoCallButton.heightAnchor.constraint(equalToConstant: 48),
+
+            addFriendButton.topAnchor.constraint(equalTo: separator.bottomAnchor, constant: 24),
+            addFriendButton.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
+            addFriendButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
+            addFriendButton.heightAnchor.constraint(equalToConstant: 48),
         ])
     }
 
-    private func populateUser() {
-        let user = try? storage.users.user(uid: userId)
+    private func observeUser() {
+        apply(user: try? storage.users.user(uid: userId))
+        storage.users.usersPublisher()
+            .replaceError(with: [])
+            .sink { [weak self] users in
+                guard let self else { return }
+                self.apply(user: users.first { $0.uid == self.userId })
+            }
+            .store(in: &cancellables)
+    }
+
+    private func apply(user: StoredUser?) {
         let displayName = user?.displayName ?? user?.name ?? userId
         let mobile = user?.mobile
         avatarImageView.setAvatar(urlString: user?.portrait, displayName: displayName)
         nameLabel.text = displayName
         mobileLabel.text = mobile.map { "电话/邮箱: \($0)" }
         mobileLabel.isHidden = mobile == nil
+
+        let isFriend = user?.isFriend ?? false
+        sendMessageButton.isHidden = !(isFriend && !isSelf)
+        videoCallButton.isHidden = !(isFriend && !isSelf)
+        addFriendButton.isHidden = isSelf || isFriend || sendFriendRequest == nil
     }
 
     @objc private func sendMessageTapped() { onSendMessage?() }
     @objc private func videoCallTapped() { onVideoCall?() }
+
+    @objc private func addFriendTapped() {
+        let alert = UIAlertController(title: "添加朋友", message: "向 \(nameLabel.text ?? userId) 发送好友请求", preferredStyle: .alert)
+        alert.addTextField { textField in
+            textField.placeholder = "验证消息（可选）"
+        }
+        alert.addAction(UIAlertAction(title: "取消", style: .cancel))
+        alert.addAction(UIAlertAction(title: "发送", style: .default) { [weak self, weak alert] _ in
+            let reason = alert?.textFields?.first?.text ?? ""
+            self?.performSendFriendRequest(reason: reason)
+        })
+        present(alert, animated: true)
+    }
+
+    private func performSendFriendRequest(reason: String) {
+        addFriendButton.isEnabled = false
+        sendFriendRequest?(reason) { [weak self] result in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.addFriendButton.isEnabled = true
+                switch result {
+                case .success:
+                    self.presentResultAlert(title: "已发送", message: "好友请求已发送")
+                case .failure:
+                    self.presentResultAlert(title: "发送失败", message: "请稍后重试")
+                }
+            }
+        }
+    }
+
+    private func presentResultAlert(title: String, message: String) {
+        let alert = UIAlertController(title: title, message: message, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "好", style: .default))
+        present(alert, animated: true)
+    }
 }

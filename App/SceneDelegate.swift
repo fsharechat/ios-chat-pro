@@ -238,7 +238,14 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         switch QRCodeContent.parse(raw) {
         case .user(let uid):
             environment.contactSyncService?.fetchUserInfo(uids: [uid], forceRefresh: true)
-            let userInfoViewController = UserInfoViewController(userId: uid, storage: environment.storage)
+            let userInfoViewController = UserInfoViewController(
+                userId: uid,
+                storage: environment.storage,
+                isSelf: uid == environment.imClient?.userId
+            )
+            userInfoViewController.sendFriendRequest = { [weak self] reason, completion in
+                self?.environment.contactSyncService?.sendFriendRequest(to: uid, reason: reason, completion: completion)
+            }
             userInfoViewController.onSendMessage = { [weak self, weak listViewController] in
                 self?.openSingleConversation(uid: uid, via: listViewController)
             }
