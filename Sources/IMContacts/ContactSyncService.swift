@@ -43,6 +43,16 @@ public final class ContactSyncService {
         let friendRequestSyncHandler = FriendRequestSyncHandler(storage: storage, myUid: imClient.userId)
         friendRequestSyncHandler.onRemoteUpdateNotified = { [weak self] in self?.syncFriendRequests() }
         imClient.register(friendRequestSyncHandler)
+
+        // `.fn` fires when a friend relationship changes server-side (e.g.
+        // the other side accepted our request) — re-pull the friend list and
+        // requests, matching Android's `NotifyFriendHandler`.
+        let friendNotifyHandler = FriendNotifyHandler()
+        friendNotifyHandler.onFriendListUpdateNotified = { [weak self] in
+            self?.syncFriendList()
+            self?.syncFriendRequests()
+        }
+        imClient.register(friendNotifyHandler)
     }
 
     /// Always a full refresh (`version: 0`) — Android's own client never
@@ -148,6 +158,9 @@ public final class ContactSyncService {
             case .success:
                 try? self.storage.friendRequests.markAccepted(fromUid: uid)
                 self.syncFriendRequests()
+                // The new friend must show up in the contact list right away —
+                // don't rely solely on the server's follow-up `.fn` push.
+                self.syncFriendList()
                 completion(.success(()))
             case .failure(let error):
                 completion(.failure(error))

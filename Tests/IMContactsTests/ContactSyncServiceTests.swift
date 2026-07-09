@@ -168,8 +168,36 @@ final class ContactSyncServiceTests: XCTestCase {
         let rows = try storage.dbQueueForTesting.read { db in try StoredFriendRequest.fetchAll(db) }
         XCTAssertEqual(rows.first?.status, StoredFriendRequest.Status.accepted)
 
-        let followUpFrame = try XCTUnwrap(FrameDecoder().feed(fakeTransport.sentFrames.last!).first)
-        XCTAssertEqual(followUpFrame.header.subSignal, .frp)
+        let followUpSubSignals = try fakeTransport.sentFrames.suffix(2).map {
+            try XCTUnwrap(FrameDecoder().feed($0).first).header.subSignal
+        }
+        XCTAssertTrue(followUpSubSignals.contains(.frp), "接受成功后应重新拉取好友请求,实际发送: \(followUpSubSignals)")
+    }
+
+    func test_acceptFriendRequest_onSuccess_alsoRefreshesFriendList() throws {
+        try storage.friendRequests.upsert(StoredFriendRequest(fromUid: "u1", toUid: "me", reason: "hi", status: StoredFriendRequest.Status.pending, updateDt: 100, fromReadStatus: false, toReadStatus: false))
+        service.acceptFriendRequest(from: "u1") { _ in }
+
+        let acceptFrame = try decodeOnlySentFrame()
+        let ackBytes = FrameEncoder.encode(signal: .pubAck, subSignal: .fhr, messageId: acceptFrame.header.messageId, body: Data([0x00]))
+        fakeTransport.simulateReceivedData(ackBytes)
+
+        let followUpSubSignals = try fakeTransport.sentFrames.suffix(2).map {
+            try XCTUnwrap(FrameDecoder().feed($0).first).header.subSignal
+        }
+        XCTAssertTrue(followUpSubSignals.contains(.fp), "接受好友请求成功后应重新拉取好友列表,实际发送: \(followUpSubSignals)")
+    }
+
+    func test_receivingFNNotify_triggersFriendListAndFriendRequestPull() throws {
+        let frameBytes = FrameEncoder.encode(signal: .publish, subSignal: .fn, messageId: 0, body: Data([0, 0, 0, 0, 0, 0, 0, 1]))
+
+        fakeTransport.simulateReceivedData(frameBytes)
+
+        let sentSubSignals = try fakeTransport.sentFrames.suffix(2).map {
+            try XCTUnwrap(FrameDecoder().feed($0).first).header.subSignal
+        }
+        XCTAssertTrue(sentSubSignals.contains(.fp), "FN 通知(好友关系变化,如对方接受了我的请求)应触发好友列表拉取,实际发送: \(sentSubSignals)")
+        XCTAssertTrue(sentSubSignals.contains(.frp), "FN 通知同时应刷新好友请求列表(对齐 Android NotifyFriendHandler),实际发送: \(sentSubSignals)")
     }
 
     func test_syncFriendRequests_sendsCurrentFriendRequestHeadAsVersion() throws {
