@@ -75,6 +75,7 @@
 		E2E627EE50345A115DB5B2ED /* GroupInfoViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A887447B146764C16A4E603 /* GroupInfoViewController.swift */; };
 		E48899C747B0A0BD8C98A028 /* EmojiPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 767A2D49F043AA9A82A8FFFB /* EmojiPanelView.swift */; };
 		E9F8B2779486AB4D8F736447 /* GroupEntryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B177F3C5957AF38D8250AC7 /* GroupEntryView.swift */; };
+		ED3217CCB1E2B24A6F2FD378 /* FileDownloadManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 060A7470530CBB16BEE6E37A /* FileDownloadManager.swift */; };
 		EEAD53A71EAD7C968380673B /* IMMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = E0AB875DDD2DC10A0CEAA624 /* IMMessaging */; };
 		EF0CA2C372E7C21E53FC2452 /* ToggleSwitchCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 783F647445420DE668035D28 /* ToggleSwitchCell.swift */; };
 		F0E0711134156FE1E30507ED /* MessageInputBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A7AF95FBB4F8D27A5F4067D /* MessageInputBar.swift */; };
@@ -85,6 +86,7 @@
 /* Begin PBXFileReference section */
 		01F48A9FE1740DCDDAC2EBD0 /* TextPreviewViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextPreviewViewController.swift; sourceTree = "<group>"; };
 		03560F1E35A1CD83F06CBEFF /* GroupQRCodeViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupQRCodeViewController.swift; sourceTree = "<group>"; };
+		060A7470530CBB16BEE6E37A /* FileDownloadManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileDownloadManager.swift; sourceTree = "<group>"; };
 		0832B3942D777D6A0D67E100 /* NewFriendsViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewFriendsViewController.swift; sourceTree = "<group>"; };
 		0AD23AFE8191A4A283002338 /* CallRingtonePlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CallRingtonePlayer.swift; sourceTree = "<group>"; };
 		0B65530874C01F08C0C8B669 /* ForwardPickerViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForwardPickerViewController.swift; sourceTree = "<group>"; };
@@ -217,6 +219,7 @@
 				767A2D49F043AA9A82A8FFFB /* EmojiPanelView.swift */,
 				25D8EA95D53B3D0A78B985BE /* ExtPanelView.swift */,
 				BDF651A69DA130BE158D8EF1 /* FavGroupListViewController.swift */,
+				060A7470530CBB16BEE6E37A /* FileDownloadManager.swift */,
 				A00822E7236C8497D7E1D66E /* FileMessageCell.swift */,
 				0B65530874C01F08C0C8B669 /* ForwardPickerViewController.swift */,
 				14A2F42FFBACA55D6A5741FA /* ForwardPreviewViewController.swift */,
@@ -380,6 +383,7 @@
 				E48899C747B0A0BD8C98A028 /* EmojiPanelView.swift in Sources */,
 				4C0E9667BF3FEAD9168A31CC /* ExtPanelView.swift in Sources */,
 				D50D77865C2E9DFF7B261829 /* FavGroupListViewController.swift in Sources */,
+				ED3217CCB1E2B24A6F2FD378 /* FileDownloadManager.swift in Sources */,
 				5CCCCCD8B87CE043CB00EFFA /* FileMessageCell.swift in Sources */,
 				47A9ADF6067FC38530A2ABEA /* ForwardPickerViewController.swift in Sources */,
 				E1556A736693B9FCAC98259B /* ForwardPreviewViewController.swift in Sources */,

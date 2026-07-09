@@ -1,5 +1,6 @@
 // App/ConversationViewController.swift
 import UIKit
+import QuickLook
 import Photos
 import PhotosUI
 import UniformTypeIdentifiers
@@ -13,6 +14,8 @@ final class ConversationViewController: UIViewController {
     private let viewModel: ConversationViewModel
     private var cancellables = Set<AnyCancellable>()
     private var dataSource: UITableViewDiffableDataSource<Int, ChatMessageRow>!
+    private let fileDownloadManager = FileDownloadManager()
+    private var previewURL: URL?
     private var audioPlayer: AVAudioPlayer?
     private var voicePlayer: AVPlayer?
     private var currentPlaybackTempURL: URL?
@@ -169,16 +172,17 @@ final class ConversationViewController: UIViewController {
     }
 
     private func configureDataSource() {
-        dataSource = UITableViewDiffableDataSource<Int, ChatMessageRow>(tableView: tableView) { tableView, indexPath, row in
+        dataSource = UITableViewDiffableDataSource<Int, ChatMessageRow>(tableView: tableView) { [weak self] tableView, indexPath, row in
             switch row {
             case .message(let message) where message.text?.hasPrefix("[语音]") == true:
                 let cell = tableView.dequeueReusableCell(withIdentifier: VoiceMessageCell.reuseIdentifier, for: indexPath) as! VoiceMessageCell
                 cell.configure(with: message)
                 cell.onTapped = { [weak self, weak cell] in self?.playVoice(urlString: message.imageRemoteURL, cell: cell) }
                 return cell
-            case .message(let message) where message.text?.hasPrefix("[文件]") == true:
+            case .message(let message) where message.fileName != nil:
                 let cell = tableView.dequeueReusableCell(withIdentifier: FileMessageCell.reuseIdentifier, for: indexPath) as! FileMessageCell
-                cell.configure(with: message)
+                cell.configure(with: message, state: self?.fileDownloadManager.state(for: message) ?? .notDownloaded)
+                cell.onTapped = { [weak self] in self?.handleFileTap(message: message) }
                 return cell
             case .message(let message) where message.locationLat != nil:
                 let cell = tableView.dequeueReusableCell(withIdentifier: LocationMessageCell.reuseIdentifier, for: indexPath) as! LocationMessageCell
@@ -855,6 +859,55 @@ extension ConversationViewController: UIDocumentPickerDelegate {
         defer { url.stopAccessingSecurityScopedResource() }
         guard let data = try? Data(contentsOf: url) else { return }
         viewModel.sendFile(fileData: data, fileName: url.lastPathComponent)
+    }
+}
+
+// MARK: - 文件消息下载与预览
+
+extension ConversationViewController: QLPreviewControllerDataSource {
+    /// 未下载 → 起下载并实时刷新进度；下载中 → 忽略；已下载 → QuickLook
+    /// 预览（自带分享按钮，可存到「文件」或转发其他 App）。
+    private func handleFileTap(message: StoredMessageRow) {
+        switch fileDownloadManager.state(for: message) {
+        case .downloading:
+            return
+        case .downloaded(let url):
+            presentFilePreview(url: url)
+        case .notDownloaded:
+            fileDownloadManager.download(row: message) { [weak self] _ in
+                self?.refreshFileCell(for: message)
+            } completion: { [weak self] result in
+                self?.refreshFileCell(for: message)
+                if case .failure = result {
+                    let alert = UIAlertController(title: "下载失败", message: "文件下载失败，请稍后重试", preferredStyle: .alert)
+                    alert.addAction(UIAlertAction(title: "好", style: .default))
+                    self?.present(alert, animated: true)
+                }
+            }
+            refreshFileCell(for: message)
+        }
+    }
+
+    /// 下载状态不参与 diffable 快照身份，直接刷新可见 cell 的状态行。
+    private func refreshFileCell(for message: StoredMessageRow) {
+        guard let indexPath = dataSource.indexPath(for: .message(message)),
+              let cell = tableView.cellForRow(at: indexPath) as? FileMessageCell else { return }
+        cell.update(state: fileDownloadManager.state(for: message))
+    }
+
+    private func presentFilePreview(url: URL) {
+        previewURL = url
+        let preview = QLPreviewController()
+        preview.dataSource = self
+        present(preview, animated: true)
+    }
+
+    func numberOfPreviewItems(in controller: QLPreviewController) -> Int {
+        previewURL == nil ? 0 : 1
+    }
+
+    func previewController(_ controller: QLPreviewController, previewItemAt index: Int) -> QLPreviewItem {
+        (previewURL ?? URL(fileURLWithPath: "")) as NSURL
     }
 }
 

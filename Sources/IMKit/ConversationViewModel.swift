@@ -413,7 +413,12 @@ public final class ConversationViewModel {
         case .voice(let remoteURL, _, let duration):
             return .message(buildStoredMessageRow(message, text: "[语音] \(duration)秒",
                 imageThumbnail: nil, imageRemoteURL: remoteURL, voiceDuration: duration))
-        case .file(let name, let size, let remoteURL, _):
+        case .file(let rawName, let size, let remoteURL, _):
+            // 兄弟客户端（electron 等）会把「[文件] 名字」整串写进 searchableContent，
+            // 行内只保留纯文件名（展示、下载路径、转发共用）
+            let name = rawName.hasPrefix("[文件]")
+                ? String(rawName.dropFirst("[文件]".count)).trimmingCharacters(in: .whitespaces)
+                : rawName
             let sizeStr = size > 1024*1024 ? String(format: "%.1fMB", Double(size)/1024/1024) : "\(size/1024)KB"
             return .message(buildStoredMessageRow(message, text: "[文件] \(name) \(sizeStr)",
                 imageThumbnail: nil, imageRemoteURL: remoteURL, fileSize: size, fileName: name))
