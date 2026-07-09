@@ -13,6 +13,7 @@ final class VoiceMessageCell: UITableViewCell {
     private let bubbleColumn = UIStackView()
     private let rowStack = UIStackView()
     private let spacer = UIView()
+    private var bubbleWidthConstraint: NSLayoutConstraint!
 
     override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
         super.init(style: style, reuseIdentifier: reuseIdentifier)
@@ -41,14 +42,20 @@ final class VoiceMessageCell: UITableViewCell {
         hStack.translatesAutoresizingMaskIntoConstraints = false
         bubbleView.addSubview(hStack)
 
+        // 时长驱动的目标宽度。优先级低于「≥80」和「≤行宽60%」两条 required
+        // 约束，超长语音时被 60% 上限压住，内容更宽时被内容撑开。
+        bubbleWidthConstraint = bubbleView.widthAnchor.constraint(equalToConstant: 80)
+        bubbleWidthConstraint.priority = .defaultHigh
+
         NSLayoutConstraint.activate([
             iconView.widthAnchor.constraint(equalToConstant: 20),
             iconView.heightAnchor.constraint(equalToConstant: 20),
             hStack.topAnchor.constraint(equalTo: bubbleView.topAnchor, constant: 10),
             hStack.bottomAnchor.constraint(equalTo: bubbleView.bottomAnchor, constant: -10),
             hStack.leadingAnchor.constraint(equalTo: bubbleView.leadingAnchor, constant: 14),
-            hStack.trailingAnchor.constraint(equalTo: bubbleView.trailingAnchor, constant: -14),
+            hStack.trailingAnchor.constraint(lessThanOrEqualTo: bubbleView.trailingAnchor, constant: -14),
             bubbleView.widthAnchor.constraint(greaterThanOrEqualToConstant: 80),
+            bubbleWidthConstraint,
         ])
 
         bubbleColumn.axis = .vertical
@@ -92,9 +99,14 @@ final class VoiceMessageCell: UITableViewCell {
         iconView.tintColor = isOutgoing ? .white : Theme.accent
         durationLabel.textColor = isOutgoing ? .white : .label
 
-        let text = row.text ?? ""
-        let parts = text.components(separatedBy: " ")
-        durationLabel.text = parts.count > 1 ? parts[1] : text
+        let duration = row.voiceDuration ?? 0
+        durationLabel.text = "\(duration)秒"
+
+        // 对齐 Android（AudioMessageContentViewHolder.onBind）：
+        // 宽度 = 基础宽 + 半屏 × 时长/120s，120s 与 Config.DEFAULT_MAX_AUDIO_RECORD_TIME_SECOND 一致。
+        let maxDuration: CGFloat = 120
+        let extra = UIScreen.main.bounds.width / 2 * min(CGFloat(duration), maxDuration) / maxDuration
+        bubbleWidthConstraint.constant = 80 + extra
 
         for view in rowStack.arrangedSubviews {
             rowStack.removeArrangedSubview(view)
