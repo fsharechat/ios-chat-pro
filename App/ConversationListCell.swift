@@ -9,7 +9,7 @@ final class ConversationListCell: UITableViewCell {
     private let nameLabel = UILabel()
     private let timestampLabel = UILabel()
     private let previewLabel = UILabel()
-    private let unreadBadge = UILabel()
+    private let unreadBadge = BadgeLabel()
     private let muteIcon = UIImageView(image: UIImage(systemName: "bell.slash.fill"))
 
     override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
@@ -36,8 +36,8 @@ final class ConversationListCell: UITableViewCell {
         previewLabel.numberOfLines = 1
 
         unreadBadge.font = .systemFont(ofSize: 12, weight: .semibold)
-        unreadBadge.textColor = Theme.textOnAccent
-        unreadBadge.backgroundColor = Theme.accent
+        unreadBadge.textColor = .white
+        unreadBadge.backgroundColor = .systemRed
         unreadBadge.textAlignment = .center
         unreadBadge.layer.cornerRadius = 9
         unreadBadge.clipsToBounds = true
@@ -96,7 +96,7 @@ final class ConversationListCell: UITableViewCell {
         backgroundColor = row.isTop ? Theme.backgroundTertiary : Theme.backgroundSecondary
         muteIcon.isHidden = !row.isMuted
         if row.unreadCount > 0 {
-            unreadBadge.text = " \(row.unreadCount) "
+            unreadBadge.text = row.unreadCount > 99 ? "99+" : "\(row.unreadCount)"
             unreadBadge.isHidden = false
         } else {
             unreadBadge.isHidden = true
@@ -129,6 +129,16 @@ final class ConversationListCell: UITableViewCell {
         f.dateFormat = "yyyy/M/d"
         return f
     }()
+
+    /// 未读数胶囊角标：在文字宽度上补两侧内边距，保证多位数不贴边、
+    /// 单位数配合外部的 18pt 最小宽/高约束成正圆且数字居中。
+    private final class BadgeLabel: UILabel {
+        override var intrinsicContentSize: CGSize {
+            var size = super.intrinsicContentSize
+            size.width += 10
+            return size
+        }
+    }
 
     private static func formattedTimestamp(_ millis: Int64) -> String {
         guard millis > 0 else { return "" }

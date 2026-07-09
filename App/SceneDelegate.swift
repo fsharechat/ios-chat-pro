@@ -50,8 +50,14 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     private func makeMainTabBarController() -> UIViewController {
         let tabBarController = UITabBarController()
 
-        let conversationListNav = makeConversationListNavigationController()
+        let conversationListViewModel = ConversationListViewModel(storage: environment.storage, contactSync: environment.contactSyncService, groupSync: environment.groupSyncService, currentUserId: environment.imClient?.userId ?? "")
+        let conversationListNav = makeConversationListNavigationController(viewModel: conversationListViewModel)
         conversationListNav.tabBarItem = UITabBarItem(title: "消息", image: UIImage(systemName: "message"), tag: 0)
+        conversationListViewModel.$totalUnreadCount
+            .sink { [weak conversationListNav] count in
+                conversationListNav?.tabBarItem.badgeValue = count > 0 ? (count > 99 ? "99+" : "\(count)") : nil
+            }
+            .store(in: &cancellables)
 
         let contactListViewModel = ContactListViewModel(storage: environment.storage, contactSync: environment.contactSyncService)
         let contactListNav = makeContactListNavigationController(viewModel: contactListViewModel)
@@ -126,8 +132,10 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         window?.rootViewController = makeLoginViewController()
     }
 
-    private func makeConversationListNavigationController() -> UIViewController {
-        let viewModel = ConversationListViewModel(storage: environment.storage, contactSync: environment.contactSyncService, groupSync: environment.groupSyncService, currentUserId: environment.imClient?.userId ?? "")
+    /// 与 `makeContactListNavigationController` 相同的模式：`viewModel` 由
+    /// `makeMainTabBarController()` 创建并传入，便于其在 `tabBarItem` 赋值后
+    /// 订阅 `$totalUnreadCount` 驱动「消息」tab 角标。
+    private func makeConversationListNavigationController(viewModel: ConversationListViewModel) -> UIViewController {
         let listViewController = ConversationListViewController(viewModel: viewModel)
         listViewController.onConversationSelected = { [weak self, weak listViewController] row in
             guard let self else { return }

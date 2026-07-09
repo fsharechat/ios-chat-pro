@@ -104,6 +104,25 @@ final class ConversationListViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.rows.first?.displayName, "them")
     }
 
+    /// 「消息」tab 角标数据源：总未读数 = 非免打扰会话未读数之和，
+    /// 免打扰会话的未读不计入。
+    func test_totalUnreadCount_sumsUnreadOfNonMutedConversationsOnly() throws {
+        try storage.conversations.recordIncomingMessage(conversationType: .single, target: "a", line: 0, messageUid: 1, timestamp: 1_000, incrementUnread: true)
+        try storage.conversations.recordIncomingMessage(conversationType: .single, target: "a", line: 0, messageUid: 2, timestamp: 1_001, incrementUnread: true)
+        try storage.conversations.recordIncomingMessage(conversationType: .single, target: "b", line: 0, messageUid: 3, timestamp: 1_002, incrementUnread: true)
+        try storage.conversations.recordIncomingMessage(conversationType: .single, target: "muted", line: 0, messageUid: 4, timestamp: 1_003, incrementUnread: true)
+        try storage.conversations.setMuted(true, conversationType: .single, target: "muted", line: 0)
+
+        let expectation = expectation(description: "total unread reflects non-muted conversations")
+        expectation.assertForOverFulfill = false
+        viewModel.$totalUnreadCount.sink { count in
+            if count == 3 { expectation.fulfill() }
+        }.store(in: &cancellables)
+        wait(for: [expectation], timeout: 2)
+
+        XCTAssertEqual(viewModel.totalUnreadCount, 3)
+    }
+
     /// The regression this guards against: a sender's profile resolves
     /// asynchronously (a `UPUI` round trip after `fetchUserInfo` fires),
     /// with no new message/conversation event accompanying it. Before this

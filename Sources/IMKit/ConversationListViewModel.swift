@@ -6,6 +6,9 @@ import IMStorage
 /// internal locking and must be called from a single consistent queue.
 public final class ConversationListViewModel {
     @Published public private(set) var rows: [ConversationRow] = []
+    /// 所有非免打扰会话的未读数总和，供「消息」tab 角标使用。
+    /// 免打扰会话不计入 —— 与 Android 端及微信一致，静音会话不推高 tab 数字。
+    @Published public private(set) var totalUnreadCount: Int = 0
 
     private let storage: IMStorage
     private let contactSync: ContactInfoFetching?
@@ -43,6 +46,10 @@ public final class ConversationListViewModel {
     private func handleConversationsUpdate(_ conversations: [StoredConversation]) {
         var unresolvedUids: [String] = []
         var unresolvedGroupIds: [String] = []
+
+        totalUnreadCount = conversations
+            .filter { !$0.isMuted }
+            .reduce(0) { $0 + $1.unreadCount }
 
         // If either lookup fails, this silently falls back to "no last
         // message"/"no profile" with no diagnostic trail — accepted for
