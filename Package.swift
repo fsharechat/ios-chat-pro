@@ -16,6 +16,7 @@ let package = Package(
         .library(name: "IMKit", targets: ["IMKit"]),
         .library(name: "IMMedia", targets: ["IMMedia"]),
         .library(name: "IMCall", targets: ["IMCall"]),
+        .library(name: "AMRCodec", targets: ["AMRCodec"]),
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-protobuf.git", from: "1.25.0"),
@@ -54,5 +55,31 @@ let package = Package(
         .testTarget(name: "IMCallTests", dependencies: ["IMCall", "IMMessaging", "IMStorage", "IMClient", "IMTransport", "IMProto"]),
         .target(name: "AppCore", dependencies: ["IMClient", "IMStorage", "IMMessaging", "IMContacts", "IMMedia", "IMGroups", "IMCall"]),
         .testTarget(name: "AppCoreTests", dependencies: ["AppCore", "IMClient", "IMProto", "IMTransport"]),
+        // Vendored opencore-amr AMR-NB codec (Apache 2.0, see Sources/AMRCodec/LICENSE).
+        // Apple platforms ship an AMR *decoder* but no *encoder*, so sending
+        // Android-playable voice messages requires bundling this encoder.
+        // File list mirrors upstream amrnb/Makefile.am (its exclusions avoid
+        // duplicate-symbol variants like common/div_32.cpp vs enc/div_32.cpp).
+        .target(
+            name: "AMRCodec",
+            exclude: ["LICENSE"],
+            publicHeadersPath: "include",
+            cSettings: [
+                .headerSearchPath("oscl"),
+                .headerSearchPath("enc/src"),
+                .headerSearchPath("dec/src"),
+                .headerSearchPath("common/include"),
+                .headerSearchPath("common_dec_include"),
+            ],
+            cxxSettings: [
+                .headerSearchPath("oscl"),
+                .headerSearchPath("enc/src"),
+                .headerSearchPath("dec/src"),
+                .headerSearchPath("common/include"),
+                .headerSearchPath("common_dec_include"),
+            ],
+            linkerSettings: [.linkedLibrary("c++")]
+        ),
+        .testTarget(name: "AMRCodecTests", dependencies: ["AMRCodec"]),
     ]
 )

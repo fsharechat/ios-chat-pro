@@ -27,7 +27,7 @@
 		2B926665FFEADFBA42F0EF00 /* ImageGalleryViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3835376AB25AFF2A347A3D4D /* ImageGalleryViewController.swift */; };
 		2D467309920A2C8A9DF5D565 /* ScanQRCodeViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D5A6962C0779989DD4A64B9 /* ScanQRCodeViewController.swift */; };
 		2E76E04DF1A447C0359BFE8B /* incoming_call_ring.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = B2F3F3D8AB0E764052611AEA /* incoming_call_ring.mp3 */; };
-		2F6CCACDD9E93598CF9E204B /* WebRTC in Frameworks */ = {isa = PBXBuildFile; productRef = 245A8DCD66CF4BF518D7B079 /* WebRTC */; };
+		2F6CCACDD9E93598CF9E204B /* AMRCodec in Frameworks */ = {isa = PBXBuildFile; productRef = 6095E5493B7A0270649667F5 /* AMRCodec */; };
 		364E10AD59CD0F1727BB41EA /* SystemTipMessageCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CE3F018CE1845A6A279978F /* SystemTipMessageCell.swift */; };
 		3C61AE5D1A72B08EF5F3EC6D /* IMStorage in Frameworks */ = {isa = PBXBuildFile; productRef = 07ADF191AD7039FA6B899E7E /* IMStorage */; };
 		40533D31B36757999CD71E73 /* ConversationListViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3FE0167E8E8C013706DF83B /* ConversationListViewController.swift */; };
@@ -63,6 +63,7 @@
 		A1611CC727D61FF89025CA77 /* IMClient in Frameworks */ = {isa = PBXBuildFile; productRef = 99257818497BC42EED99DC6C /* IMClient */; };
 		A2DF324B8AB6D3023C51A0CC /* TextValueRowCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7044AD6B3681821E10EBBD77 /* TextValueRowCell.swift */; };
 		AC4CF93C08183929C472085A /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93FA326C9B762DCAB590F502 /* AppDelegate.swift */; };
+		B0EFF1C4DDDD6E6588C31290 /* WebRTC in Frameworks */ = {isa = PBXBuildFile; productRef = 245A8DCD66CF4BF518D7B079 /* WebRTC */; };
 		CDD9722F3A5A0B3869684D19 /* PlusMenuView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 400CEB53F49721DDD023955F /* PlusMenuView.swift */; };
 		D39C275731BBA18DD72E1C1B /* AboutViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53A605ADEEFEFF8E5A5674D9 /* AboutViewController.swift */; };
 		D50D77865C2E9DFF7B261829 /* FavGroupListViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDF651A69DA130BE158D8EF1 /* FavGroupListViewController.swift */; };
@@ -167,7 +168,8 @@
 				9E209FB56ACB4975796F5B20 /* AppCore in Frameworks */,
 				FF900D32443A8166CEA8072A /* IMKit in Frameworks */,
 				10F0F91A0119D922D2F5C61A /* IMCall in Frameworks */,
-				2F6CCACDD9E93598CF9E204B /* WebRTC in Frameworks */,
+				2F6CCACDD9E93598CF9E204B /* AMRCodec in Frameworks */,
+				B0EFF1C4DDDD6E6588C31290 /* WebRTC in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -305,6 +307,7 @@
 				AF6EC4831921C0CD2F8F91AD /* AppCore */,
 				A21BC9F32CE4DC35DC8E2152 /* IMKit */,
 				9238D717B4E81FE77D740748 /* IMCall */,
+				6095E5493B7A0270649667F5 /* AMRCodec */,
 				245A8DCD66CF4BF518D7B079 /* WebRTC */,
 			);
 			productName = App;
@@ -642,6 +645,10 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 6D6610523EB37D2ED3A93A25 /* XCRemoteSwiftPackageReference "WebRTC" */;
 			productName = WebRTC;
+		};
+		6095E5493B7A0270649667F5 /* AMRCodec */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = AMRCodec;
 		};
 		9238D717B4E81FE77D740748 /* IMCall */ = {
 			isa = XCSwiftPackageProductDependency;

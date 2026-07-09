@@ -61,6 +61,8 @@ targets:
         product: IMKit
       - package: IMCore
         product: IMCall
+      - package: IMCore
+        product: AMRCodec
       - package: WebRTC
         product: WebRTC
 schemes:
