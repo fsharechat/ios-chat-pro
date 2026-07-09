@@ -14,8 +14,10 @@ final class ConversationListViewController: UIViewController {
     /// A placeholder until a later plan builds the real one.
     var onConversationSelected: ((ConversationRow) -> Void)?
 
-    /// Set by `SceneDelegate` — pushes the create-group flow.
-    var onCreateGroupTapped: (() -> Void)?
+    /// Set by `SceneDelegate` — the three "+" menu entries.
+    var onStartChatTapped: (() -> Void)?
+    var onAddFriendTapped: (() -> Void)?
+    var onScanTapped: (() -> Void)?
 
     init(viewModel: ConversationListViewModel) {
         self.viewModel = viewModel
@@ -29,13 +31,20 @@ final class ConversationListViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = Theme.backgroundPrimary
-        navigationItem.rightBarButtonItem = UIBarButtonItem(barButtonSystemItem: .add, target: self, action: #selector(createGroupTapped))
+        navigationItem.rightBarButtonItem = UIBarButtonItem(barButtonSystemItem: .add, target: self, action: #selector(plusTapped))
         layoutTableView()
         configureDataSource()
         bindViewModel()
     }
 
-    @objc private func createGroupTapped() { onCreateGroupTapped?() }
+    @objc private func plusTapped() {
+        guard let hostView = navigationController?.view else { return }
+        PlusMenuView.show(in: hostView, items: [
+            .init(symbolName: "ellipsis.message", title: "发起聊天") { [weak self] in self?.onStartChatTapped?() },
+            .init(symbolName: "person.badge.plus", title: "添加朋友") { [weak self] in self?.onAddFriendTapped?() },
+            .init(symbolName: "qrcode.viewfinder", title: "扫一扫") { [weak self] in self?.onScanTapped?() },
+        ])
+    }
 
     private func layoutTableView() {
         tableView.register(ConversationListCell.self, forCellReuseIdentifier: ConversationListCell.reuseIdentifier)

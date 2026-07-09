@@ -19,6 +19,9 @@ public enum Theme {
     }
 
     public static let incomingBubble = dynamicColor(dark: 0x1F212B, light: 0xF0F0F2)
+    /// Elevated popup card (e.g. the nav-bar "+" menu) — white in light mode
+    /// like WeChat's, one layer above `backgroundSecondary` in dark mode.
+    public static let popupCard = dynamicColor(dark: 0x232430, light: 0xFFFFFF)
     public static let textPrimary = UIColor.label
     public static let textOnAccent = UIColor { traits in traits.userInterfaceStyle == .dark ? .black : .white }
 

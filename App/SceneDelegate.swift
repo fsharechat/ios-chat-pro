@@ -163,7 +163,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             }
             listViewController?.navigationController?.pushViewController(conversationViewController, animated: true)
         }
-        listViewController.onCreateGroupTapped = { [weak self, weak listViewController] in
+        listViewController.onStartChatTapped = { [weak self, weak listViewController] in
             guard let self else { return }
             let createGroupViewModel = CreateGroupViewModel(
                 storage: self.environment.storage,
@@ -207,7 +207,26 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             }
             listViewController?.navigationController?.pushViewController(createGroupViewController, animated: true)
         }
+        listViewController.onAddFriendTapped = { [weak self, weak listViewController] in
+            guard let self else { return }
+            listViewController?.navigationController?.pushViewController(self.makeSearchUserViewController(), animated: true)
+        }
+        listViewController.onScanTapped = { [weak listViewController] in
+            // Placeholder until the scan screen lands (plan Task 4).
+            let alert = UIAlertController(title: "扫一扫", message: "功能开发中", preferredStyle: .alert)
+            alert.addAction(UIAlertAction(title: "好", style: .default))
+            listViewController?.present(alert, animated: true)
+        }
         return UINavigationController(rootViewController: listViewController)
+    }
+
+    private func makeSearchUserViewController() -> SearchUserViewController {
+        let searchUserViewModel = SearchUserViewModel(
+            userSearching: environment.contactSyncService,
+            friendRequestSending: environment.contactSyncService,
+            storage: environment.storage
+        )
+        return SearchUserViewController(viewModel: searchUserViewModel)
     }
 
     /// Wires the chat screen's tappable group title (see
@@ -459,13 +478,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             let newFriendsViewController = NewFriendsViewController(viewModel: newFriendsViewModel)
             newFriendsViewController.onAddFriendTapped = { [weak self, weak newFriendsViewController] in
                 guard let self else { return }
-                let searchUserViewModel = SearchUserViewModel(
-                    userSearching: self.environment.contactSyncService,
-                    friendRequestSending: self.environment.contactSyncService,
-                    storage: self.environment.storage
-                )
-                let searchUserViewController = SearchUserViewController(viewModel: searchUserViewModel)
-                newFriendsViewController?.navigationController?.pushViewController(searchUserViewController, animated: true)
+                newFriendsViewController?.navigationController?.pushViewController(self.makeSearchUserViewController(), animated: true)
             }
             listViewController?.navigationController?.pushViewController(newFriendsViewController, animated: true)
         }
