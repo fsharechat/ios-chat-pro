@@ -28,6 +28,10 @@ public final class GroupInfoViewModel {
     @Published public private(set) var group: StoredGroup?
     @Published public private(set) var members: [MemberRow] = []
 
+    /// Whether `currentUserId` is an active member — drives the dual-state
+    /// page (member view vs. scanned-QR preview with a "加入群聊" button).
+    @Published public private(set) var isMember: Bool = false
+
     // Permissions
     @Published public private(set) var canAddMembers: Bool = false
     @Published public private(set) var canKickMembers: Bool = false
@@ -39,7 +43,7 @@ public final class GroupInfoViewModel {
     @Published public private(set) var isMuted: Bool = false
     @Published public private(set) var isFav: Bool = false
 
-    private let groupId: String
+    public let groupId: String
     private let groupActing: GroupActing?
     private let groupSyncing: GroupSyncing?
     private let storage: IMStorage
@@ -59,6 +63,11 @@ public final class GroupInfoViewModel {
             self.isTop = conversation.isTop
             self.isMuted = conversation.isMuted
         }
+
+        // Synchronous so first render already knows member vs. stranger —
+        // the members publisher below keeps it updated (e.g. after joining).
+        self.isMember = ((try? storage.groups.members(groupId: groupId)) ?? [])
+            .contains { $0.memberId == currentUserId }
 
         groupCancellable = storage.groups.groupPublisher(groupId: groupId)
             .replaceError(with: nil)
@@ -85,11 +94,33 @@ public final class GroupInfoViewModel {
                 }
             }
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] rows in self?.members = rows }
+            .sink { [weak self] rows in
+                guard let self else { return }
+                self.members = rows
+                let nowMember = rows.contains { $0.uid == self.currentUserId }
+                if nowMember != self.isMember {
+                    self.isMember = nowMember
+                    self.recomputePermissions()
+                }
+            }
     }
 
     public func refresh() {
         groupSyncing?.refreshGroup(targetId: groupId)
+        groupSyncing?.refreshMembers(targetId: groupId)
+    }
+
+    /// Non-member joins by adding themselves — same wire call Android's
+    /// `GroupInfoActivity` uses (`addGroupMember(group, [self])`).
+    public func joinGroup(completion: @escaping (Result<Void, Error>) -> Void) {
+        groupActing?.addMembers(groupId: groupId, memberIds: [currentUserId]) { [weak self] result in
+            if case .success = result {
+                guard let self else { return }
+                self.groupSyncing?.refreshGroup(targetId: self.groupId)
+                self.groupSyncing?.refreshMembers(targetId: self.groupId)
+            }
+            completion(result)
+        }
     }
 
     // MARK: - Member Actions
@@ -171,7 +202,7 @@ public final class GroupInfoViewModel {
     }
 
     private func recomputePermissions() {
-        guard let group else {
+        guard let group, isMember else {
             canAddMembers = false; canKickMembers = false
             canModifyInfo = false; canDismiss = false
             return

@@ -13,6 +13,13 @@ final class GroupInfoViewController: UIViewController {
     var onQRCodeTapped: (() -> Void)?
     var onGroupNoticeTapped: (() -> Void)?
     var onSearchMessagesTapped: (() -> Void)?
+    /// Preview mode only — fired after joining, or when tapping "进入群聊".
+    var onEnterGroupChat: ((_ groupId: String, _ name: String) -> Void)?
+
+    /// Scanned-QR landing mode (Android `GroupInfoActivity` semantics):
+    /// hides all management/settings rows and swaps the bottom button to
+    /// "加入群聊 / 进入群聊" depending on membership.
+    var presentsAsPreview = false
 
     // MARK: - Section / Row Model
 
@@ -67,6 +74,7 @@ final class GroupInfoViewController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        if presentsAsPreview { title = "群信息" }
         view.backgroundColor = .systemGroupedBackground
         layoutViews()
         configureDataSource()
@@ -191,6 +199,12 @@ final class GroupInfoViewController: UIViewController {
 
     private func applySnapshot() {
         var snapshot = NSDiffableDataSourceSnapshot<Section, Row>()
+        if presentsAsPreview {
+            snapshot.appendSections([.groupInfo])
+            snapshot.appendItems([.groupName(viewModel.group?.name ?? "")], toSection: .groupInfo)
+            dataSource.apply(snapshot, animatingDifferences: false)
+            return
+        }
         snapshot.appendSections(Section.allCases)
 
         snapshot.appendItems([
@@ -235,17 +249,29 @@ final class GroupInfoViewController: UIViewController {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] members, canAdd, canRemove in
                 guard let self else { return }
-                self.memberGridView.update(members: members, canAdd: canAdd, canRemove: canRemove)
+                let allowManage = !self.presentsAsPreview
+                self.memberGridView.update(members: members, canAdd: canAdd && allowManage, canRemove: canRemove && allowManage)
                 self.updateGridHeader()
             }
             .store(in: &cancellables)
 
         viewModel.$canDismiss
+            .combineLatest(viewModel.$isMember)
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] canDismiss in
-                self?.bottomButton.setTitle(canDismiss ? "解散群组" : "退出群组", for: .normal)
+            .sink { [weak self] canDismiss, isMember in
+                self?.updateBottomButton(canDismiss: canDismiss, isMember: isMember)
             }
             .store(in: &cancellables)
+    }
+
+    private func updateBottomButton(canDismiss: Bool, isMember: Bool) {
+        if presentsAsPreview {
+            bottomButton.setTitle(isMember ? "进入群聊" : "加入群聊", for: .normal)
+            bottomButton.backgroundColor = Theme.accent
+        } else {
+            bottomButton.setTitle(canDismiss ? "解散群组" : "退出群组", for: .normal)
+            bottomButton.backgroundColor = .systemRed
+        }
     }
 
     private func updateGridHeader() {
@@ -258,6 +284,10 @@ final class GroupInfoViewController: UIViewController {
     // MARK: - Actions
 
     @objc private func bottomButtonTapped() {
+        if presentsAsPreview {
+            handlePreviewBottomTapped()
+            return
+        }
         if viewModel.canDismiss {
             confirmAction(title: "解散群组", message: "解散后群组将不可恢复，请谨慎操作。") { [weak self] in
                 self?.viewModel.dismissGroup { result in
@@ -280,6 +310,31 @@ final class GroupInfoViewController: UIViewController {
                             self?.navigationController?.popViewController(animated: true)
                         }
                     }
+                }
+            }
+        }
+    }
+
+    private func handlePreviewBottomTapped() {
+        let enterChat = { [weak self] in
+            guard let self else { return }
+            let groupId = self.viewModel.groupId
+            self.onEnterGroupChat?(groupId, self.viewModel.group?.name ?? groupId)
+        }
+        if viewModel.isMember {
+            enterChat()
+            return
+        }
+        bottomButton.isEnabled = false
+        viewModel.joinGroup { [weak self] result in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.bottomButton.isEnabled = true
+                switch result {
+                case .success:
+                    enterChat()
+                case .failure:
+                    self.showAlert(title: "加入失败", message: "请稍后重试")
                 }
             }
         }

@@ -131,4 +131,36 @@ final class GroupInfoViewModelTests: XCTestCase {
 
         XCTAssertEqual(fakeSyncing.lastRefreshedGroupId, "g1")
     }
+
+    // --- 双态(成员/非成员,扫群码入口)
+
+    func test_isMember_trueForMember_falseForStranger() throws {
+        try seedGroup(type: .normal)
+
+        XCTAssertTrue(makeViewModel(currentUserId: "member1").isMember)
+        XCTAssertFalse(makeViewModel(currentUserId: "stranger").isMember)
+    }
+
+    func test_nonMember_allManagementPermissionsFalse() throws {
+        try seedGroup(type: .normal)
+        let viewModel = makeViewModel(currentUserId: "stranger")
+
+        XCTAssertFalse(viewModel.canAddMembers)
+        XCTAssertFalse(viewModel.canKickMembers)
+        XCTAssertFalse(viewModel.canModifyInfo)
+        XCTAssertFalse(viewModel.canDismiss)
+    }
+
+    func test_joinGroup_addsSelfThenRefreshesGroupAndMembers() throws {
+        try seedGroup(type: .normal)
+        let viewModel = makeViewModel(currentUserId: "stranger")
+
+        var succeeded = false
+        viewModel.joinGroup { if case .success = $0 { succeeded = true } }
+
+        XCTAssertTrue(succeeded)
+        XCTAssertEqual(fakeActing.lastMemberIds, ["stranger"])
+        XCTAssertEqual(fakeSyncing.lastRefreshedGroupId, "g1")
+        XCTAssertEqual(fakeSyncing.lastRefreshedMembersGroupId, "g1")
+    }
 }

@@ -254,12 +254,19 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             }
             scanViewController.navigationController?.pushViewController(userInfoViewController, animated: true)
         case .group(let groupId):
-            // 双态群资料页在后续 Task 落地,先提示群 id。
-            let alert = UIAlertController(title: "群二维码", message: groupId, preferredStyle: .alert)
-            alert.addAction(UIAlertAction(title: "好", style: .default) { [weak scanViewController] _ in
-                scanViewController?.resumeScanning()
-            })
-            scanViewController.present(alert, animated: true)
+            let groupInfoViewModel = GroupInfoViewModel(
+                groupId: groupId,
+                groupActing: environment.groupSyncService,
+                groupSyncing: environment.groupSyncService,
+                storage: environment.storage,
+                currentUserId: environment.imClient?.userId ?? ""
+            )
+            let groupInfoViewController = GroupInfoViewController(viewModel: groupInfoViewModel)
+            groupInfoViewController.presentsAsPreview = true
+            groupInfoViewController.onEnterGroupChat = { [weak self, weak listViewController] groupId, name in
+                self?.openGroupConversation(groupId: groupId, name: name, via: listViewController)
+            }
+            scanViewController.navigationController?.pushViewController(groupInfoViewController, animated: true)
         case nil:
             let alert = UIAlertController(title: "扫描结果", message: raw, preferredStyle: .alert)
             alert.addAction(UIAlertAction(title: "好", style: .default) { [weak scanViewController] _ in
@@ -275,6 +282,18 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             conversationType: .single, target: uid, line: 0,
             displayName: user?.displayName ?? user?.name ?? uid,
             avatarURL: user?.portrait, previewText: "",
+            timestamp: 0, unreadCount: 0, hasUnreadMention: false,
+            isTop: false, isMuted: false, lastMessageStatus: nil
+        )
+        listViewController?.navigationController?.popToRootViewController(animated: false)
+        listViewController?.onConversationSelected?(row)
+    }
+
+    private func openGroupConversation(groupId: String, name: String, via listViewController: ConversationListViewController?) {
+        let group = try? environment.storage.groups.group(groupId: groupId)
+        let row = ConversationRow(
+            conversationType: .group, target: groupId, line: 0,
+            displayName: group?.name ?? name, avatarURL: group?.portrait, previewText: "",
             timestamp: 0, unreadCount: 0, hasUnreadMention: false,
             isTop: false, isMuted: false, lastMessageStatus: nil
         )
