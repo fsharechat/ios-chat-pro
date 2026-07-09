@@ -65,6 +65,45 @@ final class CreateGroupViewModelTests: XCTestCase {
         XCTAssertNil(fakeSyncing.lastRefreshedGroupId)
     }
 
+    // MARK: - startChat(发起聊天:1 人单聊 / 多人自动命名建群,对齐 Android)
+
+    func test_startChat_singleSelection_returnsSingleWithoutCreatingGroup() {
+        viewModel.toggleSelection(uid: "u2")
+
+        var received: CreateGroupViewModel.StartChatResult?
+        viewModel.startChat { result in received = try? result.get() }
+
+        XCTAssertEqual(received, .single(uid: "u2"))
+        XCTAssertNil(fakeActing.lastName)
+    }
+
+    func test_startChat_multiSelection_createsGroupWithAutoName() {
+        fakeActing.resultToReturn = .success("g5")
+        viewModel.toggleSelection(uid: "u2")
+        viewModel.toggleSelection(uid: "u3")
+
+        var received: CreateGroupViewModel.StartChatResult?
+        viewModel.startChat { result in received = try? result.get() }
+
+        XCTAssertEqual(received, .group(groupId: "g5", name: "Bob、Carol"))
+        XCTAssertEqual(fakeActing.lastName, "Bob、Carol")
+        XCTAssertEqual(Set(fakeActing.lastMemberIds ?? []), ["u2", "u3"])
+        XCTAssertEqual(fakeSyncing.lastRefreshedGroupId, "g5")
+    }
+
+    func test_startChat_emptySelection_doesNothing() {
+        var callbackCount = 0
+        viewModel.startChat { _ in callbackCount += 1 }
+
+        XCTAssertEqual(callbackCount, 0)
+        XCTAssertNil(fakeActing.lastName)
+    }
+
+    func test_autoGroupName_capsAtThreeNames() {
+        XCTAssertEqual(CreateGroupViewModel.autoGroupName(from: ["A", "B", "C", "D"]), "A、B、C")
+        XCTAssertEqual(CreateGroupViewModel.autoGroupName(from: ["A"]), "A")
+    }
+
     func test_unrelatedFriendListMutation_preservesInProgressSelection() throws {
         viewModel.toggleSelection(uid: "u2")
         XCTAssertEqual(viewModel.selectedCount, 1)

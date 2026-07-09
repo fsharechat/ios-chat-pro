@@ -50,6 +50,34 @@ public final class CreateGroupViewModel {
         selectedCount = rows.filter(\.isSelected).count
     }
 
+    public enum StartChatResult: Equatable {
+        case single(uid: String)
+        case group(groupId: String, name: String)
+    }
+
+    /// "发起聊天" semantics, aligned with Android's `CreateConversationActivity`:
+    /// exactly one contact selected opens a single chat directly; two or more
+    /// creates a group named after the first few members. No callback fires
+    /// for an empty selection (the UI disables the confirm button anyway).
+    public func startChat(completion: @escaping (Result<StartChatResult, Error>) -> Void) {
+        let selected = rows.filter(\.isSelected).map(\.contact)
+        guard let first = selected.first else { return }
+        guard selected.count > 1 else {
+            completion(.success(.single(uid: first.uid)))
+            return
+        }
+        let name = Self.autoGroupName(from: selected.map(\.displayName))
+        createGroup(name: name) { result in
+            completion(result.map { .group(groupId: $0, name: name) })
+        }
+    }
+
+    /// Android caps the auto-generated name at the first 3 display names
+    /// joined by "、" (`GroupViewModel.createGroup`).
+    public static func autoGroupName(from displayNames: [String]) -> String {
+        displayNames.prefix(3).joined(separator: "、")
+    }
+
     public func createGroup(name: String, completion: @escaping (Result<String, Error>) -> Void) {
         let memberIds = rows.filter(\.isSelected).map(\.contact.uid)
         groupActing?.createGroup(name: name, memberIds: memberIds) { [weak self] result in

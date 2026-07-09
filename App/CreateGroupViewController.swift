@@ -3,13 +3,18 @@ import UIKit
 import Combine
 import IMKit
 
+/// "发起聊天" contact picker, aligned with Android's
+/// `CreateConversationActivity`: picking one contact opens a single chat,
+/// picking several auto-names and creates a group (no name field).
 final class CreateGroupViewController: UIViewController {
     private let viewModel: CreateGroupViewModel
     private var cancellables = Set<AnyCancellable>()
     private var dataSource: UITableViewDiffableDataSource<Int, CreateGroupViewModel.SelectableRow>!
 
     private let tableView = UITableView()
-    private let nameField = UITextField()
+
+    /// Exactly one contact picked — caller opens the single chat.
+    var onSinglePicked: ((_ uid: String) -> Void)?
 
     /// `groupId`/`name` of the newly created group, for the caller to push
     /// straight into its chat screen.
@@ -18,7 +23,7 @@ final class CreateGroupViewController: UIViewController {
     init(viewModel: CreateGroupViewModel) {
         self.viewModel = viewModel
         super.init(nibName: nil, bundle: nil)
-        title = "创建群聊"
+        title = "发起聊天"
     }
 
     @available(*, unavailable)
@@ -27,7 +32,7 @@ final class CreateGroupViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = Theme.backgroundPrimary
-        navigationItem.rightBarButtonItem = UIBarButtonItem(title: "创建", style: .done, target: self, action: #selector(createTapped))
+        navigationItem.rightBarButtonItem = UIBarButtonItem(title: "确定", style: .done, target: self, action: #selector(confirmTapped))
         navigationItem.rightBarButtonItem?.isEnabled = false
         layoutViews()
         configureDataSource()
@@ -35,25 +40,15 @@ final class CreateGroupViewController: UIViewController {
     }
 
     private func layoutViews() {
-        nameField.placeholder = "群聊名称"
-        nameField.borderStyle = .roundedRect
-        nameField.backgroundColor = Theme.backgroundSecondary
-        nameField.translatesAutoresizingMaskIntoConstraints = false
-
         tableView.register(ContactListCell.self, forCellReuseIdentifier: ContactListCell.reuseIdentifier)
         tableView.delegate = self
         tableView.backgroundColor = Theme.backgroundPrimary
         tableView.translatesAutoresizingMaskIntoConstraints = false
 
-        view.addSubview(nameField)
         view.addSubview(tableView)
 
         NSLayoutConstraint.activate([
-            nameField.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 12),
-            nameField.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
-            nameField.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
-
-            tableView.topAnchor.constraint(equalTo: nameField.bottomAnchor, constant: 12),
+            tableView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
             tableView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             tableView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             tableView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
@@ -80,18 +75,21 @@ final class CreateGroupViewController: UIViewController {
             }
             .store(in: &cancellables)
         viewModel.$selectedCount
-            .sink { [weak self] count in self?.navigationItem.rightBarButtonItem?.isEnabled = count > 0 }
+            .sink { [weak self] count in
+                self?.navigationItem.rightBarButtonItem?.isEnabled = count > 0
+                self?.navigationItem.rightBarButtonItem?.title = count > 1 ? "确定(\(count))" : "确定"
+            }
             .store(in: &cancellables)
     }
 
-    @objc private func createTapped() {
-        let name = nameField.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        guard !name.isEmpty else { return }
+    @objc private func confirmTapped() {
         navigationItem.rightBarButtonItem?.isEnabled = false
-        viewModel.createGroup(name: name) { [weak self] result in
+        viewModel.startChat { [weak self] result in
             guard let self else { return }
             switch result {
-            case .success(let groupId):
+            case .success(.single(let uid)):
+                self.onSinglePicked?(uid)
+            case .success(.group(let groupId, let name)):
                 self.onGroupCreated?(groupId, name)
             case .failure:
                 self.navigationItem.rightBarButtonItem?.isEnabled = true

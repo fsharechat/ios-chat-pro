@@ -171,6 +171,19 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
                 groupSyncing: self.environment.groupSyncService
             )
             let createGroupViewController = CreateGroupViewController(viewModel: createGroupViewModel)
+            createGroupViewController.onSinglePicked = { [weak self, weak listViewController] uid in
+                guard let self else { return }
+                let user = try? self.environment.storage.users.user(uid: uid)
+                let row = ConversationRow(
+                    conversationType: .single, target: uid, line: 0,
+                    displayName: user?.displayName ?? user?.name ?? uid,
+                    avatarURL: user?.portrait, previewText: "",
+                    timestamp: 0, unreadCount: 0, hasUnreadMention: false,
+                    isTop: false, isMuted: false, lastMessageStatus: nil
+                )
+                listViewController?.navigationController?.popToRootViewController(animated: false)
+                listViewController?.onConversationSelected?(row)
+            }
             createGroupViewController.onGroupCreated = { [weak self, weak listViewController] groupId, name in
                 guard let self else { return }
                 let conversationViewModel = ConversationViewModel(
