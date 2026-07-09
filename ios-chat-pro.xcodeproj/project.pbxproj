@@ -25,6 +25,7 @@
 		27D4FFD33AED4D4826C72636 /* MarkdownRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = F83C1F61EA97D38D86CE7324 /* MarkdownRenderer.swift */; };
 		2B03B7D44659C520AEFC917E /* AvatarImageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5ACDCE0BC8F9E8EF7A77D603 /* AvatarImageView.swift */; };
 		2B926665FFEADFBA42F0EF00 /* ImageGalleryViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3835376AB25AFF2A347A3D4D /* ImageGalleryViewController.swift */; };
+		2D467309920A2C8A9DF5D565 /* ScanQRCodeViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D5A6962C0779989DD4A64B9 /* ScanQRCodeViewController.swift */; };
 		2E76E04DF1A447C0359BFE8B /* incoming_call_ring.mp3 in Resources */ = {isa = PBXBuildFile; fileRef = B2F3F3D8AB0E764052611AEA /* incoming_call_ring.mp3 */; };
 		2F6CCACDD9E93598CF9E204B /* WebRTC in Frameworks */ = {isa = PBXBuildFile; productRef = 245A8DCD66CF4BF518D7B079 /* WebRTC */; };
 		364E10AD59CD0F1727BB41EA /* SystemTipMessageCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CE3F018CE1845A6A279978F /* SystemTipMessageCell.swift */; };
@@ -62,6 +63,7 @@
 		A1611CC727D61FF89025CA77 /* IMClient in Frameworks */ = {isa = PBXBuildFile; productRef = 99257818497BC42EED99DC6C /* IMClient */; };
 		A2DF324B8AB6D3023C51A0CC /* TextValueRowCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7044AD6B3681821E10EBBD77 /* TextValueRowCell.swift */; };
 		AC4CF93C08183929C472085A /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93FA326C9B762DCAB590F502 /* AppDelegate.swift */; };
+		CDD9722F3A5A0B3869684D19 /* PlusMenuView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 400CEB53F49721DDD023955F /* PlusMenuView.swift */; };
 		D39C275731BBA18DD72E1C1B /* AboutViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53A605ADEEFEFF8E5A5674D9 /* AboutViewController.swift */; };
 		D50D77865C2E9DFF7B261829 /* FavGroupListViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDF651A69DA130BE158D8EF1 /* FavGroupListViewController.swift */; };
 		D91AD4CA3FBFB2F6A396A9DE /* NewFriendsViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0832B3942D777D6A0D67E100 /* NewFriendsViewController.swift */; };
@@ -97,9 +99,11 @@
 		2A868472B0D7644EECCB4752 /* SingleConversationInfoViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SingleConversationInfoViewController.swift; sourceTree = "<group>"; };
 		2A887447B146764C16A4E603 /* GroupInfoViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupInfoViewController.swift; sourceTree = "<group>"; };
 		2BFD92E47E6C5AE1CD51B7EE /* LocationPickerViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationPickerViewController.swift; sourceTree = "<group>"; };
+		2D5A6962C0779989DD4A64B9 /* ScanQRCodeViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanQRCodeViewController.swift; sourceTree = "<group>"; };
 		3835376AB25AFF2A347A3D4D /* ImageGalleryViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageGalleryViewController.swift; sourceTree = "<group>"; };
 		38D6C28B7BC3F34AF2780264 /* LoginViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginViewController.swift; sourceTree = "<group>"; };
 		3CE3F018CE1845A6A279978F /* SystemTipMessageCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemTipMessageCell.swift; sourceTree = "<group>"; };
+		400CEB53F49721DDD023955F /* PlusMenuView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlusMenuView.swift; sourceTree = "<group>"; };
 		433A3515C086B0178E667801 /* CallViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CallViewController.swift; sourceTree = "<group>"; };
 		4B035D72A76A3F36AA69CEBE /* UserInfoViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserInfoViewController.swift; sourceTree = "<group>"; };
 		4B177F3C5957AF38D8250AC7 /* GroupEntryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupEntryView.swift; sourceTree = "<group>"; };
@@ -241,6 +245,8 @@
 				55BBBC6ED72EBA9DF8E8E1BA /* NavigationRowCell.swift */,
 				1499CDEAF049F73974F200A4 /* NewFriendsEntryView.swift */,
 				0832B3942D777D6A0D67E100 /* NewFriendsViewController.swift */,
+				400CEB53F49721DDD023955F /* PlusMenuView.swift */,
+				2D5A6962C0779989DD4A64B9 /* ScanQRCodeViewController.swift */,
 				A0E388EB556B39D1EFCF7DEA /* SceneDelegate.swift */,
 				B4CDE3524198DE5097D7D78B /* SearchMessageViewController.swift */,
 				690D108BAFD2ED791E23C0A9 /* SearchUserViewController.swift */,
@@ -401,6 +407,8 @@
 				029D819BBD6C2F36F5711085 /* NavigationRowCell.swift in Sources */,
 				5419EAD85D7C9132AB94FBA6 /* NewFriendsEntryView.swift in Sources */,
 				D91AD4CA3FBFB2F6A396A9DE /* NewFriendsViewController.swift in Sources */,
+				CDD9722F3A5A0B3869684D19 /* PlusMenuView.swift in Sources */,
+				2D467309920A2C8A9DF5D565 /* ScanQRCodeViewController.swift in Sources */,
 				25D0AC4139A0950DB0CD2B4B /* SceneDelegate.swift in Sources */,
 				5178BA7DEFDD3B7EBEFDABE3 /* SearchMessageViewController.swift in Sources */,
 				08504DA6B3F3A100FA1C2484 /* SearchUserViewController.swift in Sources */,
