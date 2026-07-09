@@ -263,6 +263,20 @@ final class MessageContentCodecTests: XCTestCase {
         XCTAssertEqual(json["duration"] as? Int, 12)
     }
 
+    // Android 的 MediaMessageContent.decode 靠 wire.mediaType 识别媒体类型
+    // （IMAGE=1/VOICE=2/VIDEO=3/FILE=4），缺失时 mediaMessageContentFile 返回
+    // null，收端点击语音/文件毫无反应（2026-07-09 线上问题）。
+    func test_encodeMedia_setsAndroidMediaTypeField() {
+        XCTAssertEqual(MessageContentCodec.encode(
+            .image(thumbnail: nil, remoteURL: nil, localPath: nil)).mediaType, 1)
+        XCTAssertEqual(MessageContentCodec.encode(
+            .voice(remoteURL: nil, localPath: nil, duration: 1)).mediaType, 2)
+        XCTAssertEqual(MessageContentCodec.encode(
+            .video(thumbnail: nil, remoteURL: nil, localPath: nil, duration: 1)).mediaType, 3)
+        XCTAssertEqual(MessageContentCodec.encode(
+            .file(name: "a.txt", size: 1, remoteURL: nil, localPath: nil)).mediaType, 4)
+    }
+
     func test_encodeVoice_noRemoteURL_doesNotSetRemoteMediaURL() {
         let wire = MessageContentCodec.encode(.voice(remoteURL: nil, localPath: nil, duration: 5))
 

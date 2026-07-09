@@ -72,6 +72,10 @@ public enum MessageContentCodec {
             wire.searchableContent = text
         case .image(let thumbnail, let remoteURL, _):
             wire.type = 3
+            // Android 的 MediaMessageContent.decode 用 wire.mediaType 识别媒体
+            // 类型（MessageContentMediaType：IMAGE=1/VOICE=2/VIDEO=3/FILE=4），
+            // mediaMessageContentFile 靠它决定下载文件名——不设则收端点击无反应。
+            wire.mediaType = 1
             wire.searchableContent = "[图片]"
             if let thumbnail {
                 wire.data = thumbnail
@@ -102,6 +106,7 @@ public enum MessageContentCodec {
             }
         case .voice(let remoteURL, _, let duration):
             wire.type = 2
+            wire.mediaType = 2 // VOICE，见 .image 分支的说明
             wire.searchableContent = "[语音]"
             // Android SoundMessageContent.encode() writes {"duration":X} JSON into content field.
             if let json = try? JSONEncoder().encode(VoiceWireContent(duration: duration)),
@@ -111,11 +116,13 @@ public enum MessageContentCodec {
             if let remoteURL { wire.remoteMediaURL = remoteURL }
         case .file(let name, let size, let remoteURL, _):
             wire.type = 5
+            wire.mediaType = 4 // FILE，见 .image 分支的说明
             wire.searchableContent = name
             wire.content = "\(size)"
             if let remoteURL { wire.remoteMediaURL = remoteURL }
         case .video(let thumbnail, let remoteURL, _, let duration):
             wire.type = 6
+            wire.mediaType = 3 // VIDEO，见 .image 分支的说明
             wire.searchableContent = "[视频]"
             if let thumbnail { wire.data = thumbnail }
             if let remoteURL { wire.remoteMediaURL = remoteURL }
