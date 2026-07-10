@@ -26,6 +26,19 @@ final class CreateGroupViewModelTests: XCTestCase {
         XCTAssertTrue(viewModel.rows.allSatisfy { !$0.isSelected })
     }
 
+    func test_init_groupsRowsIntoPinyinSections() {
+        XCTAssertEqual(viewModel.sections.map(\.letter), ["B", "C"])
+        XCTAssertEqual(viewModel.sections.map { $0.rows.map(\.contact.displayName) }, [["Bob"], ["Carol"]])
+    }
+
+    func test_toggleSelection_updatesSectionsInPlace() {
+        viewModel.toggleSelection(uid: "u2")
+
+        let bobRow = viewModel.sections.flatMap(\.rows).first { $0.contact.uid == "u2" }
+        XCTAssertEqual(bobRow?.isSelected, true)
+        XCTAssertEqual(viewModel.sections.map(\.letter), ["B", "C"])
+    }
+
     func test_toggleSelection_flipsIsSelectedAndSelectedCount() {
         let uid = viewModel.rows[0].contact.uid
 

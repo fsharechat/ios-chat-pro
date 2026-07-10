@@ -19,6 +19,9 @@ public final class CreateGroupViewModel {
     }
 
     @Published public private(set) var rows: [SelectableRow] = []
+    /// 按拼音首字母分组后的行，供 UI 渲染分组表头 + 右侧字母索引，
+    /// 分组规则与联系人列表一致（`PinyinIndexer.sections`）。
+    @Published public private(set) var sections: [(letter: String, rows: [SelectableRow])] = []
     @Published public private(set) var selectedCount: Int = 0
 
     private let groupActing: GroupActing?
@@ -41,12 +44,16 @@ public final class CreateGroupViewModel {
             let contact = ContactRow(uid: user.uid, displayName: displayName, avatarURL: user.portrait, sectionLetter: PinyinIndexer.sectionLetter(for: displayName))
             return SelectableRow(contact: contact, isSelected: selectedUids.contains(user.uid))
         }
+        sections = PinyinIndexer.sections(of: rows, name: \.contact.displayName)
+            .map { (letter: $0.letter, rows: $0.items) }
         selectedCount = rows.filter(\.isSelected).count
     }
 
     public func toggleSelection(uid: String) {
         guard let index = rows.firstIndex(where: { $0.contact.uid == uid }) else { return }
         rows[index].isSelected.toggle()
+        sections = PinyinIndexer.sections(of: rows, name: \.contact.displayName)
+            .map { (letter: $0.letter, rows: $0.items) }
         selectedCount = rows.filter(\.isSelected).count
     }
 

@@ -7,9 +7,27 @@ import IMKit
 /// `CreateConversationActivity`: picking one contact opens a single chat,
 /// picking several auto-names and creates a group (no name field).
 final class CreateGroupViewController: UIViewController {
+    /// Same three overrides as `ContactListDataSource` — section headers and
+    /// the native A-Z index sidebar require subclassing the diffable data
+    /// source (Apple's documented pattern).
+    private final class DataSource: UITableViewDiffableDataSource<String, CreateGroupViewModel.SelectableRow> {
+        override func tableView(_ tableView: UITableView, titleForHeaderInSection section: Int) -> String? {
+            snapshot().sectionIdentifiers[section]
+        }
+
+        override func sectionIndexTitles(for tableView: UITableView) -> [String]? {
+            let titles = snapshot().sectionIdentifiers
+            return titles.isEmpty ? nil : titles
+        }
+
+        override func tableView(_ tableView: UITableView, sectionForSectionIndexTitle title: String, at index: Int) -> Int {
+            snapshot().sectionIdentifiers.firstIndex(of: title) ?? 0
+        }
+    }
+
     private let viewModel: CreateGroupViewModel
     private var cancellables = Set<AnyCancellable>()
-    private var dataSource: UITableViewDiffableDataSource<Int, CreateGroupViewModel.SelectableRow>!
+    private var dataSource: DataSource!
 
     private let tableView = UITableView()
 
@@ -44,6 +62,8 @@ final class CreateGroupViewController: UIViewController {
         tableView.register(ContactListCell.self, forCellReuseIdentifier: ContactListCell.reuseIdentifier)
         tableView.delegate = self
         tableView.backgroundColor = Theme.backgroundPrimary
+        tableView.separatorColor = Theme.backgroundTertiary
+        tableView.sectionIndexColor = Theme.accent
         tableView.translatesAutoresizingMaskIntoConstraints = false
 
         view.addSubview(tableView)
@@ -57,7 +77,7 @@ final class CreateGroupViewController: UIViewController {
     }
 
     private func configureDataSource() {
-        dataSource = UITableViewDiffableDataSource<Int, CreateGroupViewModel.SelectableRow>(tableView: tableView) { tableView, indexPath, row in
+        dataSource = DataSource(tableView: tableView) { tableView, indexPath, row in
             let cell = tableView.dequeueReusableCell(withIdentifier: ContactListCell.reuseIdentifier, for: indexPath) as! ContactListCell
             cell.configure(with: row.contact)
             cell.accessoryType = row.isSelected ? .checkmark : .none
@@ -66,13 +86,15 @@ final class CreateGroupViewController: UIViewController {
     }
 
     private func bindViewModel() {
-        viewModel.$rows
-            .sink { [weak self] rows in
+        viewModel.$sections
+            .sink { [weak self] sections in
                 guard let self else { return }
-                var snapshot = NSDiffableDataSourceSnapshot<Int, CreateGroupViewModel.SelectableRow>()
-                snapshot.appendSections([0])
-                snapshot.appendItems(rows, toSection: 0)
-                self.dataSource.apply(snapshot, animatingDifferences: true)
+                var snapshot = NSDiffableDataSourceSnapshot<String, CreateGroupViewModel.SelectableRow>()
+                snapshot.appendSections(sections.map { $0.letter })
+                for section in sections {
+                    snapshot.appendItems(section.rows, toSection: section.letter)
+                }
+                self.dataSource.apply(snapshot, animatingDifferences: false)
             }
             .store(in: &cancellables)
         viewModel.$selectedCount
