@@ -7,8 +7,7 @@ final class TextMessageCell: UITableViewCell {
 
     private let bubbleView = UIView()
     private let messageTextLabel = UILabel()
-    private let statusLabel = UILabel()
-    private let retryButton = UIButton(type: .system)
+    private let statusIndicator = MessageStatusIndicatorView()
     private let senderNameLabel = UILabel()
     private let senderAvatarImageView = AvatarImageView(loader: AvatarLoader.shared)
     private let bubbleColumn = UIStackView()
@@ -55,25 +54,19 @@ final class TextMessageCell: UITableViewCell {
         senderNameLabel.font = .systemFont(ofSize: 12)
         senderNameLabel.textColor = Theme.textPrimary.withAlphaComponent(0.6)
 
-        statusLabel.font = .systemFont(ofSize: 11)
-        statusLabel.textColor = .secondaryLabel
-
-        retryButton.setImage(UIImage(systemName: "exclamationmark.circle.fill"), for: .normal)
-        retryButton.tintColor = .systemRed
-        retryButton.addTarget(self, action: #selector(retryTapped), for: .touchUpInside)
+        statusIndicator.onRetry = { [weak self] in self?.onRetryTapped?() }
 
         expandButton.setTitle("查看全文", for: .normal)
         expandButton.titleLabel?.font = .systemFont(ofSize: 13)
         expandButton.addTarget(self, action: #selector(expandTapped), for: .touchUpInside)
         expandButton.isHidden = true
 
-        // bubbleColumn stacks sender name + bubble + expand + status vertically
+        // bubbleColumn stacks sender name + bubble + expand vertically
         bubbleColumn.axis = .vertical
         bubbleColumn.spacing = 2
         bubbleColumn.addArrangedSubview(senderNameLabel)
         bubbleColumn.addArrangedSubview(bubbleView)
         bubbleColumn.addArrangedSubview(expandButton)
-        bubbleColumn.addArrangedSubview(statusLabel)
 
         rowStack.axis = .horizontal
         rowStack.alignment = .bottom
@@ -84,7 +77,13 @@ final class TextMessageCell: UITableViewCell {
         // referencing contentView is activated — they need a common ancestor.
         rowStack.addArrangedSubview(bubbleColumn)
 
+        // 状态指示器不入 stack：直接钉在气泡左侧、垂直居中。
+        statusIndicator.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(statusIndicator)
+
         NSLayoutConstraint.activate([
+            statusIndicator.trailingAnchor.constraint(equalTo: bubbleView.leadingAnchor, constant: -6),
+            statusIndicator.centerYAnchor.constraint(equalTo: bubbleView.centerYAnchor),
             senderAvatarImageView.widthAnchor.constraint(equalToConstant: 36),
             senderAvatarImageView.heightAnchor.constraint(equalToConstant: 36),
             rowStack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 8),
@@ -134,14 +133,12 @@ final class TextMessageCell: UITableViewCell {
         // attributedText repaints the whole string, clobbering the per-run
         // colors (quote/divider alpha) MarkdownRenderer produced.
         bubbleColumn.alignment = isOutgoing ? .trailing : .leading
-        statusLabel.textAlignment = isOutgoing ? .right : .left
 
-        switch row.status {
-        case .sending: statusLabel.text = "发送中"
-        case .sendFailure: statusLabel.text = "发送失败"
-        default: statusLabel.text = nil
+        switch (isOutgoing, row.status) {
+        case (true, .sending): statusIndicator.apply(.sending)
+        case (true, .sendFailure): statusIndicator.apply(.failed)
+        default: statusIndicator.apply(.none)
         }
-        statusLabel.isHidden = statusLabel.text == nil
 
         // Reset rowStack: keep bubbleColumn in the hierarchy (its width
         // constraint to contentView must stay valid); remove everything else.
@@ -149,13 +146,11 @@ final class TextMessageCell: UITableViewCell {
             rowStack.removeArrangedSubview(view)
             if view !== bubbleColumn { view.removeFromSuperview() }
         }
-        retryButton.removeFromSuperview()
         senderAvatarImageView.removeFromSuperview()
 
         if isOutgoing {
             rowStack.addArrangedSubview(spacer)
             rowStack.addArrangedSubview(bubbleColumn)
-            if row.status == .sendFailure { rowStack.addArrangedSubview(retryButton) }
             rowStack.addArrangedSubview(senderAvatarImageView)
             senderAvatarImageView.setAvatar(urlString: row.senderAvatarURL, displayName: "我")
         } else {
@@ -178,6 +173,5 @@ final class TextMessageCell: UITableViewCell {
         configure(with: row)
     }
 
-    @objc private func retryTapped() { onRetryTapped?() }
     @objc private func expandTapped() { onExpandTapped?() }
 }

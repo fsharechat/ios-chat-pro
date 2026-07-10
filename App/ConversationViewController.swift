@@ -272,9 +272,9 @@ final class ConversationViewController: UIViewController {
             applyPreservingReadingPosition(snapshot, anchor: oldRows.first)
             return
         }
-        // Disable animation on initial load (oldRows empty) to avoid visible
-        // insert-from-top flash before scrollToBottom repositions the view.
-        dataSource.apply(snapshot, animatingDifferences: !oldRows.isEmpty) { [weak self] in
+        // 微信风格：新消息（发出或收到）直接落到底部，状态翻转原地刷新，
+        // 一律不带插入/切换动画。
+        dataSource.apply(snapshot, animatingDifferences: false) { [weak self] in
             guard let self else { return }
             if isAppend {
                 if !self.tableReady {
@@ -283,7 +283,7 @@ final class ConversationViewController: UIViewController {
                     self.view.layoutIfNeeded()
                     self.tableReady = true
                 }
-                self.scrollToBottom(animated: !oldRows.isEmpty)
+                self.scrollToBottom(animated: false)
                 self.tableView.alpha = 1
             }
         }

@@ -76,7 +76,8 @@ final class ConversationListViewController: UIViewController {
                 var snapshot = NSDiffableDataSourceSnapshot<Int, ConversationRow>()
                 snapshot.appendSections([0])
                 snapshot.appendItems(rows, toSection: 0)
-                self.dataSource.apply(snapshot, animatingDifferences: true)
+                // 微信风格：来新消息/顺序变化直接刷新，不带切换动画。
+                self.dataSource.apply(snapshot, animatingDifferences: false)
             }
             .store(in: &cancellables)
     }

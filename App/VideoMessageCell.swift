@@ -20,8 +20,7 @@ final class VideoMessageCell: UITableViewCell {
     private let playCircle = UIView()
     private let playIcon = UIImageView(image: UIImage(systemName: "play.fill"))
     private let durationLabel = UILabel()
-    private let activityIndicator = UIActivityIndicatorView(style: .medium)
-    private let retryButton = UIButton(type: .system)
+    private let statusIndicator = MessageStatusIndicatorView()
     private let senderNameLabel = UILabel()
     private let senderAvatarImageView = AvatarImageView(loader: AvatarLoader.shared)
     private let bubbleColumn = UIStackView()
@@ -50,7 +49,7 @@ final class VideoMessageCell: UITableViewCell {
         onTapped = nil
         onRetryTapped = nil
         thumbnailView.image = nil
-        activityIndicator.stopAnimating()
+        statusIndicator.apply(.none)
     }
 
     private func layoutViews() {
@@ -79,14 +78,7 @@ final class VideoMessageCell: UITableViewCell {
         durationLabel.textAlignment = .center
         durationLabel.translatesAutoresizingMaskIntoConstraints = false
 
-        // Activity indicator (shown during upload)
-        activityIndicator.color = .white
-        activityIndicator.translatesAutoresizingMaskIntoConstraints = false
-
-        // Retry button
-        retryButton.setImage(UIImage(systemName: "exclamationmark.circle.fill"), for: .normal)
-        retryButton.tintColor = .systemRed
-        retryButton.addTarget(self, action: #selector(retryTapped), for: .touchUpInside)
+        statusIndicator.onRetry = { [weak self] in self?.onRetryTapped?() }
 
         // Bubble container holds thumbnail + overlays
         bubbleContainer.layer.cornerRadius = Theme.bubbleCornerRadius
@@ -99,7 +91,6 @@ final class VideoMessageCell: UITableViewCell {
         bubbleContainer.addSubview(thumbnailView)
         bubbleContainer.addSubview(playCircle)
         bubbleContainer.addSubview(durationLabel)
-        bubbleContainer.addSubview(activityIndicator)
 
         senderNameLabel.font = .systemFont(ofSize: 12)
         senderNameLabel.textColor = Theme.textPrimary.withAlphaComponent(0.6)
@@ -115,6 +106,10 @@ final class VideoMessageCell: UITableViewCell {
         rowStack.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(rowStack)
         rowStack.addArrangedSubview(bubbleColumn)
+
+        // 状态指示器不入 stack：直接钉在气泡左侧、垂直居中。
+        statusIndicator.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(statusIndicator)
 
         bubbleWidthConstraint = bubbleContainer.widthAnchor.constraint(equalToConstant: ImageBubbleSizing.fallbackSize.width)
         bubbleHeightConstraint = bubbleContainer.heightAnchor.constraint(equalToConstant: ImageBubbleSizing.fallbackSize.height)
@@ -151,8 +146,8 @@ final class VideoMessageCell: UITableViewCell {
             durationLabel.heightAnchor.constraint(equalToConstant: 20),
             durationLabel.widthAnchor.constraint(greaterThanOrEqualToConstant: 36),
 
-            activityIndicator.centerXAnchor.constraint(equalTo: bubbleContainer.centerXAnchor),
-            activityIndicator.centerYAnchor.constraint(equalTo: bubbleContainer.centerYAnchor),
+            statusIndicator.trailingAnchor.constraint(equalTo: bubbleContainer.leadingAnchor, constant: -6),
+            statusIndicator.centerYAnchor.constraint(equalTo: bubbleContainer.centerYAnchor),
         ])
     }
 
@@ -168,14 +163,19 @@ final class VideoMessageCell: UITableViewCell {
         durationLabel.text = " \(formatDuration(data.duration)) "
         playCircle.isHidden = data.isUploading
         durationLabel.isHidden = data.isUploading
-        activityIndicator.isHidden = !data.isUploading
-        if data.isUploading { activityIndicator.startAnimating() } else { activityIndicator.stopAnimating() }
+        if data.isOutgoing, data.isUploading {
+            statusIndicator.apply(.sending)
+        } else if data.isOutgoing, data.isFailed {
+            statusIndicator.apply(.failed)
+        } else {
+            statusIndicator.apply(.none)
+        }
 
         let showsSender = !data.isOutgoing && data.senderDisplayName != nil
         senderNameLabel.isHidden = !showsSender
         senderNameLabel.text = showsSender ? data.senderDisplayName : nil
 
-        applyLayout(isOutgoing: data.isOutgoing, isFailed: data.isFailed,
+        applyLayout(isOutgoing: data.isOutgoing,
                     avatarURL: data.senderAvatarURL, displayName: data.senderDisplayName ?? "")
     }
 
@@ -191,18 +191,16 @@ final class VideoMessageCell: UITableViewCell {
         ))
     }
 
-    private func applyLayout(isOutgoing: Bool, isFailed: Bool, avatarURL: String?, displayName: String) {
+    private func applyLayout(isOutgoing: Bool, avatarURL: String?, displayName: String) {
         for view in rowStack.arrangedSubviews {
             rowStack.removeArrangedSubview(view)
             if view !== bubbleColumn { view.removeFromSuperview() }
         }
-        retryButton.removeFromSuperview()
         senderAvatarImageView.removeFromSuperview()
 
         if isOutgoing {
             rowStack.addArrangedSubview(spacer)
             rowStack.addArrangedSubview(bubbleColumn)
-            if isFailed { rowStack.addArrangedSubview(retryButton) }
             rowStack.addArrangedSubview(senderAvatarImageView)
             senderAvatarImageView.setAvatar(urlString: avatarURL, displayName: "我")
         } else {
@@ -220,5 +218,4 @@ final class VideoMessageCell: UITableViewCell {
     }
 
     @objc private func tapped() { onTapped?() }
-    @objc private func retryTapped() { onRetryTapped?() }
 }

@@ -23,6 +23,7 @@
 		210E1455397E2917F39FD69A /* ImageZoomPageViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5748DFBF068B55B8C14CB9B2 /* ImageZoomPageViewController.swift */; };
 		25D0AC4139A0950DB0CD2B4B /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = A0E388EB556B39D1EFCF7DEA /* SceneDelegate.swift */; };
 		27D4FFD33AED4D4826C72636 /* MarkdownRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = F83C1F61EA97D38D86CE7324 /* MarkdownRenderer.swift */; };
+		2875F6F3E1D76FA101CCEACC /* MessageStatusIndicatorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B712BFC45B9060DC3503548 /* MessageStatusIndicatorView.swift */; };
 		2B03B7D44659C520AEFC917E /* AvatarImageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5ACDCE0BC8F9E8EF7A77D603 /* AvatarImageView.swift */; };
 		2B926665FFEADFBA42F0EF00 /* ImageGalleryViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3835376AB25AFF2A347A3D4D /* ImageGalleryViewController.swift */; };
 		2D467309920A2C8A9DF5D565 /* ScanQRCodeViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D5A6962C0779989DD4A64B9 /* ScanQRCodeViewController.swift */; };
@@ -96,6 +97,7 @@
 		1499CDEAF049F73974F200A4 /* NewFriendsEntryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewFriendsEntryView.swift; sourceTree = "<group>"; };
 		14A2F42FFBACA55D6A5741FA /* ForwardPreviewViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForwardPreviewViewController.swift; sourceTree = "<group>"; };
 		1A7AF95FBB4F8D27A5F4067D /* MessageInputBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageInputBar.swift; sourceTree = "<group>"; };
+		1B712BFC45B9060DC3503548 /* MessageStatusIndicatorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageStatusIndicatorView.swift; sourceTree = "<group>"; };
 		25D8EA95D53B3D0A78B985BE /* ExtPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExtPanelView.swift; sourceTree = "<group>"; };
 		278BCC3264FADA3C5FD49230 /* MarkdownTableRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownTableRenderer.swift; sourceTree = "<group>"; };
 		29D71A57B85DC64E3CCC00C7 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -244,6 +246,7 @@
 				278BCC3264FADA3C5FD49230 /* MarkdownTableRenderer.swift */,
 				0CE65FB3E4BBBDBC011338C7 /* MentionPickerViewController.swift */,
 				1A7AF95FBB4F8D27A5F4067D /* MessageInputBar.swift */,
+				1B712BFC45B9060DC3503548 /* MessageStatusIndicatorView.swift */,
 				55F30F8F9D722D06F08E8D99 /* MeViewController.swift */,
 				FED7AD303D48EFB2741ED7BD /* MyProfileViewController.swift */,
 				FCCFBE9437171B403CF11393 /* MyQRCodeViewController.swift */,
@@ -409,6 +412,7 @@
 				942E1DEC4481B341B23959E7 /* MeViewController.swift in Sources */,
 				471B25795C53FC319DED0CCD /* MentionPickerViewController.swift in Sources */,
 				F0E0711134156FE1E30507ED /* MessageInputBar.swift in Sources */,
+				2875F6F3E1D76FA101CCEACC /* MessageStatusIndicatorView.swift in Sources */,
 				890FAE1EC814F14A52439526 /* MyProfileViewController.swift in Sources */,
 				9D5257C3863A7F98DACD6D8B /* MyQRCodeViewController.swift in Sources */,
 				029D819BBD6C2F36F5711085 /* NavigationRowCell.swift in Sources */,

@@ -11,6 +11,7 @@ final class ConversationListCell: UITableViewCell {
     private let previewLabel = UILabel()
     private let unreadBadge = BadgeLabel()
     private let muteIcon = UIImageView(image: UIImage(systemName: "bell.slash.fill"))
+    private let sendFailureIcon = UIImageView(image: UIImage(systemName: "exclamationmark.circle.fill"))
 
     override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
         super.init(style: style, reuseIdentifier: reuseIdentifier)
@@ -46,11 +47,17 @@ final class ConversationListCell: UITableViewCell {
         muteIcon.tintColor = .secondaryLabel
         muteIcon.setContentHuggingPriority(.required, for: .horizontal)
 
+        // 最后一条消息发送失败：预览文字左侧的红色感叹号（微信风格）。
+        sendFailureIcon.tintColor = .systemRed
+        sendFailureIcon.contentMode = .scaleAspectFit
+        sendFailureIcon.setContentHuggingPriority(.required, for: .horizontal)
+        sendFailureIcon.setContentCompressionResistancePriority(.required, for: .horizontal)
+
         let topRow = UIStackView(arrangedSubviews: [nameLabel, timestampLabel])
         topRow.axis = .horizontal
         topRow.spacing = Theme.standardSpacing
 
-        let bottomRow = UIStackView(arrangedSubviews: [previewLabel, muteIcon, unreadBadge])
+        let bottomRow = UIStackView(arrangedSubviews: [sendFailureIcon, previewLabel, muteIcon, unreadBadge])
         bottomRow.axis = .horizontal
         bottomRow.spacing = 6
         bottomRow.alignment = .center
@@ -69,6 +76,8 @@ final class ConversationListCell: UITableViewCell {
         NSLayoutConstraint.activate([
             avatarImageView.widthAnchor.constraint(equalToConstant: 48),
             avatarImageView.heightAnchor.constraint(equalToConstant: 48),
+            sendFailureIcon.widthAnchor.constraint(equalToConstant: 16),
+            sendFailureIcon.heightAnchor.constraint(equalToConstant: 16),
             unreadBadge.widthAnchor.constraint(greaterThanOrEqualToConstant: 18),
             unreadBadge.heightAnchor.constraint(equalToConstant: 18),
             rowStack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 16),
@@ -84,14 +93,8 @@ final class ConversationListCell: UITableViewCell {
         timestampLabel.text = Self.formattedTimestamp(row.timestamp)
 
         let mentionPrefix = row.hasUnreadMention ? "[有人@我] " : ""
-        switch row.lastMessageStatus {
-        case .sending:
-            previewLabel.text = mentionPrefix + "发送中... " + row.previewText
-        case .sendFailure:
-            previewLabel.text = mentionPrefix + "发送失败 " + row.previewText
-        default:
-            previewLabel.text = mentionPrefix + row.previewText
-        }
+        previewLabel.text = mentionPrefix + row.previewText
+        sendFailureIcon.isHidden = row.lastMessageStatus != .sendFailure
 
         backgroundColor = row.isTop ? Theme.backgroundTertiary : Theme.backgroundSecondary
         muteIcon.isHidden = !row.isMuted

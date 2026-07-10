@@ -26,8 +26,7 @@ final class ImageMessageCell: UITableViewCell {
     static let reuseIdentifier = "ImageMessageCell"
 
     private let bubbleImageView = UIImageView()
-    private let activityIndicator = UIActivityIndicatorView(style: .medium)
-    private let retryButton = UIButton(type: .system)
+    private let statusIndicator = MessageStatusIndicatorView()
     private let senderNameLabel = UILabel()
     private let senderAvatarImageView = AvatarImageView(loader: AvatarLoader.shared)
     private let bubbleColumn = UIStackView()
@@ -58,7 +57,7 @@ final class ImageMessageCell: UITableViewCell {
         onTapped = nil
         onRetryTapped = nil
         bubbleImageView.image = nil
-        activityIndicator.stopAnimating()
+        statusIndicator.apply(.none)
         currentRemoteURL = nil
     }
 
@@ -71,12 +70,7 @@ final class ImageMessageCell: UITableViewCell {
         bubbleImageView.translatesAutoresizingMaskIntoConstraints = false
         bubbleImageView.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(tapped)))
 
-        activityIndicator.translatesAutoresizingMaskIntoConstraints = false
-        bubbleImageView.addSubview(activityIndicator)
-
-        retryButton.setImage(UIImage(systemName: "exclamationmark.circle.fill"), for: .normal)
-        retryButton.tintColor = .systemRed
-        retryButton.addTarget(self, action: #selector(retryTapped), for: .touchUpInside)
+        statusIndicator.onRetry = { [weak self] in self?.onRetryTapped?() }
 
         senderNameLabel.font = .systemFont(ofSize: 12)
         senderNameLabel.textColor = Theme.textPrimary.withAlphaComponent(0.6)
@@ -96,6 +90,10 @@ final class ImageMessageCell: UITableViewCell {
         // width constraint that references contentView.
         rowStack.addArrangedSubview(bubbleColumn)
 
+        // 状态指示器不入 stack：直接钉在气泡左侧、垂直居中。
+        statusIndicator.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(statusIndicator)
+
         bubbleWidthConstraint = bubbleImageView.widthAnchor.constraint(equalToConstant: ImageBubbleSizing.fallbackSize.width)
         bubbleHeightConstraint = bubbleImageView.heightAnchor.constraint(equalToConstant: ImageBubbleSizing.fallbackSize.height)
 
@@ -111,8 +109,8 @@ final class ImageMessageCell: UITableViewCell {
             bubbleWidthConstraint,
             bubbleHeightConstraint,
 
-            activityIndicator.centerXAnchor.constraint(equalTo: bubbleImageView.centerXAnchor),
-            activityIndicator.centerYAnchor.constraint(equalTo: bubbleImageView.centerYAnchor),
+            statusIndicator.trailingAnchor.constraint(equalTo: bubbleImageView.leadingAnchor, constant: -6),
+            statusIndicator.centerYAnchor.constraint(equalTo: bubbleImageView.centerYAnchor),
         ])
     }
 
@@ -140,21 +138,24 @@ final class ImageMessageCell: UITableViewCell {
                 }
             }
         }
-        activityIndicator.isHidden = !data.isUploading
-        if data.isUploading { activityIndicator.startAnimating() } else { activityIndicator.stopAnimating() }
+        if data.isOutgoing, data.isUploading {
+            statusIndicator.apply(.sending)
+        } else if data.isOutgoing, data.isFailed {
+            statusIndicator.apply(.failed)
+        } else {
+            statusIndicator.apply(.none)
+        }
 
         // Reset rowStack: keep bubbleColumn in the hierarchy.
         for view in rowStack.arrangedSubviews {
             rowStack.removeArrangedSubview(view)
             if view !== bubbleColumn { view.removeFromSuperview() }
         }
-        retryButton.removeFromSuperview()
         senderAvatarImageView.removeFromSuperview()
 
         if data.isOutgoing {
             rowStack.addArrangedSubview(spacer)
             rowStack.addArrangedSubview(bubbleColumn)
-            if data.isFailed { rowStack.addArrangedSubview(retryButton) }
             rowStack.addArrangedSubview(senderAvatarImageView)
             senderAvatarImageView.setAvatar(urlString: data.senderAvatarURL, displayName: "我")
         } else {
@@ -169,5 +170,4 @@ final class ImageMessageCell: UITableViewCell {
     }
 
     @objc private func tapped() { onTapped?() }
-    @objc private func retryTapped() { onRetryTapped?() }
 }
