@@ -42,6 +42,11 @@ final class MessageInputBar: UIView {
     private let extButton = UIButton(type: .system)
     private let sendButton = UIButton(type: .system)
     private var textViewHeightConstraint: NSLayoutConstraint!
+    /// ext(+) 与发送按钮共用输入栏右侧区域但宽度不同（32 vs 文字+内边距），
+    /// 两者的右缘钉边约束互斥激活，否则隐藏方的约束仍参与布局，
+    /// 会把发送按钮压回 + 号的 32pt 槽位，宽度设置全部失效。
+    private var extTrailingConstraint: NSLayoutConstraint!
+    private var sendLeadingConstraint: NSLayoutConstraint!
 
     private let panelContainer = UIView()
     private var panelContainerHeightConstraint: NSLayoutConstraint!
@@ -133,7 +138,13 @@ final class MessageInputBar: UIView {
         extButton.addTarget(self, action: #selector(extTapped), for: .touchUpInside)
 
         sendButton.setTitle("发送", for: .normal)
-        sendButton.tintColor = Theme.accent
+        sendButton.setTitleColor(.white, for: .normal)
+        sendButton.titleLabel?.font = .systemFont(ofSize: 15, weight: .medium)
+        sendButton.backgroundColor = Theme.accent
+        sendButton.layer.cornerRadius = 6
+        sendButton.contentEdgeInsets = UIEdgeInsets(top: 0, left: 18, bottom: 0, right: 18)
+        sendButton.setContentHuggingPriority(.required, for: .horizontal)
+        sendButton.setContentCompressionResistancePriority(.required, for: .horizontal)
         sendButton.isHidden = true
         sendButton.addTarget(self, action: #selector(sendTapped), for: .touchUpInside)
 
@@ -170,15 +181,18 @@ final class MessageInputBar: UIView {
             emojiButton.heightAnchor.constraint(equalToConstant: 32),
 
             extButton.leadingAnchor.constraint(equalTo: emojiButton.trailingAnchor, constant: 4),
-            extButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
             extButton.bottomAnchor.constraint(equalTo: textView.bottomAnchor),
             extButton.widthAnchor.constraint(equalToConstant: 32),
             extButton.heightAnchor.constraint(equalToConstant: 32),
 
-            sendButton.leadingAnchor.constraint(equalTo: emojiButton.trailingAnchor, constant: 4),
             sendButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
             sendButton.bottomAnchor.constraint(equalTo: textView.bottomAnchor),
+            sendButton.heightAnchor.constraint(equalToConstant: 36),
         ])
+
+        extTrailingConstraint = extButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8)
+        sendLeadingConstraint = sendButton.leadingAnchor.constraint(equalTo: emojiButton.trailingAnchor, constant: 4)
+        extTrailingConstraint.isActive = true
     }
 
     private func setupPanelContainer() {
@@ -369,6 +383,11 @@ final class MessageInputBar: UIView {
         let hasText = !textView.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         sendButton.isHidden = !hasText
         extButton.isHidden = hasText
+        // 先全部松开再激活当前方的钉边约束，避免瞬时互相冲突。
+        extTrailingConstraint.isActive = false
+        sendLeadingConstraint.isActive = false
+        extTrailingConstraint.isActive = !hasText
+        sendLeadingConstraint.isActive = hasText
     }
 
     private func updateHeight() {
