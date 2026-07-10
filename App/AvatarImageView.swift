@@ -11,6 +11,7 @@ import IMKit
 final class AvatarImageView: UIImageView {
     private let loader: AvatarLoading
     private var currentToken: UUID?
+    private var currentURLString: String?
     private let initialsLabel = UILabel()
 
     init(loader: AvatarLoading) {
@@ -40,10 +41,18 @@ final class AvatarImageView: UIImageView {
     }
 
     func setAvatar(urlString: String?, displayName: String) {
+        initialsLabel.text = String(displayName.prefix(1)).uppercased()
+
+        // Reconfiguring with the same URL while the real image is already on
+        // screen (e.g. a multi-select cell redrawn just to toggle its
+        // checkmark) must not reset to the initials placeholder — that reset
+        // is what flashes initials ↔ avatar.
+        if urlString != nil, urlString == currentURLString, image != nil { return }
+
         let token = UUID()
         currentToken = token
+        currentURLString = urlString
         image = nil
-        initialsLabel.text = String(displayName.prefix(1)).uppercased()
         initialsLabel.isHidden = false
 
         guard let urlString else { return }
