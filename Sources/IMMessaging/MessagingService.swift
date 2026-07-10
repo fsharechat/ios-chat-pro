@@ -28,7 +28,7 @@ public final class MessagingService {
 
     private struct PendingRemoteLoad {
         let timeoutToken: SchedulerToken
-        let completion: (Int) -> Void
+        let completion: (Int?) -> Void
     }
     private var pendingRemoteLoads: [UInt16: PendingRemoteLoad] = [:]
 
@@ -338,9 +338,11 @@ public final class MessagingService {
     /// remote fallback the conversation screen uses when local history is
     /// exhausted. `beforeUid == 0` means "from the newest".
     ///
-    /// `completion` receives the number of *newly persisted* messages: 0 on
-    /// server error, on timeout (5s, same as send acks), or when everything
-    /// returned was already stored. Persisting history deliberately does
+    /// `completion` receives the number of *newly persisted* messages on
+    /// success (0 when everything returned was already stored, or the server
+    /// had nothing older), and `nil` when the request failed — server error
+    /// or timeout (5s, same as send acks) — so the caller can retry later
+    /// instead of treating history as exhausted. Persisting history deliberately does
     /// **not** touch the conversation row (no unread badge, no last-message
     /// preview regression to an older message) nor the incremental-pull sync
     /// head — history sits strictly behind what the user has already seen.
@@ -350,7 +352,7 @@ public final class MessagingService {
         line: Int,
         beforeUid: Int64,
         count: Int,
-        completion: @escaping (Int) -> Void
+        completion: @escaping (Int?) -> Void
     ) {
         var request = Im_LoadRemoteMessages()
         request.conversation.type = Int32(conversationType.rawValue)
@@ -358,10 +360,10 @@ public final class MessagingService {
         request.conversation.line = Int32(line)
         request.beforeUid = beforeUid
         request.count = Int32(count)
-        guard let body = try? request.serializedData() else { completion(0); return }
+        guard let body = try? request.serializedData() else { completion(nil); return }
         let wireId = imClient.sendFrame(signal: .publish, subSignal: .lrm, body: body)
         let timeoutToken = scheduler.scheduleOnce(after: 5) { [weak self] in
-            self?.pendingRemoteLoads.removeValue(forKey: wireId)?.completion(0)
+            self?.pendingRemoteLoads.removeValue(forKey: wireId)?.completion(nil)
         }
         pendingRemoteLoads[wireId] = PendingRemoteLoad(timeoutToken: timeoutToken, completion: completion)
     }
@@ -369,7 +371,10 @@ public final class MessagingService {
     private func handleRemoteMessagesResult(wireId: UInt16, messages: [Im_Message]?) {
         guard let pending = pendingRemoteLoads.removeValue(forKey: wireId) else { return }
         pending.timeoutToken.cancel()
-        guard let messages, !messages.isEmpty else { pending.completion(0); return }
+        // `nil` = server-reported error → a failed request; an empty page is
+        // a *successful* "no more history" and completes with 0.
+        guard let messages else { pending.completion(nil); return }
+        guard !messages.isEmpty else { pending.completion(0); return }
         var inserted = 0
         try? storage.write { db in
             for wireMessage in messages where persistHistory(wireMessage, db: db) {

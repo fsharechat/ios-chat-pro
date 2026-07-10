@@ -213,14 +213,21 @@ public final class ConversationViewModel {
             beforeUid: oldestKnownMessageUid(), count: pageSize
         ) { [weak self] inserted in
             guard let self else { completion(); return }
-            if inserted > 0 {
+            switch inserted {
+            case .some(let inserted) where inserted > 0:
                 // Local paging had just concluded "no more" — the remote
                 // fetch disproved that by persisting older rows, so re-arm
                 // it and page them in.
                 self.canLoadMore = true
                 self.loadMoreLocalPage()
-            } else {
+            case .some:
+                // A successful-but-empty page: history truly ends here.
                 self.remoteHistoryExhausted = true
+            case .none:
+                // The request failed (timeout, server error) — that says
+                // nothing about whether older history exists, so leave the
+                // latch alone and let the next pull retry.
+                break
             }
             completion()
         }

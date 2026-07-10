@@ -7,9 +7,9 @@ private final class FakeRemoteHistoryFetching: RemoteHistoryFetching {
     private(set) var calls: [(beforeUid: Int64, count: Int)] = []
     /// When set, invoked instead of the default `completion(0)` so a test can
     /// insert rows into storage (as the real service does) before completing.
-    var onLoad: ((_ beforeUid: Int64, _ count: Int, _ completion: @escaping (Int) -> Void) -> Void)?
+    var onLoad: ((_ beforeUid: Int64, _ count: Int, _ completion: @escaping (Int?) -> Void) -> Void)?
 
-    func loadRemoteMessages(conversationType: ConversationType, target: String, line: Int, beforeUid: Int64, count: Int, completion: @escaping (Int) -> Void) {
+    func loadRemoteMessages(conversationType: ConversationType, target: String, line: Int, beforeUid: Int64, count: Int, completion: @escaping (Int?) -> Void) {
         calls.append((beforeUid, count))
         if let onLoad {
             onLoad(beforeUid, count, completion)
@@ -91,6 +91,29 @@ final class ConversationViewModelRemoteHistoryTests: XCTestCase {
         viewModel.loadMoreHistory {}
 
         XCTAssertEqual(remote.calls.count, 1)
+    }
+
+    /// Regression: the remote fetch completing `nil` means the *request*
+    /// failed (timeout, server error) — not that history is exhausted. The
+    /// next pull must issue a fresh LRM request instead of staying latched
+    /// off forever; only a successful-but-empty page (0) may latch.
+    func test_loadMoreHistory_remoteFailedOnce_retriesOnNextPull() throws {
+        for i in 0..<3 { try insertMessage(uid: Int64(i + 1), text: "msg\(i)", timestamp: Int64(1_000 + i)) }
+        waitForFirstNonEmptyRows()
+
+        remote.onLoad = { _, _, completion in completion(nil) }
+        viewModel.loadMoreHistory {}
+        XCTAssertEqual(remote.calls.count, 1)
+
+        // Second pull retries; this time the fetch succeeds and pages in.
+        remote.onLoad = { [storage] _, _, completion in
+            try? storage!.messages.insert(StoredMessage(localMessageId: 100, messageUid: 0, conversationType: .single, target: "them", from: "them", content: .text("remote-old"), timestamp: 500, status: .read, direction: .receive))
+            completion(1)
+        }
+        viewModel.loadMoreHistory {}
+
+        XCTAssertEqual(remote.calls.count, 2)
+        XCTAssertEqual(rowTexts().first, "remote-old")
     }
 
     /// Regression: with fewer local messages than pageSize the live window

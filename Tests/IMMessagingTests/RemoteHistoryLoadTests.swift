@@ -153,23 +153,40 @@ final class RemoteHistoryLoadTests: XCTestCase {
         XCTAssertEqual(try storage.messages.message(uid: 9)?.content, .text("older-9"))
     }
 
-    func test_loadRemoteMessages_errorAck_completesWithZero() throws {
+    /// A server error is a *failed request* (`nil`), distinct from a
+    /// successful-but-empty page (`0`) — the conversation screen only stops
+    /// re-asking on the latter.
+    func test_loadRemoteMessages_errorAck_completesWithNil() throws {
+        var completed = false
         var insertedCount: Int?
-        service.loadRemoteMessages(conversationType: .single, target: "them", line: 0, beforeUid: 10, count: 20) { insertedCount = $0 }
+        service.loadRemoteMessages(conversationType: .single, target: "them", line: 0, beforeUid: 10, count: 20) { completed = true; insertedCount = $0 }
         let sentFrame = try decodeOnlySentFrame()
 
         let frameBytes = FrameEncoder.encode(signal: .pubAck, subSignal: .lrm, messageId: sentFrame.header.messageId, body: Data([0x01]))
         fakeTransport.simulateReceivedData(frameBytes)
 
-        XCTAssertEqual(insertedCount, 0)
+        XCTAssertTrue(completed)
+        XCTAssertNil(insertedCount)
     }
 
-    func test_loadRemoteMessages_timeout_completesWithZero() throws {
+    func test_loadRemoteMessages_timeout_completesWithNil() throws {
+        var completed = false
         var insertedCount: Int?
-        service.loadRemoteMessages(conversationType: .single, target: "them", line: 0, beforeUid: 10, count: 20) { insertedCount = $0 }
+        service.loadRemoteMessages(conversationType: .single, target: "them", line: 0, beforeUid: 10, count: 20) { completed = true; insertedCount = $0 }
 
         XCTAssertTrue(scheduler.scheduledDelays.contains(5))
         scheduler.fireNext() // the request's 5s ack timeout — the only thing scheduled here
+
+        XCTAssertTrue(completed)
+        XCTAssertNil(insertedCount)
+    }
+
+    func test_loadRemoteMessages_successEmptyPage_completesWithZero() throws {
+        var insertedCount: Int?
+        service.loadRemoteMessages(conversationType: .single, target: "them", line: 0, beforeUid: 10, count: 20) { insertedCount = $0 }
+        let sentFrame = try decodeOnlySentFrame()
+
+        try simulateLRMAck(messageId: sentFrame.header.messageId, messages: [])
 
         XCTAssertEqual(insertedCount, 0)
     }
