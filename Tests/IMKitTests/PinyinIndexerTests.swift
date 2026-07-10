@@ -40,4 +40,20 @@ final class PinyinIndexerTests: XCTestCase {
     func test_sortKey_isDeterministic() {
         XCTAssertEqual(PinyinIndexer.sortKey(for: "张三"), PinyinIndexer.sortKey(for: "张三"))
     }
+
+    func test_sections_groupsSortsAndPutsHashLast() {
+        let names = ["1", "云朵爸爸", "A玖先生", "飞享-官方测试2", "刘维涛", "ljlong2009"]
+
+        let sections = PinyinIndexer.sections(of: names, name: { $0 })
+
+        XCTAssertEqual(sections.map(\.letter), ["A", "F", "L", "Y", "#"])
+        // L 组内按 sortKey 排序："刘维涛"→"liu wei tao" < "ljlong2009"（i < j），
+        // 与 Android 端顺序一致
+        XCTAssertEqual(sections.first(where: { $0.letter == "L" })?.items, ["刘维涛", "ljlong2009"])
+        XCTAssertEqual(sections.last?.items, ["1"])
+    }
+
+    func test_sections_emptyInput_returnsEmpty() {
+        XCTAssertTrue(PinyinIndexer.sections(of: [String](), name: { $0 }).isEmpty)
+    }
 }

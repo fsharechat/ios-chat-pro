@@ -17,6 +17,8 @@ final class TextMessageCell: UITableViewCell {
 
     var onRetryTapped: (() -> Void)?
     var onExpandTapped: (() -> Void)?
+    /// 群聊里长按对方头像 → 会话页在输入框插入 @；自己发的消息不绑定。
+    var onAvatarLongPressed: (() -> Void)?
     /// Kept so a light/dark switch can re-render: markdown attributes (and
     /// the table bitmap especially) bake in colors resolved at configure
     /// time — dynamic colors can't adapt inside a drawn image.
@@ -36,6 +38,7 @@ final class TextMessageCell: UITableViewCell {
         super.prepareForReuse()
         onRetryTapped = nil
         onExpandTapped = nil
+        onAvatarLongPressed = nil
     }
 
     private func layoutViews() {
@@ -55,6 +58,12 @@ final class TextMessageCell: UITableViewCell {
         senderNameLabel.textColor = Theme.textPrimary.withAlphaComponent(0.6)
 
         statusIndicator.onRetry = { [weak self] in self?.onRetryTapped?() }
+
+        senderAvatarImageView.isUserInteractionEnabled = true
+        let avatarPress = UILongPressGestureRecognizer(target: self, action: #selector(avatarLongPressed(_:)))
+        // 比表格整行长按菜单手势（默认 0.5s）先识别，长按头像走 @ 而非弹菜单
+        avatarPress.minimumPressDuration = 0.4
+        senderAvatarImageView.addGestureRecognizer(avatarPress)
 
         expandButton.setTitle("查看全文", for: .normal)
         expandButton.titleLabel?.font = .systemFont(ofSize: 13)
@@ -174,4 +183,8 @@ final class TextMessageCell: UITableViewCell {
     }
 
     @objc private func expandTapped() { onExpandTapped?() }
+    @objc private func avatarLongPressed(_ recognizer: UILongPressGestureRecognizer) {
+        guard recognizer.state == .began else { return }
+        onAvatarLongPressed?()
+    }
 }

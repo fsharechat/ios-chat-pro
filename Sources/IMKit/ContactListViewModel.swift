@@ -47,15 +47,7 @@ public final class ContactListViewModel {
             contactSync?.fetchUserInfo(uids: unresolvedUids, forceRefresh: false)
         }
 
-        let grouped = Dictionary(grouping: rows, by: { $0.sectionLetter })
-        let sortedLetters = grouped.keys.sorted { lhs, rhs in
-            if lhs == "#" { return false }
-            if rhs == "#" { return true }
-            return lhs < rhs
-        }
-        sections = sortedLetters.map { letter in
-            let sortedRows = grouped[letter]!.sorted { PinyinIndexer.sortKey(for: $0.displayName) < PinyinIndexer.sortKey(for: $1.displayName) }
-            return (letter: letter, rows: sortedRows)
-        }
+        sections = PinyinIndexer.sections(of: rows, name: \.displayName)
+            .map { (letter: $0.letter, rows: $0.items) }
     }
 }

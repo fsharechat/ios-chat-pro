@@ -23,6 +23,20 @@ public enum PinyinIndexer {
         transliterate(name)?.lowercased() ?? name.lowercased()
     }
 
+    /// 按 `sectionLetter` 分组并排序：字母组升序、"#" 垫底，组内按
+    /// `sortKey` 升序。联系人列表与 @ 选人页共用。
+    public static func sections<T>(of items: [T], name: (T) -> String) -> [(letter: String, items: [T])] {
+        let grouped = Dictionary(grouping: items, by: { sectionLetter(for: name($0)) })
+        let letters = grouped.keys.sorted { lhs, rhs in
+            if lhs == "#" { return false }
+            if rhs == "#" { return true }
+            return lhs < rhs
+        }
+        return letters.map { letter in
+            (letter: letter, items: grouped[letter]!.sorted { sortKey(for: name($0)) < sortKey(for: name($1)) })
+        }
+    }
+
     private static func transliterate(_ name: String) -> String? {
         guard !name.isEmpty, let latin = name.applyingTransform(.toLatin, reverse: false) else { return nil }
         return latin.applyingTransform(.stripDiacritics, reverse: false) ?? latin

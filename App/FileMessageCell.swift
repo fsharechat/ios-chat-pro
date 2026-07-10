@@ -7,6 +7,8 @@ final class FileMessageCell: UITableViewCell {
     static let reuseIdentifier = "FileMessageCell"
 
     var onTapped: (() -> Void)?
+    /// 群聊里长按对方头像 → 会话页在输入框插入 @；自己发的消息不绑定。
+    var onAvatarLongPressed: (() -> Void)?
 
     private let bubbleView = UIView()
     private let badgeView = UIView()
@@ -28,6 +30,12 @@ final class FileMessageCell: UITableViewCell {
     }
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+
+    override func prepareForReuse() {
+        super.prepareForReuse()
+        onTapped = nil
+        onAvatarLongPressed = nil
+    }
 
     private func layoutViews() {
         bubbleView.layer.cornerRadius = 16
@@ -93,6 +101,12 @@ final class FileMessageCell: UITableViewCell {
         bubbleColumn.axis = .vertical
         bubbleColumn.addArrangedSubview(bubbleView)
 
+        avatarView.isUserInteractionEnabled = true
+        let avatarPress = UILongPressGestureRecognizer(target: self, action: #selector(avatarLongPressed(_:)))
+        // 比表格整行长按菜单手势（默认 0.5s）先识别，长按头像走 @ 而非弹菜单
+        avatarPress.minimumPressDuration = 0.4
+        avatarView.addGestureRecognizer(avatarPress)
+
         rowStack.axis = .horizontal
         rowStack.alignment = .center
         rowStack.spacing = 8
@@ -114,6 +128,10 @@ final class FileMessageCell: UITableViewCell {
     }
 
     @objc private func bubbleTapped() { onTapped?() }
+    @objc private func avatarLongPressed(_ recognizer: UILongPressGestureRecognizer) {
+        guard recognizer.state == .began else { return }
+        onAvatarLongPressed?()
+    }
 
     override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
         super.traitCollectionDidChange(previousTraitCollection)

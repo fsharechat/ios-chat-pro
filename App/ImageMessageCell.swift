@@ -35,6 +35,8 @@ final class ImageMessageCell: UITableViewCell {
 
     var onTapped: (() -> Void)?
     var onRetryTapped: (() -> Void)?
+    /// 群聊里长按对方头像 → 会话页在输入框插入 @；自己发的消息不绑定。
+    var onAvatarLongPressed: (() -> Void)?
     /// 复用竞态防护：异步原图回来时若 cell 已被复用绑定到别的 URL，丢弃结果。
     private var currentRemoteURL: String?
     /// 气泡宽高按原图比例算出后写回这两个约束的 constant（layoutViews 里
@@ -56,6 +58,7 @@ final class ImageMessageCell: UITableViewCell {
         super.prepareForReuse()
         onTapped = nil
         onRetryTapped = nil
+        onAvatarLongPressed = nil
         bubbleImageView.image = nil
         statusIndicator.apply(.none)
         currentRemoteURL = nil
@@ -71,6 +74,12 @@ final class ImageMessageCell: UITableViewCell {
         bubbleImageView.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(tapped)))
 
         statusIndicator.onRetry = { [weak self] in self?.onRetryTapped?() }
+
+        senderAvatarImageView.isUserInteractionEnabled = true
+        let avatarPress = UILongPressGestureRecognizer(target: self, action: #selector(avatarLongPressed(_:)))
+        // 比表格整行长按菜单手势（默认 0.5s）先识别，长按头像走 @ 而非弹菜单
+        avatarPress.minimumPressDuration = 0.4
+        senderAvatarImageView.addGestureRecognizer(avatarPress)
 
         senderNameLabel.font = .systemFont(ofSize: 12)
         senderNameLabel.textColor = Theme.textPrimary.withAlphaComponent(0.6)
@@ -170,4 +179,8 @@ final class ImageMessageCell: UITableViewCell {
     }
 
     @objc private func tapped() { onTapped?() }
+    @objc private func avatarLongPressed(_ recognizer: UILongPressGestureRecognizer) {
+        guard recognizer.state == .began else { return }
+        onAvatarLongPressed?()
+    }
 }

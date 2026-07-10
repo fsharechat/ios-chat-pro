@@ -31,6 +31,8 @@ final class LocationMessageCell: UITableViewCell {
     private let senderAvatarImageView = AvatarImageView(loader: AvatarLoader.shared)
 
     var onTapped: (() -> Void)?
+    /// 群聊里长按对方头像 → 会话页在输入框插入 @；自己发的消息不绑定。
+    var onAvatarLongPressed: (() -> Void)?
 
     override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
         super.init(style: style, reuseIdentifier: reuseIdentifier)
@@ -48,6 +50,7 @@ final class LocationMessageCell: UITableViewCell {
     override func prepareForReuse() {
         super.prepareForReuse()
         onTapped = nil
+        onAvatarLongPressed = nil
         mapImageView.image = nil
         titleLabel.text = nil
     }
@@ -79,6 +82,11 @@ final class LocationMessageCell: UITableViewCell {
 
         senderNameLabel.font = .systemFont(ofSize: 11)
         senderNameLabel.textColor = .secondaryLabel
+        senderAvatarImageView.isUserInteractionEnabled = true
+        let avatarPress = UILongPressGestureRecognizer(target: self, action: #selector(avatarLongPressed(_:)))
+        // 比表格整行长按菜单手势（默认 0.5s）先识别，长按头像走 @ 而非弹菜单
+        avatarPress.minimumPressDuration = 0.4
+        senderAvatarImageView.addGestureRecognizer(avatarPress)
         senderAvatarImageView.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
             senderAvatarImageView.widthAnchor.constraint(equalToConstant: 36),
@@ -133,4 +141,8 @@ final class LocationMessageCell: UITableViewCell {
     }
 
     @objc private func handleTap() { onTapped?() }
+    @objc private func avatarLongPressed(_ recognizer: UILongPressGestureRecognizer) {
+        guard recognizer.state == .began else { return }
+        onAvatarLongPressed?()
+    }
 }

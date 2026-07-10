@@ -33,6 +33,8 @@ final class VideoMessageCell: UITableViewCell {
 
     var onTapped: (() -> Void)?
     var onRetryTapped: (() -> Void)?
+    /// 群聊里长按对方头像 → 会话页在输入框插入 @；自己发的消息不绑定。
+    var onAvatarLongPressed: (() -> Void)?
 
     override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
         super.init(style: style, reuseIdentifier: reuseIdentifier)
@@ -48,6 +50,7 @@ final class VideoMessageCell: UITableViewCell {
         super.prepareForReuse()
         onTapped = nil
         onRetryTapped = nil
+        onAvatarLongPressed = nil
         thumbnailView.image = nil
         statusIndicator.apply(.none)
     }
@@ -79,6 +82,12 @@ final class VideoMessageCell: UITableViewCell {
         durationLabel.translatesAutoresizingMaskIntoConstraints = false
 
         statusIndicator.onRetry = { [weak self] in self?.onRetryTapped?() }
+
+        senderAvatarImageView.isUserInteractionEnabled = true
+        let avatarPress = UILongPressGestureRecognizer(target: self, action: #selector(avatarLongPressed(_:)))
+        // 比表格整行长按菜单手势（默认 0.5s）先识别，长按头像走 @ 而非弹菜单
+        avatarPress.minimumPressDuration = 0.4
+        senderAvatarImageView.addGestureRecognizer(avatarPress)
 
         // Bubble container holds thumbnail + overlays
         bubbleContainer.layer.cornerRadius = Theme.bubbleCornerRadius
@@ -218,4 +227,8 @@ final class VideoMessageCell: UITableViewCell {
     }
 
     @objc private func tapped() { onTapped?() }
+    @objc private func avatarLongPressed(_ recognizer: UILongPressGestureRecognizer) {
+        guard recognizer.state == .began else { return }
+        onAvatarLongPressed?()
+    }
 }

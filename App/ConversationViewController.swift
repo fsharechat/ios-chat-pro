@@ -179,11 +179,13 @@ final class ConversationViewController: UIViewController {
                 let cell = tableView.dequeueReusableCell(withIdentifier: VoiceMessageCell.reuseIdentifier, for: indexPath) as! VoiceMessageCell
                 cell.configure(with: message)
                 cell.onTapped = { [weak self, weak cell] in self?.playVoice(urlString: message.imageRemoteURL, cell: cell) }
+                cell.onAvatarLongPressed = { [weak self] in self?.insertMentionFromAvatar(message) }
                 return cell
             case .message(let message) where message.fileName != nil:
                 let cell = tableView.dequeueReusableCell(withIdentifier: FileMessageCell.reuseIdentifier, for: indexPath) as! FileMessageCell
                 cell.configure(with: message, state: self?.fileDownloadManager.state(for: message) ?? .notDownloaded)
                 cell.onTapped = { [weak self] in self?.handleFileTap(message: message) }
+                cell.onAvatarLongPressed = { [weak self] in self?.insertMentionFromAvatar(message) }
                 return cell
             case .message(let message) where message.locationLat != nil:
                 let cell = tableView.dequeueReusableCell(withIdentifier: LocationMessageCell.reuseIdentifier, for: indexPath) as! LocationMessageCell
@@ -198,6 +200,7 @@ final class ConversationViewController: UIViewController {
                     guard let lat = message.locationLat, let lng = message.locationLng else { return }
                     self?.presentLocationPreview(lat: lat, lng: lng, title: message.text ?? "位置")
                 }
+                cell.onAvatarLongPressed = { [weak self] in self?.insertMentionFromAvatar(message) }
                 return cell
             case .message(let message) where message.text != nil:
                 let cell = tableView.dequeueReusableCell(withIdentifier: TextMessageCell.reuseIdentifier, for: indexPath) as! TextMessageCell
@@ -207,18 +210,21 @@ final class ConversationViewController: UIViewController {
                     guard let text = message.text else { return }
                     self?.navigationController?.pushViewController(TextPreviewViewController(text: text), animated: true)
                 }
+                cell.onAvatarLongPressed = { [weak self] in self?.insertMentionFromAvatar(message) }
                 return cell
             case .message(let message) where message.videoDuration != nil:
                 let cell = tableView.dequeueReusableCell(withIdentifier: VideoMessageCell.reuseIdentifier, for: indexPath) as! VideoMessageCell
                 cell.configure(with: VideoBubbleData(thumbnail: message.imageThumbnail, duration: message.videoDuration ?? 0, isOutgoing: message.isOutgoing, isUploading: message.status == .sending, isFailed: message.status == .sendFailure, senderDisplayName: message.senderDisplayName, senderAvatarURL: message.senderAvatarURL))
                 cell.onRetryTapped = { [weak self] in self?.viewModel.retry(row: row) }
                 cell.onTapped = { [weak self] in self?.presentVideoPlayer(urlString: message.imageRemoteURL) }
+                cell.onAvatarLongPressed = { [weak self] in self?.insertMentionFromAvatar(message) }
                 return cell
             case .message(let message):
                 let cell = tableView.dequeueReusableCell(withIdentifier: ImageMessageCell.reuseIdentifier, for: indexPath) as! ImageMessageCell
                 cell.configure(with: ImageBubbleData(thumbnail: message.imageThumbnail, remoteURL: message.imageRemoteURL, isOutgoing: message.isOutgoing, isUploading: message.status == .sending, isFailed: message.status == .sendFailure, senderDisplayName: message.senderDisplayName, senderAvatarURL: message.senderAvatarURL))
                 cell.onRetryTapped = { [weak self] in self?.viewModel.retry(row: row) }
                 cell.onTapped = { [weak self] in self?.presentImageGallery(from: row) }
+                cell.onAvatarLongPressed = { [weak self] in self?.insertMentionFromAvatar(message) }
                 return cell
             case .pendingImage(let pending):
                 let cell = tableView.dequeueReusableCell(withIdentifier: ImageMessageCell.reuseIdentifier, for: indexPath) as! ImageMessageCell
@@ -449,14 +455,34 @@ final class ConversationViewController: UIViewController {
     }
 
     private func presentMentionPicker() {
-        guard row.conversationType == .group else { return }
+        // presentedViewController 防重入：removeTrailingMentionTrigger 会走
+        // textViewDidChange，若删 "@" 后文本仍以 "@" 结尾（如粘贴 "@@"），
+        // 会在 dismiss 进行中再次触发到这里。
+        guard row.conversationType == .group, presentedViewController == nil else { return }
         let picker = MentionPickerViewController(members: viewModel.groupMemberCandidatesForMention())
         picker.onPicked = { [weak self] uid, displayName in
+            // 用户敲的触发 "@" 还留在输入框里，先删掉再插入完整的
+            // "@昵称 "，否则会出现 "@@昵称"。
+            self?.inputBar.removeTrailingMentionTrigger()
             self?.inputBar.insertMention(uid: uid, displayName: displayName)
             self?.dismiss(animated: true)
         }
         picker.onCancelled = { [weak self] in self?.inputBar.removeTrailingMentionTrigger() }
         present(UINavigationController(rootViewController: picker), animated: true)
+    }
+
+    /// 长按对方头像插入 @（对齐 Android）：仅群聊、仅接收方向生效 ——
+    /// 自己发的消息 senderUid 为 nil，长按没有任何动作。
+    private func insertMentionFromAvatar(_ message: StoredMessageRow) {
+        guard row.conversationType == .group, let uid = message.senderUid else { return }
+        // 长按确认的触感提醒——放在 guard 之后，只在真正插入 @ 时震动。
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        // 行内昵称可能因「显示群成员昵称」开关关闭而为 nil，从 mention
+        // 候选里兜底解析，再不行退回 uid。
+        let displayName = message.senderDisplayName
+            ?? viewModel.groupMemberCandidatesForMention().first(where: { $0.uid == uid })?.displayName
+            ?? uid
+        inputBar.insertMention(uid: uid, displayName: displayName)
     }
 
     private func presentCamera() {

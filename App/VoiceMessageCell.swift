@@ -5,6 +5,8 @@ final class VoiceMessageCell: UITableViewCell {
     static let reuseIdentifier = "VoiceMessageCell"
 
     var onTapped: (() -> Void)?
+    /// 群聊里长按对方头像 → 会话页在输入框插入 @；自己发的消息不绑定。
+    var onAvatarLongPressed: (() -> Void)?
 
     private let bubbleView = UIView()
     private let iconView = UIImageView()
@@ -28,6 +30,12 @@ final class VoiceMessageCell: UITableViewCell {
     @objc private func bubbleTapped() { onTapped?() }
 
     @available(*, unavailable) required init?(coder: NSCoder) { fatalError() }
+
+    override func prepareForReuse() {
+        super.prepareForReuse()
+        onTapped = nil
+        onAvatarLongPressed = nil
+    }
 
     private func layoutViews() {
         bubbleView.layer.cornerRadius = 16
@@ -68,6 +76,12 @@ final class VoiceMessageCell: UITableViewCell {
         contentView.addSubview(rowStack)
         rowStack.addArrangedSubview(bubbleColumn)
 
+        avatarView.isUserInteractionEnabled = true
+        let avatarPress = UILongPressGestureRecognizer(target: self, action: #selector(avatarLongPressed(_:)))
+        // 比表格整行长按菜单手势（默认 0.5s）先识别，长按头像走 @ 而非弹菜单
+        avatarPress.minimumPressDuration = 0.4
+        avatarView.addGestureRecognizer(avatarPress)
+
         NSLayoutConstraint.activate([
             avatarView.widthAnchor.constraint(equalToConstant: 36),
             avatarView.heightAnchor.constraint(equalToConstant: 36),
@@ -77,6 +91,11 @@ final class VoiceMessageCell: UITableViewCell {
             rowStack.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -4),
             bubbleColumn.widthAnchor.constraint(lessThanOrEqualTo: contentView.widthAnchor, multiplier: 0.6),
         ])
+    }
+
+    @objc private func avatarLongPressed(_ recognizer: UILongPressGestureRecognizer) {
+        guard recognizer.state == .began else { return }
+        onAvatarLongPressed?()
     }
 
     func setPlaying(_ playing: Bool) {

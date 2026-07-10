@@ -53,7 +53,8 @@ public struct PendingVideoUpload: Equatable, Hashable {
 /// Flattened, `Hashable` presentation of a `StoredMessage`. `senderDisplayName`/
 /// `senderAvatarURL` are non-nil only for a group-chat message I received
 /// (never for single chat, never for my own outgoing messages — there's no
-/// sender row to show for either case).
+/// sender row to show for either case). `senderUid` is non-nil only for
+/// received messages (to enable avatar-tap mention insertion in groups).
 public struct StoredMessageRow: Equatable, Hashable {
     public let storageId: Int64
     public let localMessageId: Int64
@@ -66,6 +67,9 @@ public struct StoredMessageRow: Equatable, Hashable {
     public let imageRemoteURL: String?    // also holds voice/file remote URLs
     public let senderDisplayName: String?
     public let senderAvatarURL: String?
+    /// 发送者 uid，仅接收方向的消息非 nil — 群聊里点对方头像插入 @ 用；
+    /// 自己发的消息为 nil，头像点击自然无动作。
+    public let senderUid: String?
     /// Non-nil only for video messages — used by `ConversationViewController`
     /// to dispatch to `VideoMessageCell` instead of `ImageMessageCell`.
     public let videoDuration: Int?
@@ -89,6 +93,7 @@ public struct StoredMessageRow: Equatable, Hashable {
         imageRemoteURL: String?,
         senderDisplayName: String? = nil,
         senderAvatarURL: String? = nil,
+        senderUid: String? = nil,
         videoDuration: Int? = nil,
         voiceDuration: Int? = nil,
         fileSize: Int? = nil,
@@ -107,6 +112,7 @@ public struct StoredMessageRow: Equatable, Hashable {
         self.imageRemoteURL = imageRemoteURL
         self.senderDisplayName = senderDisplayName
         self.senderAvatarURL = senderAvatarURL
+        self.senderUid = senderUid
         self.videoDuration = videoDuration
         self.voiceDuration = voiceDuration
         self.fileSize = fileSize

@@ -376,19 +376,42 @@ final class ConversationViewModelTests: XCTestCase {
     func test_groupMemberCandidatesForMention_returnsActiveMembersWithDisplayNames() throws {
         try storage.groups.upsertMember(StoredGroupMember(groupId: "g1", memberId: "u2", memberType: .normal, updateDt: 0))
         try storage.groups.upsertMember(StoredGroupMember(groupId: "g1", memberId: "u3", memberType: .removed, updateDt: 0))
-        try storage.users.upsertProfile(uid: "u2", name: nil, displayName: "Bob", portrait: nil, mobile: nil, gender: 0, updateDt: 0)
+        try storage.users.upsertProfile(uid: "u2", name: nil, displayName: "Bob", portrait: "http://p/u2.png", mobile: nil, gender: 0, updateDt: 0)
         let viewModel = makeGroupViewModel(target: "g1")
 
         let candidates = viewModel.groupMemberCandidatesForMention()
 
         XCTAssertEqual(candidates.map(\.uid), ["u2"])
         XCTAssertEqual(candidates.map(\.displayName), ["Bob"])
+        XCTAssertEqual(candidates.map(\.avatarURL), ["http://p/u2.png"])
     }
 
     func test_groupMemberCandidatesForMention_onSingleChat_returnsEmpty() throws {
         let viewModel = ConversationViewModel(storage: storage, messageSending: nil, imageUploading: nil, target: "u2", conversationType: .single, currentUserId: "me")
 
         XCTAssertEqual(viewModel.groupMemberCandidatesForMention().count, 0)
+    }
+
+    func test_incomingGroupMessage_rowCarriesSenderUid() throws {
+        try storage.messages.insert(StoredMessage(
+            localMessageId: 1, conversationType: .group, target: "g1", from: "u1",
+            content: .text("hi"), timestamp: 1_000, status: .unread, direction: .receive
+        ))
+        let viewModel = makeGroupViewModel(target: "g1")
+
+        guard case .message(let row) = try waitForFirstRow(viewModel) else { return XCTFail("expected .message") }
+        XCTAssertEqual(row.senderUid, "u1")
+    }
+
+    func test_outgoingMessage_rowSenderUidIsNil() throws {
+        try storage.messages.insert(StoredMessage(
+            localMessageId: 1, conversationType: .group, target: "g1", from: "me",
+            content: .text("hi"), timestamp: 1_000, status: .sent, direction: .send
+        ))
+        let viewModel = makeGroupViewModel(target: "g1")
+
+        guard case .message(let row) = try waitForFirstRow(viewModel) else { return XCTFail("expected .message") }
+        XCTAssertNil(row.senderUid)
     }
 
     func test_recalledBySelf_rendersAsSystemTipWithNin() throws {

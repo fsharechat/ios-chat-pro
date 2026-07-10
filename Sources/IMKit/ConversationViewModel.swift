@@ -2,6 +2,19 @@ import Foundation
 import Combine
 import IMStorage
 
+/// 输入框 @ 选人页的候选成员。
+public struct MentionCandidate: Equatable {
+    public let uid: String
+    public let displayName: String
+    public let avatarURL: String?
+
+    public init(uid: String, displayName: String, avatarURL: String?) {
+        self.uid = uid
+        self.displayName = displayName
+        self.avatarURL = avatarURL
+    }
+}
+
 /// **Threading contract:** like the rest of this codebase, this has no
 /// internal locking and must be called from a single consistent queue.
 public final class ConversationViewModel {
@@ -143,12 +156,16 @@ public final class ConversationViewModel {
     /// Candidate members for the composer's "@" picker — empty for a
     /// non-group conversation. Excludes `.removed` members (same filter
     /// `GroupStore.members(groupId:)` already applies).
-    public func groupMemberCandidatesForMention() -> [(uid: String, displayName: String)] {
+    public func groupMemberCandidatesForMention() -> [MentionCandidate] {
         guard conversationType == .group else { return [] }
         let members = (try? storage.groups.members(groupId: target)) ?? []
         return members.map { member in
             let user = try? storage.users.user(uid: member.memberId)
-            return (uid: member.memberId, displayName: user?.displayName ?? user?.name ?? member.memberId)
+            return MentionCandidate(
+                uid: member.memberId,
+                displayName: user?.displayName ?? user?.name ?? member.memberId,
+                avatarURL: user?.portrait
+            )
         }
     }
 
@@ -488,6 +505,7 @@ public final class ConversationViewModel {
             imageRemoteURL: imageRemoteURL,
             senderDisplayName: senderDisplayName,
             senderAvatarURL: senderAvatarURL,
+            senderUid: message.direction == .receive ? message.from : nil,
             videoDuration: videoDuration,
             voiceDuration: voiceDuration,
             fileSize: fileSize,

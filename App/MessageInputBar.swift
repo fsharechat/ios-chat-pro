@@ -20,6 +20,13 @@ final class MessageInputBar: UIView {
     // MARK: - Mention state
     private var mentionedType: Int32 = 0
     private var mentionedTargets: [String] = []
+    /// 输入框里已插入的 @ 块字面量（"@昵称 "），uid nil 表示「所有人」。
+    /// 退格删到某块的末字符时整块删除（微信行为），避免逐字删到只剩
+    /// "@" 又误触选人页；删除后据此重算 mentionedType/Targets。
+    private var mentionTokens: [(text: String, uid: String?)] = []
+    /// 仅当用户刚敲入 "@" 字符时才允许弹选人页；删除、粘贴多字符、
+    /// 程序改文本（insertMention 等直接调 textViewDidChange）都不弹。
+    private var justTypedMentionTrigger = false
 
     // MARK: - Panel state
     private enum PanelState { case none, emoji, ext }
@@ -59,12 +66,25 @@ final class MessageInputBar: UIView {
     // MARK: - Public API (mention)
     func insertMention(uid: String?, displayName: String) {
         textView.text += "@\(displayName) "
-        if let uid {
-            if mentionedType != 2 { mentionedType = 1; mentionedTargets.append(uid) }
-        } else {
-            mentionedType = 2; mentionedTargets = []
-        }
+        mentionTokens.append(("@\(displayName) ", uid))
+        recomputeMentionState()
         textViewDidChange(textView)
+    }
+
+    /// 由 mentionTokens 重算 wire 字段：含「所有人」块即 type 2（targets
+    /// 置空），否则按剩余个人块去重收集 type 1；全删光回到 0。插入和
+    /// 整块删除共用，保证删掉「所有人」后个人 @ 能恢复生效。
+    private func recomputeMentionState() {
+        if mentionTokens.contains(where: { $0.uid == nil }) {
+            mentionedType = 2; mentionedTargets = []
+            return
+        }
+        var targets: [String] = []
+        for token in mentionTokens {
+            if let uid = token.uid, !targets.contains(uid) { targets.append(uid) }
+        }
+        mentionedTargets = targets
+        mentionedType = targets.isEmpty ? 0 : 1
     }
 
     func removeTrailingMentionTrigger() {
@@ -247,7 +267,7 @@ final class MessageInputBar: UIView {
         guard !text.isEmpty else { return }
         onSendText?(text, mentionedType, mentionedTargets)
         textView.text = ""
-        mentionedType = 0; mentionedTargets = []
+        mentionedType = 0; mentionedTargets = []; mentionTokens = []
         placeholderLabel.isHidden = false
         updateSendExtVisibility()
         updateHeight()
@@ -361,11 +381,39 @@ final class MessageInputBar: UIView {
 
 // MARK: - UITextViewDelegate
 extension MessageInputBar: UITextViewDelegate {
+    func textView(_ textView: UITextView, shouldChangeTextIn range: NSRange, replacementText text: String) -> Bool {
+        justTypedMentionTrigger = (text == "@")
+        // 退格单字符删除且删的是某个 @ 块的末字符 → 整块删除。
+        guard text.isEmpty, range.length == 1 else { return true }
+        let ns = textView.text as NSString
+        let deleteEnd = range.location + 1
+        for (index, token) in mentionTokens.enumerated() {
+            var searchLocation = 0
+            while searchLocation < ns.length {
+                let found = ns.range(of: token.text, range: NSRange(location: searchLocation, length: ns.length - searchLocation))
+                if found.location == NSNotFound { break }
+                if found.location + found.length == deleteEnd {
+                    textView.text = ns.replacingCharacters(in: found, with: "")
+                    textView.selectedRange = NSRange(location: found.location, length: 0)
+                    mentionTokens.remove(at: index)
+                    recomputeMentionState()
+                    textViewDidChange(textView)
+                    return false
+                }
+                searchLocation = found.location + 1
+            }
+        }
+        return true
+    }
+
     func textViewDidChange(_ textView: UITextView) {
         placeholderLabel.isHidden = !textView.text.isEmpty
         updateSendExtVisibility()
         updateHeight()
-        if textView.text.hasSuffix("@") { onMentionTriggered?() }
+        // 只在用户刚敲入 "@" 时弹选人页——整块删除后残留文本以 "@" 结尾、
+        // 粘贴含 "@" 的内容等场景都不该弹。
+        if justTypedMentionTrigger, textView.text.hasSuffix("@") { onMentionTriggered?() }
+        justTypedMentionTrigger = false
     }
 
     func textViewDidBeginEditing(_ textView: UITextView) {
