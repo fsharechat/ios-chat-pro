@@ -150,6 +150,7 @@ final class ConversationViewController: UIViewController {
         let tap = UITapGestureRecognizer(target: self, action: #selector(messageAreaTapped))
         tap.cancelsTouchesInView = false
         tableView.addGestureRecognizer(tap)
+        tableView.addGestureRecognizer(UILongPressGestureRecognizer(target: self, action: #selector(messageLongPressed(_:))))
         tableView.keyboardDismissMode = .onDrag
 
         inputBar.translatesAutoresizingMaskIntoConstraints = false
@@ -649,8 +650,21 @@ final class ConversationViewController: UIViewController {
         }
     }
 
-    private func buildContextMenu(for message: StoredMessageRow) -> UIMenu {
-        var actions: [UIAction] = []
+    @objc private func messageLongPressed(_ recognizer: UILongPressGestureRecognizer) {
+        guard recognizer.state == .began,
+              let indexPath = tableView.indexPathForRow(at: recognizer.location(in: tableView)),
+              let item = dataSource.itemIdentifier(for: indexPath),
+              case .message(let message) = item,
+              let hostView = navigationController?.view else { return }
+        // 横向跟随手指（区分左右气泡），纵向贴住被按的那一行。
+        let rowRect = tableView.convert(tableView.rectForRow(at: indexPath), to: hostView)
+        let touchX = recognizer.location(in: hostView).x
+        let anchorRect = CGRect(x: touchX, y: rowRect.minY, width: 0, height: rowRect.height)
+        PlusMenuView.show(in: hostView, anchorRect: anchorRect, items: buildMenuItems(for: message))
+    }
+
+    private func buildMenuItems(for message: StoredMessageRow) -> [PlusMenuView.Item] {
+        var items: [PlusMenuView.Item] = []
 
         // Copy — text-only (excludes voice/file prefixes, location, video)
         if let text = message.text,
@@ -658,46 +672,46 @@ final class ConversationViewController: UIViewController {
            message.fileName == nil,
            message.locationLat == nil,
            message.videoDuration == nil {
-            actions.append(UIAction(title: "复制", image: UIImage(systemName: "doc.on.doc")) { _ in
+            items.append(.init(symbolName: "doc.on.doc", title: "复制") {
                 UIPasteboard.general.string = text
             })
         }
 
         // Forward
-        actions.append(UIAction(title: "转发", image: UIImage(systemName: "arrowshape.turn.up.right")) { [weak self] _ in
+        items.append(.init(symbolName: "arrowshape.turn.up.right", title: "转发") { [weak self] in
             self?.handleForward(message: message)
         })
 
         // Recall
         if viewModel.canRecall(row: message) {
-            actions.append(UIAction(title: "撤回", image: UIImage(systemName: "arrow.uturn.backward")) { [weak self] _ in
+            items.append(.init(symbolName: "arrow.uturn.backward", title: "撤回") { [weak self] in
                 self?.handleRecall(message: message)
             })
         }
-
-        // Delete
-        actions.append(UIAction(title: "删除", image: UIImage(systemName: "trash"), attributes: .destructive) { [weak self] _ in
-            self?.handleDelete(message: message)
-        })
 
         // Save image — image messages only (has thumbnail, no video/voice/file)
         if message.imageThumbnail != nil,
            message.videoDuration == nil,
            message.voiceDuration == nil,
            message.fileName == nil {
-            actions.append(UIAction(title: "保存图片", image: UIImage(systemName: "square.and.arrow.down")) { [weak self] _ in
+            items.append(.init(symbolName: "square.and.arrow.down", title: "保存图片") { [weak self] in
                 self?.saveMedia(urlString: message.imageRemoteURL, isVideo: false)
             })
         }
 
         // Save video
         if message.videoDuration != nil {
-            actions.append(UIAction(title: "保存视频", image: UIImage(systemName: "square.and.arrow.down")) { [weak self] _ in
+            items.append(.init(symbolName: "square.and.arrow.down", title: "保存视频") { [weak self] in
                 self?.saveMedia(urlString: message.imageRemoteURL, isVideo: true)
             })
         }
 
-        return UIMenu(title: "", children: actions)
+        // Delete
+        items.append(.init(symbolName: "trash", title: "删除", isDestructive: true) { [weak self] in
+            self?.handleDelete(message: message)
+        })
+
+        return items
     }
 
     private func handleForward(message: StoredMessageRow) {
@@ -799,14 +813,6 @@ extension ConversationViewController: UITableViewDelegate {
         }
     }
 
-    func tableView(_ tableView: UITableView, contextMenuConfigurationForRowAt indexPath: IndexPath, point: CGPoint) -> UIContextMenuConfiguration? {
-        guard let item = dataSource.itemIdentifier(for: indexPath),
-              case .message(let message) = item else { return nil }
-        return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { [weak self] _ in
-            guard let self else { return UIMenu(title: "", children: []) }
-            return self.buildContextMenu(for: message)
-        }
-    }
 }
 
 extension ConversationViewController: PHPickerViewControllerDelegate {

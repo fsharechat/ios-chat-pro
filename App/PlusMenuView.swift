@@ -1,15 +1,24 @@
 // App/PlusMenuView.swift
 import UIKit
 
-/// WeChat-style popup menu anchored below the nav-bar "+" button: a rounded
-/// card at the top-right with icon+title rows, dismissed by tapping anywhere
-/// outside. Shown over the navigation controller's view so it floats above
-/// the list content.
+/// WeChat-style popup menu: a rounded card with icon+title rows, dismissed by
+/// tapping anywhere outside. Two anchoring modes:
+/// - `show(in:items:)` pins the card below the nav-bar "+" button (top-right);
+/// - `show(in:anchorRect:items:)` pops the card next to a long-pressed row.
+/// Shown over the navigation controller's view so it floats above the content.
 final class PlusMenuView: UIView {
     struct Item {
         let symbolName: String
         let title: String
+        let isDestructive: Bool
         let handler: () -> Void
+
+        init(symbolName: String, title: String, isDestructive: Bool = false, handler: @escaping () -> Void) {
+            self.symbolName = symbolName
+            self.title = title
+            self.isDestructive = isDestructive
+            self.handler = handler
+        }
     }
 
     private let card = UIView()
@@ -17,16 +26,46 @@ final class PlusMenuView: UIView {
 
     private static let cardWidth: CGFloat = 160
     private static let rowHeight: CGFloat = 52
+    private static let margin: CGFloat = 8
 
     static func show(in hostView: UIView, items: [Item]) {
-        let menu = PlusMenuView(frame: hostView.bounds)
-        menu.items = items
-        menu.buildCard(in: hostView)
-        hostView.addSubview(menu)
-        menu.animateIn()
+        let frame = CGRect(
+            x: hostView.bounds.width - cardWidth - margin,
+            y: hostView.safeAreaInsets.top + 6,
+            width: cardWidth,
+            height: rowHeight * CGFloat(items.count)
+        )
+        show(in: hostView, items: items, cardFrame: frame, animationAnchor: CGPoint(x: 1, y: 0))
     }
 
-    private func buildCard(in hostView: UIView) {
+    /// Pops the card near `anchorRect` (in `hostView` coordinates): below it when
+    /// there is room, otherwise above, horizontally centered on it and clamped
+    /// to the host bounds.
+    static func show(in hostView: UIView, anchorRect: CGRect, items: [Item]) {
+        let height = rowHeight * CGFloat(items.count)
+        let x = min(max(anchorRect.midX - cardWidth / 2, margin), hostView.bounds.width - cardWidth - margin)
+
+        let maxY = hostView.bounds.height - hostView.safeAreaInsets.bottom - margin
+        let minY = hostView.safeAreaInsets.top + margin
+        let below = anchorRect.maxY + margin
+        let showsBelow = below + height <= maxY
+        let y = showsBelow ? below : max(anchorRect.minY - margin - height, minY)
+
+        let frame = CGRect(x: x, y: y, width: cardWidth, height: height)
+        let anchorX = min(max((anchorRect.midX - frame.minX) / cardWidth, 0), 1)
+        let anchor = CGPoint(x: anchorX, y: showsBelow ? 0 : 1)
+        show(in: hostView, items: items, cardFrame: frame, animationAnchor: anchor)
+    }
+
+    private static func show(in hostView: UIView, items: [Item], cardFrame: CGRect, animationAnchor: CGPoint) {
+        let menu = PlusMenuView(frame: hostView.bounds)
+        menu.items = items
+        menu.buildCard(frame: cardFrame)
+        hostView.addSubview(menu)
+        menu.animateIn(anchor: animationAnchor)
+    }
+
+    private func buildCard(frame cardFrame: CGRect) {
         autoresizingMask = [.flexibleWidth, .flexibleHeight]
         backgroundColor = .clear
 
@@ -36,12 +75,7 @@ final class PlusMenuView: UIView {
         card.layer.shadowOpacity = 0.18
         card.layer.shadowRadius = 16
         card.layer.shadowOffset = CGSize(width: 0, height: 4)
-        card.frame = CGRect(
-            x: hostView.bounds.width - Self.cardWidth - 8,
-            y: hostView.safeAreaInsets.top + 6,
-            width: Self.cardWidth,
-            height: Self.rowHeight * CGFloat(items.count)
-        )
+        card.frame = cardFrame
         addSubview(card)
 
         for (index, item) in items.enumerated() {
@@ -62,9 +96,10 @@ final class PlusMenuView: UIView {
     private func makeRow(item: Item, index: Int) -> UIControl {
         let row = UIButton(type: .system)
         row.tag = index
+        let tint = item.isDestructive ? UIColor.systemRed : Theme.textPrimary
 
         let icon = UIImageView(image: UIImage(systemName: item.symbolName))
-        icon.tintColor = Theme.textPrimary
+        icon.tintColor = tint
         icon.contentMode = .scaleAspectFit
         icon.isUserInteractionEnabled = false
         icon.translatesAutoresizingMaskIntoConstraints = false
@@ -72,7 +107,7 @@ final class PlusMenuView: UIView {
         let label = UILabel()
         label.text = item.title
         label.font = .systemFont(ofSize: 16)
-        label.textColor = Theme.textPrimary
+        label.textColor = tint
         label.isUserInteractionEnabled = false
         label.translatesAutoresizingMaskIntoConstraints = false
 
@@ -100,10 +135,10 @@ final class PlusMenuView: UIView {
         animateOut()
     }
 
-    private func animateIn() {
-        // Scale up from the card's top-right corner, like WeChat.
+    private func animateIn(anchor: CGPoint) {
+        // Scale up from the corner nearest the anchor, like WeChat.
         let target = card.frame
-        card.layer.anchorPoint = CGPoint(x: 1, y: 0)
+        card.layer.anchorPoint = anchor
         card.frame = target
         card.transform = CGAffineTransform(scaleX: 0.2, y: 0.2)
         card.alpha = 0

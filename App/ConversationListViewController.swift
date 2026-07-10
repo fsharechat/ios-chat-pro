@@ -49,6 +49,7 @@ final class ConversationListViewController: UIViewController {
     private func layoutTableView() {
         tableView.register(ConversationListCell.self, forCellReuseIdentifier: ConversationListCell.reuseIdentifier)
         tableView.delegate = self
+        tableView.addGestureRecognizer(UILongPressGestureRecognizer(target: self, action: #selector(rowLongPressed(_:))))
         tableView.backgroundColor = Theme.backgroundPrimary
         tableView.separatorColor = Theme.backgroundTertiary
         tableView.translatesAutoresizingMaskIntoConstraints = false
@@ -90,51 +91,40 @@ extension ConversationListViewController: UITableViewDelegate {
         onConversationSelected?(row)
     }
 
-    func tableView(_ tableView: UITableView, contextMenuConfigurationForRowAt indexPath: IndexPath, point: CGPoint) -> UIContextMenuConfiguration? {
-        guard let row = dataSource.itemIdentifier(for: indexPath) else { return nil }
-        return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { [weak self] _ in
-            guard let self else { return UIMenu(title: "", children: []) }
-            return self.makeContextMenu(for: row)
-        }
-    }
 }
 
 private extension ConversationListViewController {
-    func makeContextMenu(for row: ConversationRow) -> UIMenu {
-        let clearAction = UIAction(
-            title: "清空会话",
-            image: UIImage(systemName: "trash"),
-            attributes: .destructive
-        ) { [weak self] _ in
-            self?.confirmDestructive(title: "清空会话") {
-                try self?.viewModel.clearConversation(row)
-            }
-        }
+    @objc func rowLongPressed(_ recognizer: UILongPressGestureRecognizer) {
+        guard recognizer.state == .began,
+              let indexPath = tableView.indexPathForRow(at: recognizer.location(in: tableView)),
+              let row = dataSource.itemIdentifier(for: indexPath),
+              let hostView = navigationController?.view else { return }
+        let anchorRect = tableView.convert(tableView.rectForRow(at: indexPath), to: hostView)
+        PlusMenuView.show(in: hostView, anchorRect: anchorRect, items: makeMenuItems(for: row))
+    }
 
-        let deleteAction = UIAction(
-            title: "删除会话",
-            image: UIImage(systemName: "xmark.circle"),
-            attributes: .destructive
-        ) { [weak self] _ in
-            self?.confirmDestructive(title: "删除会话") {
-                try self?.viewModel.deleteConversation(row)
-            }
-        }
-
+    func makeMenuItems(for row: ConversationRow) -> [PlusMenuView.Item] {
         let pinTitle = row.isTop ? "取消置顶" : "置顶"
         let pinSymbol = row.isTop ? "pin.slash" : "pin"
-        let pinAction = UIAction(
-            title: pinTitle,
-            image: UIImage(systemName: pinSymbol)
-        ) { [weak self] _ in
-            do {
-                try self?.viewModel.setTop(!row.isTop, for: row)
-            } catch {
-                self?.showStorageError(error)
-            }
-        }
-
-        return UIMenu(title: "", children: [clearAction, deleteAction, pinAction])
+        return [
+            .init(symbolName: pinSymbol, title: pinTitle) { [weak self] in
+                do {
+                    try self?.viewModel.setTop(!row.isTop, for: row)
+                } catch {
+                    self?.showStorageError(error)
+                }
+            },
+            .init(symbolName: "trash", title: "清空会话", isDestructive: true) { [weak self] in
+                self?.confirmDestructive(title: "清空会话") {
+                    try self?.viewModel.clearConversation(row)
+                }
+            },
+            .init(symbolName: "xmark.circle", title: "删除会话", isDestructive: true) { [weak self] in
+                self?.confirmDestructive(title: "删除会话") {
+                    try self?.viewModel.deleteConversation(row)
+                }
+            },
+        ]
     }
 
     func confirmDestructive(title: String, action: @escaping () throws -> Void) {
