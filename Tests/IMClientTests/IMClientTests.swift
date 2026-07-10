@@ -186,4 +186,108 @@ final class IMClientTests: XCTestCase {
 
         XCTAssertEqual(client.serverTimeDeltaMillis, 0)
     }
+
+    // MARK: - viability 宽限(TCP 静默断网既不 failed 也不 cancelled)
+
+    /// 走到 connected 状态的公共前置:connect → transport ready → CONNECT
+    /// 发送完成 → 收到 CONNECT_ACK → 心跳 PING 发送完成(心跳定时器已排入)。
+    private func driveToConnected() {
+        client.connect()
+        fakeTransport.simulate(.connected)
+        fakeTransport.completeOldestSend() // CONNECT
+        fakeTransport.simulateReceivedData(makeConnectAckFrameBytes())
+        fakeTransport.completeOldestSend() // 心跳 PING
+    }
+
+    func test_notViable_startsGraceTimer_whichCancelsTransportOnFire() {
+        driveToConnected()
+        let delaysBefore = scheduler.scheduledDelays // [30] 心跳定时器
+
+        fakeTransport.simulate(.notViable)
+        XCTAssertEqual(scheduler.scheduledDelays, delaysBefore + [10])
+
+        XCTAssertTrue(scheduler.fireNext()) // 先入队的心跳定时器(发出一个 PING)
+        XCTAssertTrue(scheduler.fireNext()) // 宽限定时器到点,仍未恢复
+        XCTAssertEqual(fakeTransport.cancelCallCount, 1)
+
+        // 真实 NWConnection 在 cancel 后会回调 .cancelled;fake 不自动回调,
+        // 手动模拟,验证走的是统一断开 + 退避重连路径。
+        var statuses: [IMConnectionStatus] = []
+        client.onConnectionStatusChange = { statuses.append($0) }
+        fakeTransport.simulate(.cancelled)
+        XCTAssertEqual(statuses.first, .disconnected)
+        XCTAssertEqual(scheduler.scheduledDelays.last, 2) // 第一次退避重连已排上
+    }
+
+    func test_notViable_thenViable_cancelsGraceTimerWithoutKillingConnection() {
+        driveToConnected()
+
+        fakeTransport.simulate(.notViable)
+        fakeTransport.simulate(.viable)
+
+        // 把队列里所有还能 fire 的定时器都触发(心跳会 fire;已取消的宽限
+        // 定时器不会),transport 不应被 cancel。
+        while scheduler.fireNext() {}
+        XCTAssertEqual(fakeTransport.cancelCallCount, 0)
+    }
+
+    func test_repeatedNotViable_schedulesOnlyOneGraceTimer() {
+        driveToConnected()
+        let delaysBefore = scheduler.scheduledDelays
+
+        fakeTransport.simulate(.notViable)
+        fakeTransport.simulate(.notViable)
+
+        XCTAssertEqual(scheduler.scheduledDelays, delaysBefore + [10])
+    }
+
+    // MARK: - 心跳失败走统一失败路径
+
+    func test_heartbeatSendFailure_cancelsTransportInsteadOfSilentlyStoppingHeartbeatLoop() {
+        client.connect()
+        fakeTransport.simulate(.connected)
+        fakeTransport.completeOldestSend() // CONNECT
+        fakeTransport.simulateReceivedData(makeConnectAckFrameBytes())
+
+        fakeTransport.completeOldestSend(.failure(NSError(domain: "test", code: 1))) // 心跳 PING 发送失败
+
+        XCTAssertEqual(fakeTransport.cancelCallCount, 1)
+        XCTAssertTrue(scheduler.scheduledDelays.isEmpty) // 不再排下一次心跳,等重连成功后重启
+    }
+
+    // MARK: - reconnectIfNeeded(网络恢复 / 回前台)
+
+    func test_reconnectIfNeeded_afterReconnectAttemptsExhausted_reconnectsImmediatelyAndResetsBackoff() {
+        client.connect()
+        for _ in 1...5 { fakeTransport.simulate(.failed(NSError(domain: "test", code: 1))) }
+        XCTAssertEqual(scheduler.scheduledDelays, [2, 4, 6, 8]) // 4 次耗尽,自动重连已放弃
+
+        client.reconnectIfNeeded()
+
+        XCTAssertEqual(fakeTransport.startCallCount, 2) // 立即重连,不等退避
+        fakeTransport.simulate(.failed(NSError(domain: "test", code: 1)))
+        XCTAssertEqual(scheduler.scheduledDelays.last, 2) // 退避计数已重置,从 2s 重来
+    }
+
+    func test_reconnectIfNeeded_whileConnected_sendsProbeHeartbeatOnly() {
+        driveToConnected()
+        let framesBefore = fakeTransport.sentFrames.count
+        let startsBefore = fakeTransport.startCallCount
+
+        client.reconnectIfNeeded()
+
+        XCTAssertEqual(fakeTransport.startCallCount, startsBefore) // 不重建连接
+        XCTAssertEqual(fakeTransport.sentFrames.count, framesBefore + 1) // 多发一个探活 PING
+        XCTAssertEqual(fakeTransport.cancelCallCount, 0)
+    }
+
+    func test_reconnectIfNeeded_afterUserDisconnect_doesNothing() {
+        client.connect()
+        client.disconnect()
+        let startsBefore = fakeTransport.startCallCount
+
+        client.reconnectIfNeeded()
+
+        XCTAssertEqual(fakeTransport.startCallCount, startsBefore)
+    }
 }

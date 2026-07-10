@@ -5,6 +5,7 @@ import AppCore
 import IMStorage
 import IMKit
 import IMCall
+import IMClient
 
 final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     var window: UIWindow?
@@ -39,6 +40,12 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         wireCallManagerIfReady()
         window.makeKeyAndVisible()
         self.window = window
+    }
+
+    /// iOS 后台冻结期间 TCP 几乎必死且不会有失败回调，回前台主动校验：
+    /// 未连接立即重连（重置退避计数），已连接发心跳探活。
+    func sceneWillEnterForeground(_ scene: UIScene) {
+        environment?.ensureConnected()
     }
 
     private func rootViewController() -> UIViewController {
@@ -137,6 +144,17 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     /// 订阅 `$totalUnreadCount` 驱动「消息」tab 角标。
     private func makeConversationListNavigationController(viewModel: ConversationListViewModel) -> UIViewController {
         let listViewController = ConversationListViewController(viewModel: viewModel)
+        // 对齐 Android：连接状态只体现在「消息」tab 的导航栏标题上（tab bar
+        // 文字不变——nav 的 tabBarItem 带显式 title，不受 navigationItem 影响)。
+        let applyConnectionStatus: (IMConnectionStatus) -> Void = { [weak listViewController] status in
+            switch status {
+            case .connected: listViewController?.navigationItem.title = "消息"
+            case .connecting: listViewController?.navigationItem.title = "消息(正在连接...)"
+            case .disconnected: listViewController?.navigationItem.title = "消息(连接断开)"
+            }
+        }
+        environment.onConnectionStatusChange = applyConnectionStatus
+        applyConnectionStatus(environment.connectionStatus)
         listViewController.onConversationSelected = { [weak self, weak listViewController] row in
             guard let self else { return }
             let conversationViewModel = ConversationViewModel(

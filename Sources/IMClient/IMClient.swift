@@ -79,6 +79,10 @@ public final class IMClient {
     public private(set) var serverTimeDeltaMillis: Int64 = 0
 
     private static let maxAutomaticReconnectAttempts = 4
+    /// 收到 `.notViable`（建连卡在 waiting / 已建连接路径失效）后等多久
+    /// 还没恢复就主动 cancel 走统一失败路径。太短会在信号抖动时误杀
+    /// 还能自愈的连接，太长则"已连接"假象持续太久。
+    private static let viabilityGraceSeconds: TimeInterval = 10
 
     private let configuration: IMClientConfiguration
     private let transportFactory: (String, UInt16) -> IMTransportConnection
@@ -93,6 +97,7 @@ public final class IMClient {
     private var userDisconnect = false
     private var heartbeatToken: SchedulerToken?
     private var reconnectToken: SchedulerToken?
+    private var viabilityGraceToken: SchedulerToken?
     private var nextMessageId: UInt16 = 0
 
     public init(
@@ -128,11 +133,36 @@ public final class IMClient {
         userDisconnect = true
         heartbeatToken?.cancel()
         reconnectToken?.cancel()
+        cancelViabilityGraceTimer()
+        detachAndCancelTransport()
+        connectionStatus = .disconnected
+    }
+
+    /// 网络恢复（`NWPathMonitor` 断网→有网）或回到前台时调用。已连接时
+    /// 立即发一次心跳探活——若连接实为僵尸，写入失败或 viability 回调
+    /// 会走统一失败路径重连；未连接时重置自动重连计数（4 次耗尽后唯一
+    /// 的复活入口）并立刻重连，不等退避。用户主动 `disconnect()` 后 no-op。
+    public func reconnectIfNeeded() {
+        guard !userDisconnect else { return }
+        if connectionStatus == .connected {
+            sendHeartbeat(interval: heartbeatManager.currentHeartInterval())
+            return
+        }
+        reconnectAttempt = 0
+        reconnectToken?.cancel()
+        heartbeatToken?.cancel()
+        cancelViabilityGraceTimer()
+        // 先摘掉回调再 cancel：在途旧连接的 `.cancelled` 事件不应再触发
+        // 一轮退避重连，下面 startConnection() 已经是最新的重连。
+        detachAndCancelTransport()
+        startConnection()
+    }
+
+    private func detachAndCancelTransport() {
         transport?.onEvent = nil
         transport?.onDataReceived = nil
         transport?.cancel()
         transport = nil
-        connectionStatus = .disconnected
     }
 
     private func startConnection() {
@@ -149,13 +179,37 @@ public final class IMClient {
     private func handleTransportEvent(_ event: IMTransportEvent) {
         switch event {
         case .connected:
+            cancelViabilityGraceTimer()
             sendConnectMessage()
         case .failed, .cancelled:
+            cancelViabilityGraceTimer()
             heartbeatManager.reportHeartbeatExceptionTime(nowMillis())
             heartbeatToken?.cancel()
             connectionStatus = .disconnected
             scheduleReconnectIfNeeded()
+        case .notViable:
+            startViabilityGraceTimerIfNeeded()
+        case .viable:
+            cancelViabilityGraceTimer()
         }
+    }
+
+    /// `.notViable` 不立即判死刑：给 `viabilityGraceSeconds` 的自愈窗口
+    /// （信号抖动、短暂切网常能恢复，届时 `.viable`/`.connected` 会取消
+    /// 本定时器）；到点仍未恢复则 cancel transport，其 `.cancelled` 事件
+    /// 走上面统一的断开 + 退避重连路径。
+    private func startViabilityGraceTimerIfNeeded() {
+        guard !userDisconnect, viabilityGraceToken == nil else { return }
+        viabilityGraceToken = scheduler.scheduleOnce(after: Self.viabilityGraceSeconds) { [weak self] in
+            guard let self else { return }
+            self.viabilityGraceToken = nil
+            self.transport?.cancel()
+        }
+    }
+
+    private func cancelViabilityGraceTimer() {
+        viabilityGraceToken?.cancel()
+        viabilityGraceToken = nil
     }
 
     private func scheduleReconnectIfNeeded() {
@@ -244,14 +298,22 @@ public final class IMClient {
 
     private func sendHeartbeat(interval: Int64) {
         let body = Data("{\"interval\":\(interval)}".utf8)
-        sendFrame(signal: .ping, subSignal: .none, body: body) { [weak self] result in
+        // 弱捕获发送这次心跳时的 transport：失败回调可能迟到，届时若已经
+        // 重连，不能误杀新连接。
+        sendFrame(signal: .ping, subSignal: .none, body: body) { [weak self, weak transportAtSend = transport] result in
             guard let self else { return }
             switch result {
             case .success:
                 self.heartbeatManager.reportHeartbeatSendSuccessTime(self.nowMillis())
                 self.scheduleNextHeartbeatTimer()
             case .failure:
-                self.heartbeatManager.reportHeartbeatExceptionTime(self.nowMillis())
+                // 对齐 Android receiveException：心跳发送失败视为连接异常，
+                // cancel 后由 `.cancelled` 事件走统一的断开 + 重连路径
+                // （exceptionTime 也在那里上报，此处不重复报避免间隔算法
+                // 双重收缩）。心跳循环就此停止，重连成功后会重新启动。
+                if let transportAtSend, transportAtSend === self.transport {
+                    transportAtSend.cancel()
+                }
             }
         }
     }

@@ -5,6 +5,14 @@ public enum IMTransportEvent {
     case connected
     case failed(Error)
     case cancelled
+    /// 当前发不出也收不到，但系统仍在等待路径恢复：建连阶段进入
+    /// `NWConnection.State.waiting`（如无网络时），或已建立的连接
+    /// viability 变为 false（如走出 Wi-Fi 覆盖）。TCP 断网既不会立刻
+    /// `.failed` 也不会 `.cancelled`——没有这个事件，`IMClient` 会一直
+    /// 误以为连接健康（见 `IMClient` 的宽限定时器）。
+    case notViable
+    /// 与 `notViable` 对应的恢复信号：viability 回到 true。
+    case viable
 }
 
 /// A raw byte-stream transport: connects, sends bytes, receives bytes.
@@ -49,6 +57,8 @@ public final class NWConnectionTransport: IMTransportConnection {
             case .ready:
                 self?.onEvent?(.connected)
                 self?.receiveLoop()
+            case .waiting:
+                self?.onEvent?(.notViable)
             case .failed(let error):
                 self?.onEvent?(.failed(error))
             case .cancelled:
@@ -56,6 +66,10 @@ public final class NWConnectionTransport: IMTransportConnection {
             default:
                 break
             }
+        }
+        connection.viabilityUpdateHandler = { [weak self] isViable in
+            print("[DEBUG-FP][\({ let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"; return f.string(from: Date()) }())] NWConnection viability -> \(isViable)")
+            self?.onEvent?(isViable ? .viable : .notViable)
         }
         connection.start(queue: queue)
     }

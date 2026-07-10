@@ -1,4 +1,5 @@
 import Foundation
+import Network
 import IMClient
 import IMStorage
 import IMMessaging
@@ -22,6 +23,14 @@ public final class AppEnvironment {
     private let transportFactory: (String, UInt16) -> IMTransportConnection
 
     public private(set) var imClient: IMClient?
+    /// IM 连接状态变更中继，由 `SceneDelegate` 赋值。挂在 AppEnvironment 而非
+    /// IMClient 上，因为退出重登会重建 IMClient，这个中继跨重建存活，
+    /// `connectIfPossible()` 每次都会把新 client 的回调接到它上面。
+    public var onConnectionStatusChange: ((IMConnectionStatus) -> Void)?
+    /// 当前连接状态；未登录（imClient 为 nil）视为断开。UI 首次绑定时读它
+    /// 拿初始值——`connectIfPossible()` 里 `connect()` 先于 UI 构建执行，
+    /// 最初的 `.connecting` 事件发出时中继还没被赋值。
+    public var connectionStatus: IMConnectionStatus { imClient?.connectionStatus ?? .disconnected }
     public private(set) var messagingService: MessagingService?
     public private(set) var contactSyncService: ContactSyncService?
     public private(set) var groupSyncService: GroupSyncService?
@@ -33,6 +42,14 @@ public final class AppEnvironment {
     /// controls — `CallManager` only sees it through the narrower
     /// `MediaEngine` protocol.
     public private(set) var webRTCClient: WebRTCClient?
+
+    /// 监听系统网络路径：断网→有网的沿触发 `imClient?.reconnectIfNeeded()`。
+    /// IMClient 的自动重连最多退避 4 次就停，且 TCP 静默断网不会有失败
+    /// 回调——没有这个监听，网络恢复后连接永远不会自己回来。放在
+    /// AppEnvironment 而非 IMClient 内部，是为了不给 IMClient 的单元测试
+    /// 引入真实的系统网络依赖，也和 imClient 跨登出/重登的生命周期对齐。
+    private let pathMonitor = NWPathMonitor()
+    private var lastPathSatisfied: Bool?
 
     public init(
         config: AppConfig = .production,
@@ -49,6 +66,26 @@ public final class AppEnvironment {
         self.deviceIdentifierProvider = deviceIdentifierProvider
         self.transportFactory = transportFactory
         credentialsStore.clearIfFreshInstall()
+        // start(queue: .main) 让回调直接落在主队列，符合本类的单队列约定。
+        pathMonitor.pathUpdateHandler = { [weak self] path in
+            guard let self else { return }
+            let satisfied = path.status == .satisfied
+            let wasSatisfied = self.lastPathSatisfied
+            self.lastPathSatisfied = satisfied
+            // 只在"断网→有网"的沿触发：启动时的首个回调只记基线，
+            // satisfied→satisfied 的路径抖动（如 Wi-Fi/蜂窝切换）不打扰
+            // 在途连接——接口切换导致的旧连接失效由 viability 宽限路径兜底。
+            guard satisfied, wasSatisfied == false else { return }
+            self.imClient?.reconnectIfNeeded()
+        }
+        pathMonitor.start(queue: .main)
+    }
+
+    /// 回到前台时调用（`SceneDelegate.sceneWillEnterForeground`）：未连接
+    /// 则立即重连（并重置 4 次退避计数），已连接则发一次心跳探活。iOS
+    /// 后台 TCP 几乎必死，这是回前台最快的校验/恢复手段。未登录时 no-op。
+    public func ensureConnected() {
+        imClient?.reconnectIfNeeded()
     }
 
     /// Reads `credentialsStore`; if credentials exist, (re)constructs
@@ -91,6 +128,9 @@ public final class AppEnvironment {
             contactSync?.fetchUserInfo(uids: [userId], forceRefresh: false)
         }
         client.register(connectAckHandler)
+        client.onConnectionStatusChange = { [weak self] status in
+            self?.onConnectionStatusChange?(status)
+        }
 
         imClient = client
         messagingService = service
