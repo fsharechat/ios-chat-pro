@@ -92,8 +92,18 @@ final class ConversationListCell: UITableViewCell {
         nameLabel.text = row.displayName
         timestampLabel.text = Self.formattedTimestamp(row.timestamp)
 
-        let mentionPrefix = row.hasUnreadMention ? "[有人@我] " : ""
-        previewLabel.text = mentionPrefix + row.previewText
+        if row.hasUnreadMention {
+            let preview = NSMutableAttributedString(
+                string: "[有人@我] ",
+                attributes: [.foregroundColor: UIColor.systemRed])
+            preview.append(NSAttributedString(
+                string: row.previewText,
+                attributes: [.foregroundColor: UIColor.secondaryLabel]))
+            previewLabel.attributedText = preview
+        } else {
+            previewLabel.attributedText = nil
+            previewLabel.text = row.previewText
+        }
         sendFailureIcon.isHidden = row.lastMessageStatus != .sendFailure
 
         backgroundColor = row.isTop ? Theme.backgroundTertiary : Theme.backgroundSecondary
