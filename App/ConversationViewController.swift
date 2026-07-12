@@ -487,10 +487,11 @@ final class ConversationViewController: UIViewController {
 
     private func presentCamera() {
         guard UIImagePickerController.isSourceTypeAvailable(.camera) else { return }
-        let picker = UIImagePickerController()
-        picker.sourceType = .camera
-        picker.delegate = self
-        present(picker, animated: true)
+        let camera = CameraCaptureViewController()
+        camera.modalPresentationStyle = .fullScreen
+        camera.onImage = { [weak self] image in self?.handlePickedImage(image) }
+        camera.onVideo = { [weak self] url in self?.handlePickedVideo(at: url) }
+        present(camera, animated: true)
     }
 
     private func presentFilePicker() {
@@ -863,16 +864,6 @@ extension ConversationViewController: PHPickerViewControllerDelegate {
                 DispatchQueue.main.async { self?.handlePickedVideo(at: tempURL) }
             }
         }
-    }
-}
-
-extension ConversationViewController: UINavigationControllerDelegate, UIImagePickerControllerDelegate {
-    func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
-        picker.dismiss(animated: true)
-        guard let image = info[.originalImage] as? UIImage,
-              let fullData = image.jpegData(compressionQuality: 0.8),
-              let thumbnail = Self.makeThumbnailData(image) else { return }
-        viewModel.sendImage(fullImageData: fullData, thumbnail: thumbnail)
     }
 }
 

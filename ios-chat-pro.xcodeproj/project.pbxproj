@@ -76,6 +76,7 @@
 		E1556A736693B9FCAC98259B /* ForwardPreviewViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14A2F42FFBACA55D6A5741FA /* ForwardPreviewViewController.swift */; };
 		E2E627EE50345A115DB5B2ED /* GroupInfoViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A887447B146764C16A4E603 /* GroupInfoViewController.swift */; };
 		E48899C747B0A0BD8C98A028 /* EmojiPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 767A2D49F043AA9A82A8FFFB /* EmojiPanelView.swift */; };
+		E863F4A314899B0B64CF572F /* CameraCaptureViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B6F41DEDAB57E7F88291C88 /* CameraCaptureViewController.swift */; };
 		E9F8B2779486AB4D8F736447 /* GroupEntryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B177F3C5957AF38D8250AC7 /* GroupEntryView.swift */; };
 		ED3217CCB1E2B24A6F2FD378 /* FileDownloadManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 060A7470530CBB16BEE6E37A /* FileDownloadManager.swift */; };
 		EEAD53A71EAD7C968380673B /* IMMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = E0AB875DDD2DC10A0CEAA624 /* IMMessaging */; };
@@ -122,6 +123,7 @@
 		57F8EF43378B3B114C7692EB /* outgoing_call_ring.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = outgoing_call_ring.mp3; sourceTree = "<group>"; };
 		5803A5A486BFF04BC8C60228 /* VoiceConverter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceConverter.swift; sourceTree = "<group>"; };
 		5ACDCE0BC8F9E8EF7A77D603 /* AvatarImageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AvatarImageView.swift; sourceTree = "<group>"; };
+		5B6F41DEDAB57E7F88291C88 /* CameraCaptureViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraCaptureViewController.swift; sourceTree = "<group>"; };
 		5E20A628F05F52DE37B82DB6 /* CallPermissions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CallPermissions.swift; sourceTree = "<group>"; };
 		60C53CDF7ECE24AB7925139E /* ConversationListCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationListCell.swift; sourceTree = "<group>"; };
 		619515E59C475B7B0ECBF677 /* ThemeMode+UIKit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ThemeMode+UIKit.swift"; sourceTree = "<group>"; };
@@ -214,6 +216,7 @@
 				5E20A628F05F52DE37B82DB6 /* CallPermissions.swift */,
 				0AD23AFE8191A4A283002338 /* CallRingtonePlayer.swift */,
 				433A3515C086B0178E667801 /* CallViewController.swift */,
+				5B6F41DEDAB57E7F88291C88 /* CameraCaptureViewController.swift */,
 				F8EB6D5DBC0051B5D576A085 /* ContactListCell.swift */,
 				8DFDF68D07E4AD79AFB0B169 /* ContactListViewController.swift */,
 				60C53CDF7ECE24AB7925139E /* ConversationListCell.swift */,
@@ -380,6 +383,7 @@
 				9E5BFA10E82C0ECB6BF1FD1A /* CallPermissions.swift in Sources */,
 				72DF9C8D9144BD29B958A810 /* CallRingtonePlayer.swift in Sources */,
 				DFE88FBF3B3A22EEF47634EB /* CallViewController.swift in Sources */,
+				E863F4A314899B0B64CF572F /* CameraCaptureViewController.swift in Sources */,
 				7AB9633A25E6AFDC3D82E429 /* ContactListCell.swift in Sources */,
 				951AC39EF02FC7F336FCCFCB /* ContactListViewController.swift in Sources */,
 				D91FAF18E648543CFB927ED6 /* ConversationListCell.swift in Sources */,
