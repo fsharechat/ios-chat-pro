@@ -52,6 +52,7 @@ final class ConversationListViewController: UIViewController {
         tableView.addGestureRecognizer(UILongPressGestureRecognizer(target: self, action: #selector(rowLongPressed(_:))))
         tableView.backgroundColor = Theme.backgroundPrimary
         tableView.separatorColor = Theme.backgroundTertiary
+        tableView.showsVerticalScrollIndicator = false
         tableView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(tableView)
         NSLayoutConstraint.activate([
