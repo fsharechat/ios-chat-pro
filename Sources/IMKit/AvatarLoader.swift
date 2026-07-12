@@ -6,6 +6,13 @@ import Foundation
 /// bytes into an image.
 public protocol AvatarLoading {
     func loadAvatarData(from urlString: String) async -> Data?
+
+    /// Synchronous cache-only lookup. Returns the bytes immediately when the
+    /// URL is already in the in-memory cache, `nil` otherwise — never touches
+    /// the network. Lets UI set a cached avatar in the same frame it is
+    /// configured, instead of flashing a placeholder for one runloop tick
+    /// while an async cache hit round-trips through a `Task`.
+    func cachedAvatarData(from urlString: String) -> Data?
 }
 
 /// **Threading contract:** like the rest of this codebase, this has no
@@ -30,9 +37,13 @@ public final class AvatarLoader: AvatarLoading {
         self.session = session
     }
 
+    public func cachedAvatarData(from urlString: String) -> Data? {
+        cache.object(forKey: urlString as NSString) as Data?
+    }
+
     public func loadAvatarData(from urlString: String) async -> Data? {
-        if let cached = cache.object(forKey: urlString as NSString) {
-            return cached as Data
+        if let cached = cachedAvatarData(from: urlString) {
+            return cached
         }
         guard let url = URL(string: urlString) else { return nil }
 

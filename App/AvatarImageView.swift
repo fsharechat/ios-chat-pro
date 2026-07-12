@@ -52,6 +52,20 @@ final class AvatarImageView: UIImageView {
         let token = UUID()
         currentToken = token
         currentURLString = urlString
+
+        // Cache hit must apply synchronously, in the same frame as this
+        // configure. History-prepend reshuffles which cell serves which row,
+        // so the same-URL guard above can't help; going through the async
+        // path below would render ≥1 frame of initials before the Task
+        // resumes — the whole-screen avatar flash after pull-to-load.
+        if let urlString,
+           let data = loader.cachedAvatarData(from: urlString),
+           let uiImage = UIImage(data: data) {
+            image = uiImage
+            initialsLabel.isHidden = true
+            return
+        }
+
         image = nil
         initialsLabel.isHidden = false
 
