@@ -5,12 +5,14 @@ final class VoiceMessageCell: UITableViewCell {
     static let reuseIdentifier = "VoiceMessageCell"
 
     var onTapped: (() -> Void)?
+    var onRetryTapped: (() -> Void)?
     /// 群聊里长按对方头像 → 会话页在输入框插入 @；自己发的消息不绑定。
     var onAvatarLongPressed: (() -> Void)?
 
     private let bubbleView = UIView()
     private let iconView = UIImageView()
     private let durationLabel = UILabel()
+    private let statusIndicator = MessageStatusIndicatorView()
     private let avatarView = AvatarImageView(loader: AvatarLoader.shared)
     private let bubbleColumn = UIStackView()
     private let rowStack = UIStackView()
@@ -34,7 +36,9 @@ final class VoiceMessageCell: UITableViewCell {
     override func prepareForReuse() {
         super.prepareForReuse()
         onTapped = nil
+        onRetryTapped = nil
         onAvatarLongPressed = nil
+        statusIndicator.apply(.none)
     }
 
     private func layoutViews() {
@@ -82,7 +86,14 @@ final class VoiceMessageCell: UITableViewCell {
         avatarPress.minimumPressDuration = 0.4
         avatarView.addGestureRecognizer(avatarPress)
 
+        // 状态指示器不入 stack：直接钉在气泡左侧、垂直居中。
+        statusIndicator.onRetry = { [weak self] in self?.onRetryTapped?() }
+        statusIndicator.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(statusIndicator)
+
         NSLayoutConstraint.activate([
+            statusIndicator.trailingAnchor.constraint(equalTo: bubbleView.leadingAnchor, constant: -6),
+            statusIndicator.centerYAnchor.constraint(equalTo: bubbleView.centerYAnchor),
             avatarView.widthAnchor.constraint(equalToConstant: 36),
             avatarView.heightAnchor.constraint(equalToConstant: 36),
             rowStack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 8),
@@ -113,12 +124,35 @@ final class VoiceMessageCell: UITableViewCell {
     }
 
     func configure(with row: StoredMessageRow) {
-        let isOutgoing = row.isOutgoing
+        let status: MessageStatusIndicatorView.Status
+        if row.isOutgoing, row.status == .sending {
+            status = .sending
+        } else if row.isOutgoing, row.status == .sendFailure {
+            status = .failed
+        } else {
+            status = .none
+        }
+        applyBubble(
+            isOutgoing: row.isOutgoing, duration: row.voiceDuration ?? 0, status: status,
+            avatarURL: row.senderAvatarURL, senderDisplayName: row.senderDisplayName
+        )
+    }
+
+    /// 上传中/上传失败的占位行（尚未落库），与 pending 图片/视频同一生命周期。
+    func configurePending(_ pending: PendingVoiceUpload) {
+        applyBubble(
+            isOutgoing: true, duration: pending.duration,
+            status: pending.state == .uploading ? .sending : .failed,
+            avatarURL: nil, senderDisplayName: nil
+        )
+    }
+
+    private func applyBubble(isOutgoing: Bool, duration: Int, status: MessageStatusIndicatorView.Status, avatarURL: String?, senderDisplayName: String?) {
         bubbleView.backgroundColor = isOutgoing ? Theme.accent : Theme.incomingBubble
         iconView.tintColor = isOutgoing ? .white : Theme.accent
         durationLabel.textColor = isOutgoing ? .white : .label
+        statusIndicator.apply(status)
 
-        let duration = row.voiceDuration ?? 0
         durationLabel.text = "\(duration)秒"
 
         // 对齐 Android（AudioMessageContentViewHolder.onBind）：
@@ -137,12 +171,12 @@ final class VoiceMessageCell: UITableViewCell {
             rowStack.addArrangedSubview(spacer)
             rowStack.addArrangedSubview(bubbleColumn)
             rowStack.addArrangedSubview(avatarView)
-            avatarView.setAvatar(urlString: row.senderAvatarURL, displayName: "我")
+            avatarView.setAvatar(urlString: avatarURL, displayName: "我")
         } else {
             rowStack.addArrangedSubview(avatarView)
             rowStack.addArrangedSubview(bubbleColumn)
             rowStack.addArrangedSubview(spacer)
-            avatarView.setAvatar(urlString: row.senderAvatarURL, displayName: row.senderDisplayName ?? "")
+            avatarView.setAvatar(urlString: avatarURL, displayName: senderDisplayName ?? "")
         }
     }
 }

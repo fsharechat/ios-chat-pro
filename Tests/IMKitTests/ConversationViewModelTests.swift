@@ -21,7 +21,11 @@ private final class FakeMessageSending: MessageSending {
         sentImages.append((target, thumbnail, remoteURL))
     }
 
-    func sendVoice(to target: String, conversationType: ConversationType, line: Int, remoteURL: String, duration: Int) throws {}
+    private(set) var sentVoices: [(target: String, remoteURL: String, duration: Int)] = []
+
+    func sendVoice(to target: String, conversationType: ConversationType, line: Int, remoteURL: String, duration: Int) throws {
+        sentVoices.append((target, remoteURL, duration))
+    }
 
     func sendFile(to target: String, conversationType: ConversationType, line: Int, name: String, size: Int, remoteURL: String) throws {}
 
@@ -53,6 +57,22 @@ private final class FakeVideoUploading: VideoUploading {
     private(set) var pendingCompletions: [(Result<String, MediaUploadError>) -> Void] = []
 
     func uploadVideo(_ data: Data, fileName: String, completion: @escaping (Result<String, MediaUploadError>) -> Void) {
+        uploadedData.append(data)
+        if completesSynchronously {
+            completion(nextResult)
+        } else {
+            pendingCompletions.append(completion)
+        }
+    }
+}
+
+private final class FakeVoiceUploading: VoiceUploading {
+    var nextResult: Result<String, MediaUploadError> = .failure(.invalidUploadURL)
+    var completesSynchronously = true
+    private(set) var uploadedData: [Data] = []
+    private(set) var pendingCompletions: [(Result<String, MediaUploadError>) -> Void] = []
+
+    func uploadVoice(_ data: Data, fileName: String, completion: @escaping (Result<String, MediaUploadError>) -> Void) {
         uploadedData.append(data)
         if completesSynchronously {
             completion(nextResult)
@@ -270,7 +290,7 @@ final class ConversationViewModelTests: XCTestCase {
             switch row {
             case .message(let m): return m.text
             case .systemTip: return "<systemTip>"
-            case .pendingImage, .pendingVideo, .timeHeader: return nil
+            case .pendingImage, .pendingVideo, .pendingVoice, .timeHeader: return nil
             }
         }, ["msg0", "<systemTip>", "msg2", "msg3", "msg4", "msg5"])
     }
@@ -526,6 +546,72 @@ final class ConversationViewModelTests: XCTestCase {
             return XCTFail("Expected .pendingVideo")
         }
         XCTAssertEqual(p.state, .failed)
+    }
+
+    func test_sendVoice_whileUploading_showsPendingVoiceRow() {
+        let fakeVoice = FakeVoiceUploading()
+        fakeVoice.completesSynchronously = false
+        let vm = ConversationViewModel(
+            storage: storage, messageSending: sending, imageUploading: uploading,
+            voiceUploading: fakeVoice, target: "them", pageSize: 3, currentUserId: "me"
+        )
+        vm.sendVoice(audioData: Data([0x01, 0x02]), duration: 7, fileName: "a.amr")
+        XCTAssertEqual(vm.rows.count, 1)
+        guard case .pendingVoice(let p) = vm.rows.first else {
+            return XCTFail("Expected .pendingVoice, got \(String(describing: vm.rows.first))")
+        }
+        XCTAssertEqual(p.state, .uploading)
+        XCTAssertEqual(p.duration, 7)
+    }
+
+    func test_sendVoice_onUploadSuccess_removePendingAndSendsMessage() {
+        let fakeVoice = FakeVoiceUploading()
+        fakeVoice.nextResult = .success("https://example.com/a.amr")
+        fakeVoice.completesSynchronously = true
+        let vm = ConversationViewModel(
+            storage: storage, messageSending: sending, imageUploading: uploading,
+            voiceUploading: fakeVoice, target: "them", pageSize: 3, currentUserId: "me"
+        )
+        vm.sendVoice(audioData: Data([0x01]), duration: 7, fileName: "a.amr")
+        XCTAssertTrue(vm.rows.allSatisfy { if case .pendingVoice = $0 { return false }; return true })
+        XCTAssertEqual(sending.sentVoices.first?.remoteURL, "https://example.com/a.amr")
+        XCTAssertEqual(sending.sentVoices.first?.duration, 7)
+    }
+
+    func test_sendVoice_onUploadFailure_showsFailedPendingRow() {
+        let fakeVoice = FakeVoiceUploading()
+        fakeVoice.nextResult = .failure(.invalidUploadURL)
+        fakeVoice.completesSynchronously = true
+        let vm = ConversationViewModel(
+            storage: storage, messageSending: sending, imageUploading: uploading,
+            voiceUploading: fakeVoice, target: "them", pageSize: 3, currentUserId: "me"
+        )
+        vm.sendVoice(audioData: Data([0x01]), duration: 7, fileName: "a.amr")
+        guard case .pendingVoice(let p) = vm.rows.first else {
+            return XCTFail("Expected .pendingVoice")
+        }
+        XCTAssertEqual(p.state, .failed)
+    }
+
+    func test_retryPendingVoice_reuploadsAndSends() {
+        let fakeVoice = FakeVoiceUploading()
+        fakeVoice.nextResult = .failure(.invalidUploadURL)
+        fakeVoice.completesSynchronously = true
+        let vm = ConversationViewModel(
+            storage: storage, messageSending: sending, imageUploading: uploading,
+            voiceUploading: fakeVoice, target: "them", pageSize: 3, currentUserId: "me"
+        )
+        vm.sendVoice(audioData: Data([0x01]), duration: 7, fileName: "a.amr")
+        guard case .pendingVoice(let failed)? = vm.rows.first, failed.state == .failed else {
+            return XCTFail("Expected failed .pendingVoice")
+        }
+
+        fakeVoice.nextResult = .success("https://example.com/a.amr")
+        vm.retry(row: .pendingVoice(failed))
+
+        XCTAssertTrue(vm.rows.allSatisfy { if case .pendingVoice = $0 { return false }; return true })
+        XCTAssertEqual(sending.sentVoices.first?.remoteURL, "https://example.com/a.amr")
+        XCTAssertEqual(fakeVoice.uploadedData.count, 2)
     }
 
     func testMakeRow_video_setsVideoDuration() throws {

@@ -50,6 +50,29 @@ public struct PendingVideoUpload: Equatable, Hashable {
     }
 }
 
+/// A voice message still uploading — lives only in `ConversationViewModel`'s
+/// in-memory state until upload succeeds, same lifecycle as `PendingImageUpload`.
+public struct PendingVoiceUpload: Equatable, Hashable {
+    public enum State: Equatable, Hashable {
+        case uploading
+        case failed
+    }
+
+    public let id: UUID
+    public let audioData: Data
+    public let duration: Int
+    public let fileName: String
+    public var state: State
+
+    public init(id: UUID, audioData: Data, duration: Int, fileName: String, state: State) {
+        self.id = id
+        self.audioData = audioData
+        self.duration = duration
+        self.fileName = fileName
+        self.state = state
+    }
+}
+
 /// Flattened, `Hashable` presentation of a `StoredMessage`. `senderDisplayName`/
 /// `senderAvatarURL` are non-nil only for a group-chat message I received
 /// (never for single chat, never for my own outgoing messages — there's no
@@ -146,6 +169,7 @@ public enum ChatMessageRow: Equatable, Hashable {
     case message(StoredMessageRow)
     case pendingImage(PendingImageUpload)
     case pendingVideo(PendingVideoUpload)
+    case pendingVoice(PendingVoiceUpload)
     case systemTip(SystemTipRow)
     /// text: formatted display string; anchorId: storageId of the immediately
     /// following message, making each header globally unique even when two
@@ -162,7 +186,7 @@ extension ChatMessageRow {
         switch self {
         case .message(let row): return row.storageId
         case .systemTip(let row): return row.storageId
-        case .pendingImage, .pendingVideo, .timeHeader: return nil
+        case .pendingImage, .pendingVideo, .pendingVoice, .timeHeader: return nil
         }
     }
 
@@ -170,7 +194,7 @@ extension ChatMessageRow {
         switch self {
         case .message(let row): return row.timestamp
         case .systemTip(let row): return row.timestamp
-        case .pendingImage, .pendingVideo, .timeHeader: return nil
+        case .pendingImage, .pendingVideo, .pendingVoice, .timeHeader: return nil
         }
     }
 
@@ -183,7 +207,7 @@ extension ChatMessageRow {
         switch self {
         case .message(let row): return row.messageUid == 0 ? nil : row.messageUid
         case .systemTip(let row): return row.messageUid == 0 ? nil : row.messageUid
-        case .pendingImage, .pendingVideo, .timeHeader: return nil
+        case .pendingImage, .pendingVideo, .pendingVoice, .timeHeader: return nil
         }
     }
 }

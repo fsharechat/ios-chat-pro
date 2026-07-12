@@ -179,6 +179,7 @@ final class ConversationViewController: UIViewController {
                 let cell = tableView.dequeueReusableCell(withIdentifier: VoiceMessageCell.reuseIdentifier, for: indexPath) as! VoiceMessageCell
                 cell.configure(with: message)
                 cell.onTapped = { [weak self, weak cell] in self?.playVoice(urlString: message.imageRemoteURL, cell: cell) }
+                cell.onRetryTapped = { [weak self] in self?.viewModel.retry(row: row) }
                 cell.onAvatarLongPressed = { [weak self] in self?.insertMentionFromAvatar(message) }
                 return cell
             case .message(let message) where message.fileName != nil:
@@ -234,6 +235,11 @@ final class ConversationViewController: UIViewController {
                 return cell
             case .pendingVideo(let pending):
                 let cell = tableView.dequeueReusableCell(withIdentifier: VideoMessageCell.reuseIdentifier, for: indexPath) as! VideoMessageCell
+                cell.configurePending(pending)
+                cell.onRetryTapped = { [weak self] in self?.viewModel.retry(row: row) }
+                return cell
+            case .pendingVoice(let pending):
+                let cell = tableView.dequeueReusableCell(withIdentifier: VoiceMessageCell.reuseIdentifier, for: indexPath) as! VoiceMessageCell
                 cell.configurePending(pending)
                 cell.onRetryTapped = { [weak self] in self?.viewModel.retry(row: row) }
                 return cell
@@ -399,6 +405,7 @@ final class ConversationViewController: UIViewController {
         case .message(let message): return "message-\(message.storageId)"
         case .pendingImage(let pending): return "pending-\(pending.id)"
         case .pendingVideo(let pending): return "pendingVideo-\(pending.id)"
+        case .pendingVoice(let pending): return "pendingVoice-\(pending.id)"
         case .systemTip(let tip): return "systemTip-\(tip.storageId)"
         case .timeHeader(let text, let anchorId): return "timeHeader-\(anchorId)-\(text)"
         case nil: return nil

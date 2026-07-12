@@ -48,6 +48,7 @@ public final class ConversationViewModel {
     private var liveRows: [ChatMessageRow] = []
     private var pendingImages: [PendingImageUpload] = []
     private var pendingVideos: [PendingVideoUpload] = []
+    private var pendingVoices: [PendingVoiceUpload] = []
     private var lastMessages: [StoredMessage] = []
     private var cancellable: AnyCancellable?
 
@@ -101,11 +102,25 @@ public final class ConversationViewModel {
     }
 
     public func sendVoice(audioData: Data, duration: Int, fileName: String) {
-        voiceUploading?.uploadVoice(audioData, fileName: fileName) { [weak self] result in
+        let pending = PendingVoiceUpload(id: UUID(), audioData: audioData, duration: duration, fileName: fileName, state: .uploading)
+        pendingVoices.append(pending)
+        publishRows()
+        startVoiceUpload(pending)
+    }
+
+    private func startVoiceUpload(_ pending: PendingVoiceUpload) {
+        voiceUploading?.uploadVoice(pending.audioData, fileName: pending.fileName) { [weak self] result in
             guard let self else { return }
-            if case .success(let url) = result {
-                try? self.messageSending?.sendVoice(to: self.target, conversationType: self.conversationType, line: self.line, remoteURL: url, duration: duration)
+            switch result {
+            case .success(let url):
+                try? self.messageSending?.sendVoice(to: self.target, conversationType: self.conversationType, line: self.line, remoteURL: url, duration: pending.duration)
+                self.pendingVoices.removeAll { $0.id == pending.id }
+            case .failure:
+                if let index = self.pendingVoices.firstIndex(where: { $0.id == pending.id }) {
+                    self.pendingVoices[index].state = .failed
+                }
             }
+            self.publishRows()
         }
     }
 
@@ -187,6 +202,11 @@ public final class ConversationViewModel {
             pendingVideos[index].state = .uploading
             publishRows()
             startVideoUpload(pendingVideos[index])
+        case .pendingVoice(let pending):
+            guard let index = pendingVoices.firstIndex(where: { $0.id == pending.id }) else { return }
+            pendingVoices[index].state = .uploading
+            publishRows()
+            startVoiceUpload(pendingVoices[index])
         case .message(let message):
             guard message.status == .sendFailure else { return }
             try? messageSending?.resend(localMessageId: message.localMessageId)
@@ -413,7 +433,7 @@ public final class ConversationViewModel {
     }
 
     private func publishRows() {
-        rows = olderRows + liveRows + pendingImages.map { .pendingImage($0) } + pendingVideos.map { .pendingVideo($0) }
+        rows = olderRows + liveRows + pendingImages.map { .pendingImage($0) } + pendingVideos.map { .pendingVideo($0) } + pendingVoices.map { .pendingVoice($0) }
     }
 
     /// `message.id` is always non-nil for a row fetched back from the
