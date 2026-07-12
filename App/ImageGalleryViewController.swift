@@ -29,7 +29,9 @@ final class ImageGalleryViewController: UIViewController {
         self.currentIndex = min(max(0, startIndex), items.count - 1)
         self.loader = loader
         super.init(nibName: nil, bundle: nil)
-        modalPresentationStyle = .fullScreen
+        // overFullScreen 保留底下的聊天界面视图，下拉关闭时背景 alpha
+        // 渐变才能透出聊天界面，而不是黑色窗口。
+        modalPresentationStyle = .overFullScreen
     }
 
     @available(*, unavailable)
