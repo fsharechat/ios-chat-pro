@@ -26,6 +26,7 @@ final class UserInfoViewController: UIViewController {
     private let isSelf: Bool
     private var cancellables = Set<AnyCancellable>()
 
+    private let scrollView = UIScrollView()
     private let avatarImageView = AvatarImageView(loader: AvatarLoader())
     private let nameLabel = UILabel()
     private let mobileLabel = UILabel()
@@ -105,17 +106,26 @@ final class UserInfoViewController: UIViewController {
         separator.backgroundColor = .separator
         separator.translatesAutoresizingMaskIntoConstraints = false
 
-        view.addSubview(headerStack)
-        view.addSubview(separator)
-        view.addSubview(sendMessageButton)
-        view.addSubview(videoCallButton)
-        view.addSubview(addFriendButton)
+        scrollView.alwaysBounceVertical = true
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+
+        scrollView.addSubview(headerStack)
+        scrollView.addSubview(separator)
+        scrollView.addSubview(sendMessageButton)
+        scrollView.addSubview(videoCallButton)
+        scrollView.addSubview(addFriendButton)
+        view.addSubview(scrollView)
 
         NSLayoutConstraint.activate([
+            scrollView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
+            scrollView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            scrollView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+
             avatarImageView.widthAnchor.constraint(equalToConstant: 80),
             avatarImageView.heightAnchor.constraint(equalToConstant: 80),
 
-            headerStack.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 24),
+            headerStack.topAnchor.constraint(equalTo: scrollView.topAnchor, constant: 24),
             headerStack.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
             headerStack.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
 
@@ -138,6 +148,9 @@ final class UserInfoViewController: UIViewController {
             addFriendButton.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
             addFriendButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
             addFriendButton.heightAnchor.constraint(equalToConstant: 48),
+
+            // videoCallButton 恒为最低元素（隐藏也参与布局），用它定出 contentSize 高度
+            scrollView.bottomAnchor.constraint(equalTo: videoCallButton.bottomAnchor, constant: 24),
         ])
     }
 
