@@ -170,8 +170,6 @@ final class VideoMessageCell: UITableViewCell {
         bubbleHeightConstraint.constant = displaySize.height
 
         durationLabel.text = " \(formatDuration(data.duration)) "
-        playCircle.isHidden = data.isUploading
-        durationLabel.isHidden = data.isUploading
         if data.isOutgoing, data.isUploading {
             statusIndicator.apply(.sending)
         } else if data.isOutgoing, data.isFailed {
