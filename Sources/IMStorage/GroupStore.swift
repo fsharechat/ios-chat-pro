@@ -78,4 +78,15 @@ public final class GroupStore {
             )
         }
     }
+
+    /// Resets every group's `isFav` flag — used by `IMStorage.clearSessionData()`
+    /// on logout. `isFav` is purely local (never resynced from the server,
+    /// see `StoredGroup`'s doc comment), so it's the one `groupInfo` column
+    /// that must be explicitly wiped rather than left for the next login's
+    /// sync to overwrite. Takes `db:` rather than opening its own write, so
+    /// `clearSessionData()` can run it in the same transaction as its other
+    /// table clears.
+    public func clearAllFav(db: Database) throws {
+        try db.execute(sql: "UPDATE groupInfo SET isFav = 0")
+    }
 }

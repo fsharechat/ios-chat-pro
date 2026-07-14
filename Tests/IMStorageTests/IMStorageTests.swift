@@ -68,4 +68,18 @@ final class IMStorageTests: XCTestCase {
         // users table is untouched — matches Android's SqliteDatabaseStore.stop() scope
         XCTAssertEqual(try storage.users.user(uid: "u2")?.displayName, "Bob")
     }
+
+    func test_clearSessionData_resetsFavGroupFlag() throws {
+        let storage = try IMStorage.openInMemory()
+        try storage.groups.upsertGroup(StoredGroup(
+            groupId: "g1", name: "Old Account's Group", portrait: nil, owner: "u1",
+            groupType: .normal, memberCount: 3, updateDt: 1, memberUpdateDt: 1
+        ))
+        try storage.groups.setFav(true, groupId: "g1")
+        XCTAssertEqual(try storage.groups.group(groupId: "g1")?.isFav, true)
+
+        try storage.clearSessionData()
+
+        XCTAssertEqual(try storage.groups.group(groupId: "g1")?.isFav, false)
+    }
 }
