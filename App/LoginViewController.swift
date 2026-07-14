@@ -7,6 +7,7 @@ final class LoginViewController: UIViewController {
     private let viewModel: LoginViewModel
     private var cancellables = Set<AnyCancellable>()
 
+    private let logoImageView = UIImageView()
     private let titleLabel = UILabel()
     private let phoneField = UITextField()
     private let codeField = UITextField()
@@ -14,6 +15,8 @@ final class LoginViewController: UIViewController {
     private let loginButton = UIButton(type: .system)
     private let errorLabel = UILabel()
     private let activityIndicator = UIActivityIndicatorView(style: .medium)
+    private let formStack = UIStackView()
+    private var formStackCenterYConstraint: NSLayoutConstraint!
 
     init(viewModel: LoginViewModel) {
         self.viewModel = viewModel
@@ -28,15 +31,43 @@ final class LoginViewController: UIViewController {
         view.backgroundColor = Theme.backgroundPrimary
         layoutViews()
         bindViewModel()
+
+        // cancelsTouchesInView = false so this doesn't swallow taps on
+        // `loginButton`/`requestCodeButton` — it just resigns the keyboard
+        // alongside whatever else the tap does.
+        let dismissKeyboardTap = UITapGestureRecognizer(target: self, action: #selector(dismissKeyboard))
+        dismissKeyboardTap.cancelsTouchesInView = false
+        view.addGestureRecognizer(dismissKeyboardTap)
+    }
+
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        NotificationCenter.default.addObserver(self, selector: #selector(keyboardWillShow), name: UIResponder.keyboardWillShowNotification, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(keyboardWillHide), name: UIResponder.keyboardWillHideNotification, object: nil)
+    }
+
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        NotificationCenter.default.removeObserver(self, name: UIResponder.keyboardWillShowNotification, object: nil)
+        NotificationCenter.default.removeObserver(self, name: UIResponder.keyboardWillHideNotification, object: nil)
     }
 
     private func layoutViews() {
+        logoImageView.image = UIImage(named: "LoginLogo")
+        logoImageView.contentMode = .scaleAspectFit
+        logoImageView.layer.cornerRadius = Theme.cardCornerRadius
+        logoImageView.layer.masksToBounds = true
+        logoImageView.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(logoImageView)
+
         titleLabel.text = "登录"
         titleLabel.font = .systemFont(ofSize: 28, weight: .semibold)
         titleLabel.textColor = Theme.textPrimary
+        titleLabel.textAlignment = .center
 
-        phoneField.placeholder = "手机号"
-        phoneField.keyboardType = .phonePad
+        phoneField.placeholder = "手机号/邮箱"
+        phoneField.keyboardType = .default
+        phoneField.autocapitalizationType = .none
         phoneField.borderStyle = .roundedRect
         phoneField.addTarget(self, action: #selector(phoneFieldChanged), for: .editingChanged)
 
@@ -62,18 +93,70 @@ final class LoginViewController: UIViewController {
         errorLabel.numberOfLines = 0
         errorLabel.isHidden = true
 
-        let stack = UIStackView(arrangedSubviews: [titleLabel, phoneField, codeRow, loginButton, activityIndicator, errorLabel])
-        stack.axis = .vertical
-        stack.spacing = Theme.standardSpacing
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(stack)
+        formStack.addArrangedSubview(titleLabel)
+        formStack.addArrangedSubview(phoneField)
+        formStack.addArrangedSubview(codeRow)
+        formStack.addArrangedSubview(loginButton)
+        formStack.addArrangedSubview(activityIndicator)
+        formStack.addArrangedSubview(errorLabel)
+        formStack.axis = .vertical
+        formStack.spacing = Theme.standardSpacing
+        formStack.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(formStack)
+
+        formStackCenterYConstraint = formStack.centerYAnchor.constraint(equalTo: view.safeAreaLayoutGuide.centerYAnchor)
 
         NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 24),
-            stack.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -24),
-            stack.centerYAnchor.constraint(equalTo: view.safeAreaLayoutGuide.centerYAnchor),
+            // Anchored independently near the top (not part of `formStack`)
+            // so it uses the blank space above the vertically-centered form
+            // instead of sitting glued to the title — see login page review
+            // 2026-07-14.
+            logoImageView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 64),
+            logoImageView.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            logoImageView.widthAnchor.constraint(equalToConstant: 80),
+            logoImageView.heightAnchor.constraint(equalToConstant: 80),
+
+            formStack.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 24),
+            formStack.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -24),
+            formStackCenterYConstraint,
             loginButton.heightAnchor.constraint(equalToConstant: 48),
         ])
+    }
+
+    // Keeps the verification-code field and login button visible above the
+    // keyboard: shifts `formStack` up by however much the keyboard would
+    // otherwise cover it, rather than a fixed offset, so it adapts to
+    // keyboard height/device size.
+    @objc private func keyboardWillShow(_ notification: Notification) {
+        guard
+            let userInfo = notification.userInfo,
+            let endFrame = userInfo[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect,
+            let duration = userInfo[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double,
+            let curveRaw = userInfo[UIResponder.keyboardAnimationCurveUserInfoKey] as? UInt
+        else { return }
+
+        view.layoutIfNeeded()
+        let keyboardFrameInView = view.convert(endFrame, from: nil)
+        let overlap = formStack.frame.maxY - keyboardFrameInView.minY + 16
+        guard overlap > 0 else { return }
+
+        formStackCenterYConstraint.constant = -overlap
+        UIView.animate(withDuration: duration, delay: 0, options: UIView.AnimationOptions(rawValue: curveRaw << 16)) {
+            self.view.layoutIfNeeded()
+        }
+    }
+
+    @objc private func keyboardWillHide(_ notification: Notification) {
+        guard
+            let userInfo = notification.userInfo,
+            let duration = userInfo[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double,
+            let curveRaw = userInfo[UIResponder.keyboardAnimationCurveUserInfoKey] as? UInt
+        else { return }
+
+        formStackCenterYConstraint.constant = 0
+        UIView.animate(withDuration: duration, delay: 0, options: UIView.AnimationOptions(rawValue: curveRaw << 16)) {
+            self.view.layoutIfNeeded()
+        }
     }
 
     private func bindViewModel() {
@@ -112,6 +195,10 @@ final class LoginViewController: UIViewController {
 
     @objc private func codeFieldChanged() {
         viewModel.code = codeField.text ?? ""
+    }
+
+    @objc private func dismissKeyboard() {
+        view.endEditing(true)
     }
 
     // These unstructured `Task { ... }` calls are not cancelled if this view
