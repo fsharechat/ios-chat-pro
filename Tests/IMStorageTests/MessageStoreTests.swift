@@ -291,6 +291,19 @@ final class MessageStoreTests: XCTestCase {
         XCTAssertEqual(try store.messages(conversationType: .single, target: "u2").count, 1)
     }
 
+    func test_clearMessages_db_deletesAllMessagesForConversationWithinCallerManagedTransaction() throws {
+        try store.insert(makeMessage(localMessageId: 1, target: "g1", text: "hello"))
+        try store.insert(makeMessage(localMessageId: 2, target: "g1", text: "world"))
+        try store.insert(makeMessage(localMessageId: 3, target: "u2", text: "other"))
+
+        try database.dbQueue.write { db in
+            try store.clearMessages(conversationType: .single, target: "g1", db: db)
+        }
+
+        XCTAssertTrue(try store.messages(conversationType: .single, target: "g1").isEmpty)
+        XCTAssertEqual(try store.messages(conversationType: .single, target: "u2").count, 1)
+    }
+
     func test_searchMessages_returnsMatchingMessages() throws {
         try store.insert(makeMessage(localMessageId: 1, target: "g1", text: "hello world"))
         try store.insert(makeMessage(localMessageId: 2, target: "g1", text: "goodbye"))

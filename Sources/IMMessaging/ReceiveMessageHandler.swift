@@ -241,14 +241,37 @@ public final class ReceiveMessageHandler: MessageHandler {
                 incrementMention: isMentioned && !suppressUnread && !isActiveConversation,
                 db: db
             )
-            if case .groupNotification = content {
+            if case .groupNotification(let notificationType, _, let memberUids, _) = content {
                 groupNotificationTargets.insert(target)
+                if shouldDeleteLocalGroupConversation(type: notificationType, direction: direction, memberUids: memberUids) {
+                    try? storage.messages.clearMessages(conversationType: conversationType, target: target, line: line, db: db)
+                    try? storage.conversations.deleteConversation(conversationType: conversationType, target: target, line: line, db: db)
+                }
             }
             if case .callRecord = content, direction == .receive {
                 callEvents.append(.callStart(inserted))
             }
         } catch {
             // Best-effort: one malformed/unexpected row shouldn't abort the rest of the batch.
+        }
+    }
+
+    /// 群通知消息落库后是否要连带清掉本地会话——规则对齐 Android
+    /// `ConversationListViewModel.onReceiveMessage` 里对 `DismissGroupNotificationContent`
+    /// 和 `fromSelf` 的 `QuitGroupNotificationContent` 的处理（`fromSelf` 即
+    /// `消息发送者 == 当前用户`，对应这里的 `direction == .send`）。
+    /// `kickoffGroupMember` 命中自己是 Android 没做的行为，是本次专门为
+    /// iOS 加的——群解散/自己退群/自己被踢，会话都失去意义,不该继续留在列表里。
+    private func shouldDeleteLocalGroupConversation(type: MessageContentType, direction: MessageDirection, memberUids: [String]) -> Bool {
+        switch type {
+        case .dismissGroup:
+            return true
+        case .quitGroup:
+            return direction == .send
+        case .kickoffGroupMember:
+            return memberUids.contains(myUserId())
+        default:
+            return false
         }
     }
 

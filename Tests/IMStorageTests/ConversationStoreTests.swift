@@ -143,6 +143,16 @@ final class ConversationStoreTests: XCTestCase {
         XCTAssertNoThrow(try store.deleteConversation(conversationType: .single, target: "nonexistent", line: 0))
     }
 
+    func test_deleteConversation_db_removesRowWithinCallerManagedTransaction() throws {
+        try store.recordIncomingMessage(conversationType: .single, target: "u2", line: 0, messageUid: 1, timestamp: 1_000, incrementUnread: true)
+
+        try database.dbQueue.write { db in
+            try store.deleteConversation(conversationType: .single, target: "u2", line: 0, db: db)
+        }
+
+        XCTAssertNil(try store.conversation(conversationType: .single, target: "u2"))
+    }
+
     func test_resetLastMessage_clearsLastMessageUid() throws {
         try store.recordIncomingMessage(conversationType: .single, target: "u2", line: 0, messageUid: 42, timestamp: 1_000, incrementUnread: false)
 

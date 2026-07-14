@@ -108,12 +108,17 @@ public final class MessageStore {
     }
 
     public func clearMessages(conversationType: ConversationType, target: String, line: Int = 0) throws {
-        try dbQueue.write { db in
-            try db.execute(
-                sql: "DELETE FROM message WHERE conversationType = ? AND target = ? AND line = ?",
-                arguments: [conversationType.rawValue, target, line]
-            )
-        }
+        try dbQueue.write { db in try self.clearMessages(conversationType: conversationType, target: target, line: line, db: db) }
+    }
+
+    /// Same as `clearMessages(...)`, run against a caller-managed transaction
+    /// — see `ReceiveMessageHandler`, which deletes a group's messages in the
+    /// same write transaction as persisting the notification that triggered it.
+    public func clearMessages(conversationType: ConversationType, target: String, line: Int = 0, db: Database) throws {
+        try db.execute(
+            sql: "DELETE FROM message WHERE conversationType = ? AND target = ? AND line = ?",
+            arguments: [conversationType.rawValue, target, line]
+        )
     }
 
     public func searchMessages(conversationType: ConversationType, target: String, keyword: String) throws -> [StoredMessage] {

@@ -295,7 +295,7 @@ final class GroupInfoViewController: UIViewController {
                         if case .failure = result {
                             self?.showAlert(title: "解散失败", message: "请稍后重试")
                         } else {
-                            self?.navigationController?.popViewController(animated: true)
+                            self?.popPastConversation()
                         }
                     }
                 }
@@ -307,12 +307,27 @@ final class GroupInfoViewController: UIViewController {
                         if case .failure = result {
                             self?.showAlert(title: "退出失败", message: "请稍后重试")
                         } else {
-                            self?.navigationController?.popViewController(animated: true)
+                            self?.popPastConversation()
                         }
                     }
                 }
             }
         }
+    }
+
+    /// 退出/解散群组成功后，聊天页也失去了意义——连退两级（自己 + 聊天页），
+    /// 而不是只退一级停在已经没有内容的聊天页上。不依赖具体上一级是
+    /// `ConversationViewController` 还是别的类型（群列表 → 聊天页 → 群详情，
+    /// 或扫码预览等路径），只按导航栈里自己的位置往前找两级；找不到（自己
+    /// 不在导航栈里，或前面不够两级)时退化为 popViewController。
+    private func popPastConversation() {
+        guard let nav = navigationController,
+              let selfIndex = nav.viewControllers.firstIndex(of: self),
+              selfIndex >= 2 else {
+            navigationController?.popViewController(animated: true)
+            return
+        }
+        nav.popToViewController(nav.viewControllers[selfIndex - 2], animated: true)
     }
 
     private func handlePreviewBottomTapped() {

@@ -163,4 +163,48 @@ final class GroupInfoViewModelTests: XCTestCase {
         XCTAssertEqual(fakeSyncing.lastRefreshedGroupId, "g1")
         XCTAssertEqual(fakeSyncing.lastRefreshedMembersGroupId, "g1")
     }
+
+    // --- Quit/dismiss cleanup
+
+    func test_quitGroup_onSuccess_deletesLocalConversationAndMessages() throws {
+        try seedGroup(type: .normal, owner: "owner1")
+        try storage.messages.insert(StoredMessage(
+            localMessageId: 1, conversationType: .group, target: "g1", from: "owner1",
+            content: .text("hi"), timestamp: 1_000, status: .sent, direction: .receive
+        ))
+        try storage.conversations.recordIncomingMessage(conversationType: .group, target: "g1", line: 0, messageUid: 1, timestamp: 1_000, incrementUnread: true)
+        let viewModel = makeViewModel(currentUserId: "member1")
+
+        var succeeded = false
+        viewModel.quitGroup { if case .success = $0 { succeeded = true } }
+
+        XCTAssertTrue(succeeded)
+        XCTAssertNil(try storage.conversations.conversation(conversationType: .group, target: "g1"))
+        XCTAssertTrue(try storage.messages.messages(conversationType: .group, target: "g1").isEmpty)
+    }
+
+    func test_dismissGroup_onSuccess_deletesLocalConversationAndMessages() throws {
+        try seedGroup(type: .normal, owner: "me")
+        try storage.conversations.recordIncomingMessage(conversationType: .group, target: "g1", line: 0, messageUid: 1, timestamp: 1_000, incrementUnread: false)
+        let viewModel = makeViewModel(currentUserId: "me")
+
+        var succeeded = false
+        viewModel.dismissGroup { if case .success = $0 { succeeded = true } }
+
+        XCTAssertTrue(succeeded)
+        XCTAssertNil(try storage.conversations.conversation(conversationType: .group, target: "g1"))
+    }
+
+    func test_quitGroup_onFailure_doesNotDeleteLocalConversation() throws {
+        try seedGroup(type: .normal, owner: "owner1")
+        try storage.conversations.recordIncomingMessage(conversationType: .group, target: "g1", line: 0, messageUid: 1, timestamp: 1_000, incrementUnread: false)
+        fakeActing.quitGroupResult = .failure(NSError(domain: "test", code: 1))
+        let viewModel = makeViewModel(currentUserId: "member1")
+
+        var failed = false
+        viewModel.quitGroup { if case .failure = $0 { failed = true } }
+
+        XCTAssertTrue(failed)
+        XCTAssertNotNil(try storage.conversations.conversation(conversationType: .group, target: "g1"))
+    }
 }

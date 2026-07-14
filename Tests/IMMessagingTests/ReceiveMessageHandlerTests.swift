@@ -553,4 +553,80 @@ final class ReceiveMessageHandlerTests: XCTestCase {
 
         XCTAssertEqual(try storage.syncState.get().msgHead, 503)
     }
+
+    // MARK: - Group dismiss/quit/kick conversation cleanup
+
+    private func makeGroupNotificationWireMessage(uid: Int64, type: Int32, from: String, groupId: String, memberUids: [String] = [], timestamp: Int64 = 1_000) -> Im_Message {
+        var message = Im_Message()
+        message.messageID = uid
+        message.fromUser = from
+        message.conversation.type = 1 // group
+        message.conversation.target = groupId
+        message.conversation.line = 0
+        var wireContent = Im_MessageContent()
+        wireContent.type = type
+        let memberUidsJSON = memberUids.map { "\"\($0)\"" }.joined(separator: ",")
+        wireContent.data = Data("""
+        {"g":"\(groupId)","o":"\(from)","ms":[\(memberUidsJSON)]}
+        """.utf8)
+        message.content = wireContent
+        message.serverTimestamp = timestamp
+        return message
+    }
+
+    /// 先用一条普通群消息建立会话和历史消息,再投递通知消息,证明清理逻辑
+    /// 真的删掉了已有数据,不只是"从未创建过"。
+    private func seedExistingGroupConversation(groupId: String) throws {
+        var textMessage = makeWireMessage(uid: 9_000, from: "them", target: groupId, text: "existing history")
+        textMessage.conversation.type = 1
+        textMessage.conversation.target = groupId
+        handler.handle(frame: try makePullResultFrame(messages: [textMessage], head: 9_000))
+        XCTAssertNotNil(try storage.conversations.conversation(conversationType: .group, target: groupId), "precondition: conversation must exist before the notification arrives")
+    }
+
+    func test_handle_dismissGroupNotification_deletesLocalConversationRegardlessOfDirection() throws {
+        try seedExistingGroupConversation(groupId: "g1")
+        let message = makeGroupNotificationWireMessage(uid: 1_001, type: 108, from: "owner1", groupId: "g1") // dismissGroup
+
+        handler.handle(frame: try makePullResultFrame(messages: [message], head: 1_001))
+
+        XCTAssertNil(try storage.conversations.conversation(conversationType: .group, target: "g1"))
+        XCTAssertTrue(try storage.messages.messages(conversationType: .group, target: "g1").isEmpty)
+    }
+
+    func test_handle_quitGroupNotificationFromSelf_deletesLocalConversation() throws {
+        try seedExistingGroupConversation(groupId: "g1")
+        let message = makeGroupNotificationWireMessage(uid: 1_002, type: 107, from: "me", groupId: "g1") // quitGroup, fromUser == myUserId()
+
+        handler.handle(frame: try makePullResultFrame(messages: [message], head: 1_002))
+
+        XCTAssertNil(try storage.conversations.conversation(conversationType: .group, target: "g1"))
+    }
+
+    func test_handle_quitGroupNotificationFromOther_doesNotDeleteLocalConversation() throws {
+        try seedExistingGroupConversation(groupId: "g1")
+        let message = makeGroupNotificationWireMessage(uid: 1_003, type: 107, from: "other-member", groupId: "g1") // someone else quit
+
+        handler.handle(frame: try makePullResultFrame(messages: [message], head: 1_003))
+
+        XCTAssertNotNil(try storage.conversations.conversation(conversationType: .group, target: "g1"))
+    }
+
+    func test_handle_kickoffGroupMemberIncludingSelf_deletesLocalConversation() throws {
+        try seedExistingGroupConversation(groupId: "g1")
+        let message = makeGroupNotificationWireMessage(uid: 1_004, type: 106, from: "owner1", groupId: "g1", memberUids: ["me"]) // I was kicked
+
+        handler.handle(frame: try makePullResultFrame(messages: [message], head: 1_004))
+
+        XCTAssertNil(try storage.conversations.conversation(conversationType: .group, target: "g1"))
+    }
+
+    func test_handle_kickoffGroupMemberExcludingSelf_doesNotDeleteLocalConversation() throws {
+        try seedExistingGroupConversation(groupId: "g1")
+        let message = makeGroupNotificationWireMessage(uid: 1_005, type: 106, from: "owner1", groupId: "g1", memberUids: ["someone-else"])
+
+        handler.handle(frame: try makePullResultFrame(messages: [message], head: 1_005))
+
+        XCTAssertNotNil(try storage.conversations.conversation(conversationType: .group, target: "g1"))
+    }
 }

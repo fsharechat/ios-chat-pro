@@ -154,11 +154,26 @@ public final class GroupInfoViewModel {
     }
 
     public func quitGroup(completion: @escaping (Result<Void, Error>) -> Void) {
-        groupActing?.quitGroup(groupId: groupId, completion: completion)
+        groupActing?.quitGroup(groupId: groupId) { [weak self] result in
+            if case .success = result { self?.deleteLocalConversation() }
+            completion(result)
+        }
     }
 
     public func dismissGroup(completion: @escaping (Result<Void, Error>) -> Void) {
-        groupActing?.dismissGroup(groupId: groupId, completion: completion)
+        groupActing?.dismissGroup(groupId: groupId) { [weak self] result in
+            if case .success = result { self?.deleteLocalConversation() }
+            completion(result)
+        }
+    }
+
+    /// 乐观本地清理：不等服务器把 `.dismissGroup`/`.quitGroup` 通知回显回来
+    /// （那条路径见 `ReceiveMessageHandler.shouldDeleteLocalGroupConversation`），
+    /// 退出/解散一旦确认成功就立即删掉本地会话，避免会话列表出现短暂的过期数据。
+    /// 与回显路径重复调用是安全的——对已删除的会话/消息是空操作。
+    private func deleteLocalConversation() {
+        try? storage.messages.clearMessages(conversationType: .group, target: groupId)
+        try? storage.conversations.deleteConversation(conversationType: .group, target: groupId)
     }
 
     // MARK: - Conversation Settings

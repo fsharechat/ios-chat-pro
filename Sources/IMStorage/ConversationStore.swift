@@ -137,12 +137,18 @@ public final class ConversationStore {
     }
 
     public func deleteConversation(conversationType: ConversationType, target: String, line: Int = 0) throws {
-        try dbQueue.write { db in
-            try db.execute(
-                sql: "DELETE FROM conversation WHERE conversationType = ? AND target = ? AND line = ?",
-                arguments: [conversationType.rawValue, target, line]
-            )
-        }
+        try dbQueue.write { db in try self.deleteConversation(conversationType: conversationType, target: target, line: line, db: db) }
+    }
+
+    /// Same as `deleteConversation(...)`, run against a caller-managed
+    /// transaction — see `ReceiveMessageHandler`, which removes a group's
+    /// conversation in the same write transaction as persisting the
+    /// notification that triggered it (dismiss/self-quit/self-kicked).
+    public func deleteConversation(conversationType: ConversationType, target: String, line: Int = 0, db: Database) throws {
+        try db.execute(
+            sql: "DELETE FROM conversation WHERE conversationType = ? AND target = ? AND line = ?",
+            arguments: [conversationType.rawValue, target, line]
+        )
     }
 
     public func resetLastMessage(conversationType: ConversationType, target: String, line: Int = 0) throws {

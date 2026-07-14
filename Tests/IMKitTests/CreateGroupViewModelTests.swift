@@ -159,6 +159,8 @@ final class CreateGroupViewModelTests: XCTestCase {
 final class FakeGroupActing: GroupActing {
     var resultToReturn: Result<String, Error> = .success("g1")
     var addMembersResultToReturn: Result<Void, Error> = .success(())
+    var quitGroupResult: Result<Void, Error> = .success(())
+    var dismissGroupResult: Result<Void, Error> = .success(())
     private(set) var lastName: String?
     private(set) var lastMemberIds: [String]?
 
@@ -173,8 +175,8 @@ final class FakeGroupActing: GroupActing {
     }
     func kickMember(groupId: String, memberId: String, completion: @escaping (Result<Void, Error>) -> Void) {}
     func modifyGroupInfo(groupId: String, type: ModifyGroupInfoType, value: String, completion: @escaping (Result<Void, Error>) -> Void) {}
-    func quitGroup(groupId: String, completion: @escaping (Result<Void, Error>) -> Void) {}
-    func dismissGroup(groupId: String, completion: @escaping (Result<Void, Error>) -> Void) {}
+    func quitGroup(groupId: String, completion: @escaping (Result<Void, Error>) -> Void) { completion(quitGroupResult) }
+    func dismissGroup(groupId: String, completion: @escaping (Result<Void, Error>) -> Void) { completion(dismissGroupResult) }
 }
 
 final class FakeGroupSyncing: GroupSyncing {
