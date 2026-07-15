@@ -27,6 +27,11 @@ public final class AppEnvironment {
     /// IMClient 上，因为退出重登会重建 IMClient，这个中继跨重建存活，
     /// `connectIfPossible()` 每次都会把新 client 的回调接到它上面。
     public var onConnectionStatusChange: ((IMConnectionStatus) -> Void)?
+    /// 新消息提醒中继，由 `SceneDelegate` 赋值。挂在 AppEnvironment 而非
+    /// MessagingService 上，理由与 `onConnectionStatusChange` 完全一致：
+    /// 退出重登会重建 MessagingService，这个中继跨重建存活，
+    /// `connectIfPossible()` 每次都会把新 service 的回调接到它上面。
+    public var onIncomingMessageAlert: ((_ isMuted: Bool, _ isActiveConversation: Bool, _ isGroupNotification: Bool) -> Void)?
     /// 当前连接状态；未登录（imClient 为 nil）视为断开。UI 首次绑定时读它
     /// 拿初始值——`connectIfPossible()` 里 `connect()` 先于 UI 构建执行，
     /// 最初的 `.connecting` 事件发出时中继还没被赋值。
@@ -121,6 +126,9 @@ public final class AppEnvironment {
         let contactSync = ContactSyncService(imClient: client, storage: storage)
         let groupSync = GroupSyncService(imClient: client, storage: storage)
         service.onGroupNotificationMessage = { [weak groupSync] groupId in groupSync?.refreshGroup(targetId: groupId) }
+        service.onIncomingMessageAlert = { [weak self] isMuted, isActiveConversation, isGroupNotification in
+            self?.onIncomingMessageAlert?(isMuted, isActiveConversation, isGroupNotification)
+        }
         connectAckHandler.onSyncState = { [weak service, weak contactSync, userId = credentials.userId] _ in
             service?.pullMessagesSinceLastSync()
             contactSync?.syncFriendList()

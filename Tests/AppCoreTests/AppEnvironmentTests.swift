@@ -90,6 +90,38 @@ final class AppEnvironmentTests: XCTestCase {
         XCTAssertTrue(sentSignals.contains(.fp))
     }
 
+    func test_connectIfPossible_incomingMessage_relaysOnIncomingMessageAlert() throws {
+        credentialsStore.save(Credentials(userId: "u1", token: "dG9rZW4="))
+        var captured: (isMuted: Bool, isActiveConversation: Bool, isGroupNotification: Bool)?
+        environment.onIncomingMessageAlert = { isMuted, isActiveConversation, isGroupNotification in
+            captured = (isMuted, isActiveConversation, isGroupNotification)
+        }
+
+        XCTAssertTrue(environment.connectIfPossible())
+
+        var wireMessage = Im_Message()
+        wireMessage.messageID = 970
+        wireMessage.fromUser = "them"
+        wireMessage.conversation.type = 0
+        wireMessage.conversation.target = "them"
+        wireMessage.conversation.line = 0
+        wireMessage.content.type = 1
+        wireMessage.content.searchableContent = "hi"
+        wireMessage.serverTimestamp = 1_000
+
+        var result = Im_PullMessageResult()
+        result.message = [wireMessage]
+        result.current = 970
+        result.head = 970
+        let body = Data([0x00]) + (try result.serializedData())
+        let frameBytes = FrameEncoder.encode(signal: .pubAck, subSignal: .mp, messageId: 1, body: body)
+        fakeTransport.simulateReceivedData(frameBytes)
+
+        XCTAssertEqual(captured?.isMuted, false)
+        XCTAssertEqual(captured?.isActiveConversation, false)
+        XCTAssertEqual(captured?.isGroupNotification, false)
+    }
+
     func test_connectIfPossible_withCredentials_alsoTriggersAFriendRequestSync() throws {
         credentialsStore.save(Credentials(userId: "u1", token: "dG9rZW4="))
 
