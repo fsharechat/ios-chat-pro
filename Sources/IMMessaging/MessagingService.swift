@@ -57,6 +57,15 @@ public final class MessagingService {
         set { receiveMessageHandler.onCallSignal = newValue }
     }
 
+    /// Forwards to the internal `ReceiveMessageHandler`'s closure of the
+    /// same name — see that type's doc comment. `AppEnvironment` relays this
+    /// to `App.MessageAlertPlayer` so it survives `MessagingService` being
+    /// torn down/recreated across logout/re-login.
+    public var onIncomingMessageAlert: ((_ isMuted: Bool, _ isActiveConversation: Bool, _ isGroupNotification: Bool) -> Void)? {
+        get { receiveMessageHandler.onIncomingMessageAlert }
+        set { receiveMessageHandler.onIncomingMessageAlert = newValue }
+    }
+
     /// Forwards to the internal `ReceiveMessageHandler`'s property of the
     /// same name — see that type's doc comment. `IMKit` 的
     /// `ActiveConversationTracking` conformance 通过它标记/清除用户当前

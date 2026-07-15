@@ -277,6 +277,36 @@ final class MessagingServiceTests: XCTestCase {
         XCTAssertEqual(capturedGroupId, "g1")
     }
 
+    func test_onIncomingMessageAlert_forwardsToTheInternalReceiveMessageHandler() throws {
+        var captured: (isMuted: Bool, isActiveConversation: Bool, isGroupNotification: Bool)?
+        service.onIncomingMessageAlert = { isMuted, isActiveConversation, isGroupNotification in
+            captured = (isMuted, isActiveConversation, isGroupNotification)
+        }
+
+        var wireMessage = Im_Message()
+        wireMessage.messageID = 960
+        wireMessage.fromUser = "them"
+        wireMessage.conversation.type = 0
+        wireMessage.conversation.target = "them"
+        wireMessage.conversation.line = 0
+        wireMessage.content.type = 1
+        wireMessage.content.searchableContent = "hi"
+        wireMessage.serverTimestamp = 1_000
+
+        var result = Im_PullMessageResult()
+        result.message = [wireMessage]
+        result.current = 960
+        result.head = 960
+        let body = Data([0x00]) + (try result.serializedData())
+        let frameBytes = FrameEncoder.encode(signal: .pubAck, subSignal: .mp, messageId: 1, body: body)
+
+        fakeTransport.simulateReceivedData(frameBytes)
+
+        XCTAssertEqual(captured?.isMuted, false)
+        XCTAssertEqual(captured?.isActiveConversation, false)
+        XCTAssertEqual(captured?.isGroupNotification, false)
+    }
+
     func test_sendCallStart_insertsLocalEchoAndSendsWireFrame() throws {
         let echo = try service.sendCallStart(targetId: "them", callId: "call-1", audioOnly: false)
 
