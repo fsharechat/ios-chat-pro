@@ -78,8 +78,8 @@ App.MessageAlertPlayer（新增，镜像 CallRingtonePlayer 的写法）
 
 ### 提示音/震动实现
 
-- 纯震动：`AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)`（id 4095）。
-- 震动+提示音：`AudioServicesPlaySystemSound(1007)`（系统 "SMS 收到 1" 三音效），遵循静音拨片。
+- 震动：`UINotificationFeedbackGenerator(.success)`。**2026-07-15 装机实测后调整**：最初方案用 `AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)`（id 4095），实测只有单次统一节奏的"嗡"一下，和微信"动动-动"的双击节奏不一致；`.success` 触感反馈在 Taptic Engine 设备上天然是两下节奏，改用它。"仅震动"和"震动+提示音"两档都用这个触发震动。
+- 震动+提示音：在上面的触感反馈基础上，额外 `AudioServicesPlaySystemSound(1007)`（系统 "SMS 收到 1" 三音效），遵循静音拨片。
 - 不使用 `AVAudioPlayer`，不设置/强制切换 `AVAudioSession` 类别（`CallRingtonePlayer` 为了循环播放+无视静音拨片才这么做，消息提示音刻意保持系统默认行为以遵循拨片）。
 
 ## 不做的事

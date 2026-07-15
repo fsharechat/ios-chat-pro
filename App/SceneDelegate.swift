@@ -18,6 +18,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     private var callManagerWired = false
     private let themePreferenceStore = ThemePreferenceStore()
     private let ringtonePlayer = CallRingtonePlayer()
+    private let messageAlertPlayer = MessageAlertPlayer()
 
     func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
         guard let windowScene = scene as? UIWindowScene else { return }
@@ -33,6 +34,9 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             fatalError("Failed to open local database: \(error)")
         }
         environment = AppEnvironment(storage: storage)
+        environment.onIncomingMessageAlert = { [weak self] isMuted, isActiveConversation, isGroupNotification in
+            self?.messageAlertPlayer.handle(isMuted: isMuted, isActiveConversation: isActiveConversation, isGroupNotification: isGroupNotification)
+        }
 
         let window = UIWindow(windowScene: windowScene)
         window.rootViewController = rootViewController()

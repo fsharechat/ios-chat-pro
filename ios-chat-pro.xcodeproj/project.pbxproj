@@ -65,6 +65,7 @@
 		A2DF324B8AB6D3023C51A0CC /* TextValueRowCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7044AD6B3681821E10EBBD77 /* TextValueRowCell.swift */; };
 		AC4CF93C08183929C472085A /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93FA326C9B762DCAB590F502 /* AppDelegate.swift */; };
 		B0EFF1C4DDDD6E6588C31290 /* WebRTC in Frameworks */ = {isa = PBXBuildFile; productRef = 245A8DCD66CF4BF518D7B079 /* WebRTC */; };
+		B6C83ED8F8E140766B2E7D33 /* MessageAlertPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0C50E815B16D6C055A8900B /* MessageAlertPlayer.swift */; };
 		CDD9722F3A5A0B3869684D19 /* PlusMenuView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 400CEB53F49721DDD023955F /* PlusMenuView.swift */; };
 		D39C275731BBA18DD72E1C1B /* AboutViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53A605ADEEFEFF8E5A5674D9 /* AboutViewController.swift */; };
 		D50D77865C2E9DFF7B261829 /* FavGroupListViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDF651A69DA130BE158D8EF1 /* FavGroupListViewController.swift */; };
@@ -141,6 +142,7 @@
 		A00822E7236C8497D7E1D66E /* FileMessageCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileMessageCell.swift; sourceTree = "<group>"; };
 		A0E388EB556B39D1EFCF7DEA /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
 		AD5904F1F07CC229CCF0DA07 /* VoiceMessageCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceMessageCell.swift; sourceTree = "<group>"; };
+		B0C50E815B16D6C055A8900B /* MessageAlertPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageAlertPlayer.swift; sourceTree = "<group>"; };
 		B151EC37B62DE68EFA590FB8 /* LocationMessageCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationMessageCell.swift; sourceTree = "<group>"; };
 		B2F3F3D8AB0E764052611AEA /* incoming_call_ring.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = incoming_call_ring.mp3; sourceTree = "<group>"; };
 		B32527AED5E034C0D3BC2B74 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -248,6 +250,7 @@
 				F83C1F61EA97D38D86CE7324 /* MarkdownRenderer.swift */,
 				278BCC3264FADA3C5FD49230 /* MarkdownTableRenderer.swift */,
 				0CE65FB3E4BBBDBC011338C7 /* MentionPickerViewController.swift */,
+				B0C50E815B16D6C055A8900B /* MessageAlertPlayer.swift */,
 				1A7AF95FBB4F8D27A5F4067D /* MessageInputBar.swift */,
 				1B712BFC45B9060DC3503548 /* MessageStatusIndicatorView.swift */,
 				55F30F8F9D722D06F08E8D99 /* MeViewController.swift */,
@@ -415,6 +418,7 @@
 				DB57AF5988E6CCC80A5C4256 /* MarkdownTableRenderer.swift in Sources */,
 				942E1DEC4481B341B23959E7 /* MeViewController.swift in Sources */,
 				471B25795C53FC319DED0CCD /* MentionPickerViewController.swift in Sources */,
+				B6C83ED8F8E140766B2E7D33 /* MessageAlertPlayer.swift in Sources */,
 				F0E0711134156FE1E30507ED /* MessageInputBar.swift in Sources */,
 				2875F6F3E1D76FA101CCEACC /* MessageStatusIndicatorView.swift in Sources */,
 				890FAE1EC814F14A52439526 /* MyProfileViewController.swift in Sources */,

@@ -794,6 +794,8 @@ final class MessageAlertPlayer {
 }
 ```
 
+> **2026-07-15 装机验证后修正**：上面这版震动用 `AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)`，装机实测只有单次统一节奏，和微信"动动-动"的双击节奏对不上。最终实现改为 `UINotificationFeedbackGenerator(.success)`（两档都用它触发震动，`.vibrateAndSound` 档在此基础上额外播放系统提示音 1007），并同步更新了 spec 里的"提示音/震动实现"一节。实际文件内容以 `App/MessageAlertPlayer.swift` 为准。
+
 - [ ] **Step 2: 在 `App/SceneDelegate.swift` 接线**
 
 在第 20 行 `private let ringtonePlayer = CallRingtonePlayer()` 之后加一行：
