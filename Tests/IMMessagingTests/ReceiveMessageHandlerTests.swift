@@ -56,6 +56,20 @@ final class ReceiveMessageHandlerTests: XCTestCase {
         XCTAssertEqual(try storage.syncState.get().msgHead, 100)
     }
 
+    func test_handle_newReceivedMessage_firesOnIncomingMessageAlertWithAllSignalsFalse() throws {
+        var captured: (isMuted: Bool, isActiveConversation: Bool, isGroupNotification: Bool)?
+        handler.onIncomingMessageAlert = { isMuted, isActiveConversation, isGroupNotification in
+            captured = (isMuted, isActiveConversation, isGroupNotification)
+        }
+        let frame = try makePullResultFrame(messages: [makeWireMessage(uid: 950, from: "them", target: "them")], head: 950)
+
+        handler.handle(frame: frame)
+
+        XCTAssertEqual(captured?.isMuted, false)
+        XCTAssertEqual(captured?.isActiveConversation, false)
+        XCTAssertEqual(captured?.isGroupNotification, false)
+    }
+
     func test_handle_ownSentMessageInPull_doesNotIncrementUnread() throws {
         let frame = try makePullResultFrame(messages: [makeWireMessage(uid: 101, from: "me", target: "them", text: "from me")], head: 101)
 
@@ -533,6 +547,122 @@ final class ReceiveMessageHandlerTests: XCTestCase {
 
         let storedMessage = try storage.messages.message(uid: 999)
         XCTAssertEqual(storedMessage?.target, "other")
+    }
+
+    func test_handle_messageForActiveConversation_firesOnIncomingMessageAlertWithIsActiveConversationTrue() throws {
+        handler.activeConversation = (conversationType: .single, target: "them", line: 0)
+        var captured: (isMuted: Bool, isActiveConversation: Bool, isGroupNotification: Bool)?
+        handler.onIncomingMessageAlert = { isMuted, isActiveConversation, isGroupNotification in
+            captured = (isMuted, isActiveConversation, isGroupNotification)
+        }
+        let frame = try makePullResultFrame(messages: [makeWireMessage(uid: 951, from: "them", target: "them")], head: 951)
+
+        handler.handle(frame: frame)
+
+        XCTAssertEqual(captured?.isActiveConversation, true)
+        XCTAssertEqual(captured?.isMuted, false)
+    }
+
+    func test_handle_messageForOtherConversationWhileOneIsActive_firesOnIncomingMessageAlertWithIsActiveConversationFalse() throws {
+        handler.activeConversation = (conversationType: .single, target: "them", line: 0)
+        var captured: (isMuted: Bool, isActiveConversation: Bool, isGroupNotification: Bool)?
+        handler.onIncomingMessageAlert = { isMuted, isActiveConversation, isGroupNotification in
+            captured = (isMuted, isActiveConversation, isGroupNotification)
+        }
+        let frame = try makePullResultFrame(messages: [makeWireMessage(uid: 952, from: "other", target: "other")], head: 952)
+
+        handler.handle(frame: frame)
+
+        XCTAssertEqual(captured?.isActiveConversation, false)
+    }
+
+    func test_handle_messageForMutedConversation_firesOnIncomingMessageAlertWithIsMutedTrue() throws {
+        try storage.conversations.recordIncomingMessage(conversationType: .single, target: "them", line: 0, messageUid: 1, timestamp: 500, incrementUnread: false)
+        try storage.conversations.setMuted(true, conversationType: .single, target: "them")
+        var captured: (isMuted: Bool, isActiveConversation: Bool, isGroupNotification: Bool)?
+        handler.onIncomingMessageAlert = { isMuted, isActiveConversation, isGroupNotification in
+            captured = (isMuted, isActiveConversation, isGroupNotification)
+        }
+        let frame = try makePullResultFrame(messages: [makeWireMessage(uid: 953, from: "them", target: "them")], head: 953)
+
+        handler.handle(frame: frame)
+
+        XCTAssertEqual(captured?.isMuted, true)
+    }
+
+    func test_handle_duringSuppressedInitialSync_doesNotFireOnIncomingMessageAlert() throws {
+        handler.suppressUnreadIncrement = true
+        var fired = false
+        handler.onIncomingMessageAlert = { _, _, _ in fired = true }
+        let frame = try makePullResultFrame(messages: [makeWireMessage(uid: 954, from: "them", target: "them")], head: 954)
+
+        handler.handle(frame: frame)
+
+        XCTAssertFalse(fired)
+    }
+
+    func test_handle_ownSentMessageInPull_doesNotFireOnIncomingMessageAlert() throws {
+        var fired = false
+        handler.onIncomingMessageAlert = { _, _, _ in fired = true }
+        let frame = try makePullResultFrame(messages: [makeWireMessage(uid: 955, from: "me", target: "them")], head: 955)
+
+        handler.handle(frame: frame)
+
+        XCTAssertFalse(fired)
+    }
+
+    func test_handle_groupNotificationMessage_firesOnIncomingMessageAlertAsGroupNotification() throws {
+        var captured: (isMuted: Bool, isActiveConversation: Bool, isGroupNotification: Bool)?
+        handler.onIncomingMessageAlert = { isMuted, isActiveConversation, isGroupNotification in
+            captured = (isMuted, isActiveConversation, isGroupNotification)
+        }
+        let message = makeGroupNotificationWireMessage(uid: 956, type: 105, from: "them", groupId: "g1", memberUids: ["me"])
+
+        handler.handle(frame: try makePullResultFrame(messages: [message], head: 956))
+
+        XCTAssertEqual(captured?.isGroupNotification, true)
+        XCTAssertEqual(captured?.isMuted, false)
+    }
+
+    func test_handle_recalledMessageInPull_doesNotFireOnIncomingMessageAlert() throws {
+        var fired = false
+        handler.onIncomingMessageAlert = { _, _, _ in fired = true }
+
+        var message = Im_Message()
+        message.messageID = 957
+        message.fromUser = "them"
+        message.conversation.type = 0
+        message.conversation.target = "them"
+        message.conversation.line = 0
+        var wireContent = Im_MessageContent()
+        wireContent.type = 80 // recalled
+        wireContent.content = "them"
+        message.content = wireContent
+        message.serverTimestamp = 1_000
+        let frame = try makePullResultFrame(messages: [message], head: 957)
+
+        handler.handle(frame: frame)
+
+        XCTAssertFalse(fired)
+    }
+
+    func test_handle_receivedCallStart_stillFiresOnIncomingMessageAlertLikeANormalMessage() throws {
+        var fired = false
+        handler.onIncomingMessageAlert = { _, _, _ in fired = true }
+
+        var message = Im_Message()
+        message.messageID = 958
+        message.fromUser = "them"
+        message.conversation.type = 0
+        message.conversation.target = "them"
+        message.conversation.line = 0
+        message.content = MessageContentCodec.encode(.callRecord(callId: "call-alert-1", targetId: "me", audioOnly: false, status: 0, connectTime: 0, endTime: 0))
+        message.serverTimestamp = 1_000
+        let frame = try makePullResultFrame(messages: [message], head: 958)
+
+        handler.handle(frame: frame)
+
+        XCTAssertTrue(fired)
     }
 
     func test_handle_callSignal_stillAdvancesSyncHead() throws {

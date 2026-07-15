@@ -57,6 +57,18 @@ public final class ReceiveMessageHandler: MessageHandler {
     /// call signaling, don't persist it."
     public var onCallSignal: ((Im_Message) -> Void)?
 
+    /// Fired after persisting any *received*, non-suppressed message that
+    /// should produce a local vibrate/sound alert. Never fired for
+    /// `.recalled` content (a recall is a system event, not a new message),
+    /// own echoed-back sends, or messages absorbed into an initial-sync/
+    /// catch-up pull (`suppressUnreadIncrement == true`). `isMuted`/
+    /// `isActiveConversation` are the exact same signals `recordIncomingMessage`
+    /// uses to decide the unread badge; `isGroupNotification` tells the
+    /// consumer (`App.MessageAlertPlayer`) to cap the alert at vibrate-only
+    /// even when the other two signals would otherwise call for a full
+    /// vibrate+sound alert.
+    public var onIncomingMessageAlert: ((_ isMuted: Bool, _ isActiveConversation: Bool, _ isGroupNotification: Bool) -> Void)?
+
     /// Set to `true` before an initial-sync pull (localHead == 0) so that
     /// historical messages don't generate unread badges on first login.
     /// Automatically reset to `false` after the first batch is processed.
@@ -92,10 +104,11 @@ public final class ReceiveMessageHandler: MessageHandler {
         suppressUnreadIncrement = false
         var groupNotificationTargets: Set<String> = []
         var callEvents: [CallEvent] = []
+        var alertCandidates: [(isMuted: Bool, isActiveConversation: Bool, isGroupNotification: Bool)] = []
         let t0 = ProcessInfo.processInfo.systemUptime
         try? storage.write { db in
             for wireMessage in result.message {
-                persist(wireMessage, db: db, suppressUnread: shouldSuppressUnread, groupNotificationTargets: &groupNotificationTargets, callEvents: &callEvents)
+                persist(wireMessage, db: db, suppressUnread: shouldSuppressUnread, groupNotificationTargets: &groupNotificationTargets, callEvents: &callEvents, alertCandidates: &alertCandidates)
             }
             advanceSyncHead(to: result.head, db: db)
         }
@@ -110,6 +123,9 @@ public final class ReceiveMessageHandler: MessageHandler {
         // historical pull right after logging into a different account.
         for target in groupNotificationTargets {
             onGroupNotificationMessage?(target)
+        }
+        for candidate in alertCandidates {
+            onIncomingMessageAlert?(candidate.isMuted, candidate.isActiveConversation, candidate.isGroupNotification)
         }
         // 单循环按原始 wire 顺序派发 —— 见 CallEvent 的注释,不能拆成两个
         // "先 callStart 全部、再 signal 全部"的循环。
@@ -136,7 +152,7 @@ public final class ReceiveMessageHandler: MessageHandler {
     /// resulting `StoredMessage` is appended to `callEvents` as `.callStart`.
     /// Both are appended to the **same** array, in wire order, so a mixed
     /// batch replays in the order it arrived (see `CallEvent`'s doc comment).
-    private func persist(_ wireMessage: Im_Message, db: Database, suppressUnread: Bool, groupNotificationTargets: inout Set<String>, callEvents: inout [CallEvent]) {
+    private func persist(_ wireMessage: Im_Message, db: Database, suppressUnread: Bool, groupNotificationTargets: inout Set<String>, callEvents: inout [CallEvent], alertCandidates: inout [(isMuted: Bool, isActiveConversation: Bool, isGroupNotification: Bool)]) {
         guard wireMessage.messageID != 0 else { return }
         if (try? storage.messages.message(uid: wireMessage.messageID, db: db)) != nil {
             return // already have it via server uid — pull windows can overlap
@@ -231,7 +247,7 @@ public final class ReceiveMessageHandler: MessageHandler {
             let isActiveConversation = activeConversation.map {
                 $0.conversationType == conversationType && $0.target == target && $0.line == line
             } ?? false
-            try storage.conversations.recordIncomingMessage(
+            let isMuted = try storage.conversations.recordIncomingMessage(
                 conversationType: conversationType,
                 target: target,
                 line: line,
@@ -241,6 +257,18 @@ public final class ReceiveMessageHandler: MessageHandler {
                 incrementMention: isMentioned && !suppressUnread && !isActiveConversation,
                 db: db
             )
+            // 撤回是对已有消息的修正、不是新消息，不触发提醒；其余类型
+            // （含 `.groupNotification`、`.callRecord`）按 onIncomingMessageAlert
+            // 的决策表交给消费方分档 —— 这里只负责收集信号。
+            if direction == .receive, !suppressUnread, !isRecalledContent(content) {
+                let isGroupNotification: Bool
+                if case .groupNotification = content {
+                    isGroupNotification = true
+                } else {
+                    isGroupNotification = false
+                }
+                alertCandidates.append((isMuted: isMuted, isActiveConversation: isActiveConversation, isGroupNotification: isGroupNotification))
+            }
             if case .groupNotification(let notificationType, _, let memberUids, _) = content {
                 groupNotificationTargets.insert(target)
                 if shouldDeleteLocalGroupConversation(type: notificationType, direction: direction, memberUids: memberUids) {
@@ -254,6 +282,11 @@ public final class ReceiveMessageHandler: MessageHandler {
         } catch {
             // Best-effort: one malformed/unexpected row shouldn't abort the rest of the batch.
         }
+    }
+
+    private func isRecalledContent(_ content: MessageContent) -> Bool {
+        if case .recalled = content { return true }
+        return false
     }
 
     /// 群通知消息落库后是否要连带清掉本地会话——规则对齐 Android
