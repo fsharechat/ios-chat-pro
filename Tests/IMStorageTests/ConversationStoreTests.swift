@@ -174,4 +174,20 @@ final class ConversationStoreTests: XCTestCase {
     func test_resetLastMessage_whenRowDoesNotExist_isNoOp() throws {
         XCTAssertNoThrow(try store.resetLastMessage(conversationType: .single, target: "nonexistent", line: 0))
     }
+
+    func test_recordIncomingMessage_dbOverload_returnsCurrentIsMutedFlag() throws {
+        try store.recordIncomingMessage(conversationType: .single, target: "u2", line: 0, messageUid: 1, timestamp: 1_000, incrementUnread: false)
+
+        let notMuted = try database.dbQueue.write { db in
+            try store.recordIncomingMessage(conversationType: .single, target: "u2", line: 0, messageUid: 2, timestamp: 2_000, incrementUnread: false, db: db)
+        }
+        XCTAssertFalse(notMuted)
+
+        try store.setMuted(true, conversationType: .single, target: "u2")
+
+        let muted = try database.dbQueue.write { db in
+            try store.recordIncomingMessage(conversationType: .single, target: "u2", line: 0, messageUid: 3, timestamp: 3_000, incrementUnread: false, db: db)
+        }
+        XCTAssertTrue(muted)
+    }
 }

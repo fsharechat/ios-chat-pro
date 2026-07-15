@@ -58,7 +58,12 @@ public final class ConversationStore {
 
     /// Same as `recordIncomingMessage(...)`, run against a caller-managed
     /// transaction — see `ReceiveMessageHandler`, the first caller batching
-    /// many of these into one transaction.
+    /// many of these into one transaction. Returns the conversation's
+    /// `isMuted` flag *after* the upsert (mute status itself is never
+    /// changed here) — `ReceiveMessageHandler` uses it to decide whether a
+    /// newly persisted message should trigger a local vibrate/sound alert,
+    /// at no extra query cost since this method already `fetchOne`s the row.
+    @discardableResult
     public func recordIncomingMessage(
         conversationType: ConversationType,
         target: String,
@@ -68,7 +73,7 @@ public final class ConversationStore {
         incrementUnread: Bool,
         incrementMention: Bool = false,
         db: Database
-    ) throws {
+    ) throws -> Bool {
         let existing = try StoredConversation
             .filter(Column("conversationType") == conversationType.rawValue)
             .filter(Column("target") == target)
@@ -85,6 +90,7 @@ public final class ConversationStore {
             conversation.unreadMentionCount += 1
         }
         try conversation.save(db)
+        return conversation.isMuted
     }
 
     /// Re-saves the existing conversation row without changing `timestamp`,
