@@ -22,7 +22,7 @@ final class SingleConversationInfoViewController: UIViewController {
     }
 
     private let tableView = UITableView(frame: .zero, style: .insetGrouped)
-    private let avatarImageView = AvatarImageView(loader: AvatarLoader())
+    private let avatarImageView = AvatarImageView(loader: AvatarLoader.shared)
     private let nameLabel = UILabel()
 
     init(viewModel: SingleConversationInfoViewModel) {

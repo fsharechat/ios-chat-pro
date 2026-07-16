@@ -1,9 +1,13 @@
 import Foundation
 
-/// Fetches and in-memory-caches avatar image bytes from a URL string.
+/// Fetches and caches avatar image bytes from a URL string.
 /// Returns raw `Data`, not `UIImage` — `UIKit` isn't available when this
 /// target builds for `swift test` on macOS; the `App` target decodes the
 /// bytes into an image.
+///
+/// Two-level cache like `ImageLoader`: `NSCache` in memory + files on disk
+/// under `Caches/AvatarCache/<SHA256(urlString)>`, so avatars survive a cold
+/// start instead of re-downloading on every launch.
 public protocol AvatarLoading {
     func loadAvatarData(from urlString: String) async -> Data?
 
@@ -32,9 +36,14 @@ public final class AvatarLoader: AvatarLoading {
 
     private let session: URLSession
     private let cache = NSCache<NSString, NSData>()
+    private let diskDirectory: URL
 
-    public init(session: URLSession = .shared) {
+    public init(session: URLSession = .shared, diskDirectory: URL? = nil) {
         self.session = session
+        self.diskDirectory = diskDirectory
+            ?? FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+                .appendingPathComponent("AvatarCache", isDirectory: true)
+        try? FileManager.default.createDirectory(at: self.diskDirectory, withIntermediateDirectories: true)
     }
 
     public func cachedAvatarData(from urlString: String) -> Data? {
@@ -45,6 +54,13 @@ public final class AvatarLoader: AvatarLoading {
         if let cached = cachedAvatarData(from: urlString) {
             return cached
         }
+
+        let fileURL = diskDirectory.appendingPathComponent(ImageLoader.cacheFileName(for: urlString))
+        if let diskData = try? Data(contentsOf: fileURL) {
+            cache.setObject(diskData as NSData, forKey: urlString as NSString)
+            return diskData
+        }
+
         guard let url = URL(string: urlString) else { return nil }
 
         let result: (Data, URLResponse)
@@ -58,6 +74,7 @@ public final class AvatarLoader: AvatarLoading {
         }
 
         cache.setObject(result.0 as NSData, forKey: urlString as NSString)
+        try? result.0.write(to: fileURL, options: .atomic)
         return result.0
     }
 }

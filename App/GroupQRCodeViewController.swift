@@ -8,7 +8,7 @@ final class GroupQRCodeViewController: UIViewController {
     private let groupName: String
     private let portraitURL: String?
 
-    private let avatarView = AvatarImageView(loader: AvatarLoader())
+    private let avatarView = AvatarImageView(loader: AvatarLoader.shared)
     private let nameLabel = UILabel()
     private let qrImageView = UIImageView()
 

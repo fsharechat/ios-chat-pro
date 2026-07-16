@@ -5,7 +5,7 @@ import IMKit
 final class FriendRequestCell: UITableViewCell {
     static let reuseIdentifier = "FriendRequestCell"
 
-    private let avatarImageView = AvatarImageView(loader: AvatarLoader())
+    private let avatarImageView = AvatarImageView(loader: AvatarLoader.shared)
     private let nameLabel = UILabel()
     private let reasonLabel = UILabel()
     private let acceptButton = UIButton(type: .system)

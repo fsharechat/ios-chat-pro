@@ -106,7 +106,7 @@ extension GroupMemberGridView: UICollectionViewDelegate {
 // MARK: - Private Cells
 
 private final class MemberCell: UICollectionViewCell {
-    private let avatarView = AvatarImageView(loader: AvatarLoader())
+    private let avatarView = AvatarImageView(loader: AvatarLoader.shared)
     private let nameLabel = UILabel()
 
     override init(frame: CGRect) {

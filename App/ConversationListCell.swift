@@ -5,7 +5,7 @@ import IMKit
 final class ConversationListCell: UITableViewCell {
     static let reuseIdentifier = "ConversationListCell"
 
-    private let avatarImageView = AvatarImageView(loader: AvatarLoader())
+    private let avatarImageView = AvatarImageView(loader: AvatarLoader.shared)
     private let nameLabel = UILabel()
     private let timestampLabel = UILabel()
     private let previewLabel = UILabel()

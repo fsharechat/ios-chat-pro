@@ -83,7 +83,7 @@ extension FavGroupListViewController: UITableViewDelegate {
 final class FavGroupCell: UITableViewCell {
     static let reuseIdentifier = "FavGroupCell"
 
-    private let avatarImageView: AvatarImageView = AvatarImageView(loader: AvatarLoader())
+    private let avatarImageView: AvatarImageView = AvatarImageView(loader: AvatarLoader.shared)
     private let nameLabel = UILabel()
 
     override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {

@@ -16,7 +16,7 @@ final class MyProfileViewController: UIViewController {
 
     private let tableView = UITableView(frame: .zero, style: .insetGrouped)
     private let headerView = UIView()
-    private let avatarImageView = AvatarImageView(loader: AvatarLoader())
+    private let avatarImageView = AvatarImageView(loader: AvatarLoader.shared)
     private let changeAvatarLabel = UILabel()
 
     init(viewModel: MyProfileViewModel, imageUploading: ImageUploading) {

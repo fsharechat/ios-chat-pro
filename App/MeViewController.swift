@@ -9,7 +9,7 @@ import IMKit
 /// pointing at a previous cell's `contentView`, which UIKit rejects at
 /// activation time ("no common ancestor").
 private final class ProfileCell: UITableViewCell {
-    private let avatarImageView = AvatarImageView(loader: AvatarLoader())
+    private let avatarImageView = AvatarImageView(loader: AvatarLoader.shared)
     private let displayNameLabel = UILabel()
 
     override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {

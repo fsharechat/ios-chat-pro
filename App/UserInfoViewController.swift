@@ -27,7 +27,7 @@ final class UserInfoViewController: UIViewController {
     private var cancellables = Set<AnyCancellable>()
 
     private let scrollView = UIScrollView()
-    private let avatarImageView = AvatarImageView(loader: AvatarLoader())
+    private let avatarImageView = AvatarImageView(loader: AvatarLoader.shared)
     private let nameLabel = UILabel()
     private let mobileLabel = UILabel()
     private let sendMessageButton = UIButton(type: .system)

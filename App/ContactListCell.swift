@@ -5,7 +5,7 @@ import IMKit
 final class ContactListCell: UITableViewCell {
     static let reuseIdentifier = "ContactListCell"
 
-    private let avatarImageView = AvatarImageView(loader: AvatarLoader())
+    private let avatarImageView = AvatarImageView(loader: AvatarLoader.shared)
     private let nameLabel = UILabel()
 
     override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
