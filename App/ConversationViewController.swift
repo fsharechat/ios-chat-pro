@@ -212,6 +212,7 @@ final class ConversationViewController: UIViewController {
                     self?.navigationController?.pushViewController(TextPreviewViewController(text: text), animated: true)
                 }
                 cell.onAvatarLongPressed = { [weak self] in self?.insertMentionFromAvatar(message) }
+                cell.onLinkTapped = { url in UIApplication.shared.open(url) }
                 return cell
             case .message(let message) where message.videoDuration != nil:
                 let cell = tableView.dequeueReusableCell(withIdentifier: VideoMessageCell.reuseIdentifier, for: indexPath) as! VideoMessageCell

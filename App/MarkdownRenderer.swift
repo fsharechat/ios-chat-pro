@@ -8,24 +8,41 @@ import IMKit
 enum MarkdownRenderer {
     private static let cache = NSCache<NSString, NSAttributedString>()
 
+    /// Carries the link URL for text rendered into a `UILabel` (the chat
+    /// bubble). Deliberately not the system `.link` key: `UILabel` paints
+    /// `.link`-attributed runs with its own default link color, silently
+    /// overriding any explicit `.foregroundColor` on that range — which is
+    /// why a bubble link kept rendering system blue even after this file
+    /// set a distinct `linkColor`. `UITextView` (the full-text page) has no
+    /// such override — `linkTextAttributes` governs it there — so it keeps
+    /// using the real `.link` key for the native tap/preview behavior.
+    static let bubbleLinkAttributeKey = NSAttributedString.Key("MarkdownBubbleLinkURL")
+
     /// `availableWidth` is the widest a line can render (the bubble/text
     /// view's content width) — tables are drawn to fill exactly that width.
+    /// `linkColor` styles link runs distinctly from body text — callers must
+    /// pick one with contrast against their own background (e.g. the
+    /// accent-colored outgoing bubble needs a different tint than plain
+    /// body text, see `Theme.linkOnAccent`). `linkAttributeKey` selects
+    /// which attribute key carries the URL — see `bubbleLinkAttributeKey`.
     static func render(
         _ text: String,
         textColor: UIColor,
+        linkColor: UIColor,
+        linkAttributeKey: NSAttributedString.Key = .link,
         baseFontSize: CGFloat = 16,
         availableWidth: CGFloat
     ) -> NSAttributedString {
-        // textColor differs between incoming/outgoing bubbles (and theme
-        // changes), width between bubble and full-text page — both are part
-        // of the key.
-        let key = "\(baseFontSize)|\(availableWidth)|\(textColor.hashValue)|\(text)" as NSString
+        // textColor/linkColor differ between incoming/outgoing bubbles (and
+        // theme changes), width between bubble and full-text page — all are
+        // part of the key.
+        let key = "\(baseFontSize)|\(availableWidth)|\(textColor.hashValue)|\(linkColor.hashValue)|\(linkAttributeKey.rawValue)|\(text)" as NSString
         if let cached = cache.object(forKey: key) { return cached }
 
         let result = NSMutableAttributedString()
         for (index, block) in MarkdownMessage.parse(text).enumerated() {
             if index > 0 { result.append(NSAttributedString(string: "\n")) }
-            append(block, to: result, textColor: textColor, baseFontSize: baseFontSize, availableWidth: availableWidth)
+            append(block, to: result, textColor: textColor, linkColor: linkColor, linkAttributeKey: linkAttributeKey, baseFontSize: baseFontSize, availableWidth: availableWidth)
         }
         let immutable = NSAttributedString(attributedString: result)
         cache.setObject(immutable, forKey: key)
@@ -36,6 +53,8 @@ enum MarkdownRenderer {
         _ block: MarkdownBlock,
         to result: NSMutableAttributedString,
         textColor: UIColor,
+        linkColor: UIColor,
+        linkAttributeKey: NSAttributedString.Key,
         baseFontSize: CGFloat,
         availableWidth: CGFloat
     ) {
@@ -43,19 +62,19 @@ enum MarkdownRenderer {
         case .heading(let level, let spans):
             let sizes: [CGFloat] = [baseFontSize + 6, baseFontSize + 4, baseFontSize + 2]
             let size = level <= sizes.count ? sizes[level - 1] : baseFontSize
-            appendSpans(spans, to: result, color: textColor, size: size, forceBold: true)
+            appendSpans(spans, to: result, color: textColor, linkColor: linkColor, linkAttributeKey: linkAttributeKey, size: size, forceBold: true)
         case .bullet(let spans):
             result.append(NSAttributedString(string: "• ", attributes: [
                 .font: UIFont.systemFont(ofSize: baseFontSize), .foregroundColor: textColor,
             ]))
-            appendSpans(spans, to: result, color: textColor, size: baseFontSize)
+            appendSpans(spans, to: result, color: textColor, linkColor: linkColor, linkAttributeKey: linkAttributeKey, size: baseFontSize)
         case .ordered(let number, let spans):
             result.append(NSAttributedString(string: "\(number). ", attributes: [
                 .font: UIFont.systemFont(ofSize: baseFontSize), .foregroundColor: textColor,
             ]))
-            appendSpans(spans, to: result, color: textColor, size: baseFontSize)
+            appendSpans(spans, to: result, color: textColor, linkColor: linkColor, linkAttributeKey: linkAttributeKey, size: baseFontSize)
         case .quote(let spans):
-            appendSpans(spans, to: result, color: textColor.withAlphaComponent(0.6), size: baseFontSize)
+            appendSpans(spans, to: result, color: textColor.withAlphaComponent(0.6), linkColor: linkColor, linkAttributeKey: linkAttributeKey, size: baseFontSize)
         case .codeBlock(let code):
             let image = MarkdownCodeBlockRenderer.image(
                 code: code, maxWidth: availableWidth,
@@ -80,7 +99,7 @@ enum MarkdownRenderer {
             attachment.bounds = CGRect(origin: .zero, size: image.size)
             result.append(NSAttributedString(attachment: attachment))
         case .paragraph(let spans):
-            appendSpans(spans, to: result, color: textColor, size: baseFontSize)
+            appendSpans(spans, to: result, color: textColor, linkColor: linkColor, linkAttributeKey: linkAttributeKey, size: baseFontSize)
         }
     }
 
@@ -88,16 +107,22 @@ enum MarkdownRenderer {
         _ spans: [MarkdownSpan],
         to result: NSMutableAttributedString,
         color: UIColor,
+        linkColor: UIColor,
+        linkAttributeKey: NSAttributedString.Key,
         size: CGFloat,
         forceBold: Bool = false
     ) {
-        result.append(spanString(spans, color: color, size: size, forceBold: forceBold))
+        result.append(spanString(spans, color: color, linkColor: linkColor, linkAttributeKey: linkAttributeKey, size: size, forceBold: forceBold))
     }
 
-    /// Also used by `MarkdownTableRenderer` for cell content.
+    /// Also used by `MarkdownTableRenderer` for cell content — table cells
+    /// pass `color` again for `linkColor` since a table never renders on an
+    /// accent-colored background needing a distinct tint.
     static func spanString(
         _ spans: [MarkdownSpan],
         color: UIColor,
+        linkColor: UIColor? = nil,
+        linkAttributeKey: NSAttributedString.Key = .link,
         size: CGFloat,
         forceBold: Bool = false,
         alignment: NSTextAlignment? = nil
@@ -115,10 +140,11 @@ enum MarkdownRenderer {
                 attributes[.strikethroughStyle] = NSUnderlineStyle.single.rawValue
             }
             if let url = span.linkURL {
-                // No underline (user preference) — the .link attribute's
-                // color treatment alone marks it; UITextView makes it
-                // tappable on the full-text page.
-                attributes[.link] = url
+                // No underline (user preference) — the distinct link color
+                // alone marks it; TextMessageCell/TextPreviewViewController
+                // hit-test `linkAttributeKey` to make it tappable.
+                attributes[linkAttributeKey] = url
+                attributes[.foregroundColor] = linkColor ?? color
             }
             if let alignment {
                 let paragraph = NSMutableParagraphStyle()

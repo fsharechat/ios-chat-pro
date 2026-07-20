@@ -19,6 +19,9 @@ final class TextMessageCell: UITableViewCell {
     var onExpandTapped: (() -> Void)?
     /// 群聊里长按对方头像 → 会话页在输入框插入 @；自己发的消息不绑定。
     var onAvatarLongPressed: (() -> Void)?
+    /// 消息里的链接被点击。`messageTextLabel` 是 UILabel，`.link` 属性本身不会
+    /// 触发跳转（只有 UITextView 会拦截），需要自己命中测试后转发出去。
+    var onLinkTapped: ((URL) -> Void)?
     /// Kept so a light/dark switch can re-render: markdown attributes (and
     /// the table bitmap especially) bake in colors resolved at configure
     /// time — dynamic colors can't adapt inside a drawn image.
@@ -39,12 +42,15 @@ final class TextMessageCell: UITableViewCell {
         onRetryTapped = nil
         onExpandTapped = nil
         onAvatarLongPressed = nil
+        onLinkTapped = nil
     }
 
     private func layoutViews() {
         messageTextLabel.numberOfLines = 0
         messageTextLabel.font = .systemFont(ofSize: 16)
         messageTextLabel.translatesAutoresizingMaskIntoConstraints = false
+        messageTextLabel.isUserInteractionEnabled = true
+        messageTextLabel.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(messageTextTapped(_:))))
         bubbleView.layer.cornerRadius = Theme.bubbleCornerRadius
         bubbleView.addSubview(messageTextLabel)
         NSLayoutConstraint.activate([
@@ -126,9 +132,13 @@ final class TextMessageCell: UITableViewCell {
         // and the resolved value keys the render cache per appearance.
         let textColor = (isOutgoing ? Theme.textOnAccent : Theme.textPrimary)
             .resolvedColor(with: traitCollection)
+        let linkColor = (isOutgoing ? Theme.linkOnAccent : Theme.link)
+            .resolvedColor(with: traitCollection)
         messageTextLabel.attributedText = MarkdownRenderer.render(
             preview.text,
             textColor: textColor,
+            linkColor: linkColor,
+            linkAttributeKey: MarkdownRenderer.bubbleLinkAttributeKey,
             availableWidth: Self.maxContentWidth
         )
         expandButton.isHidden = !preview.isTruncated
@@ -186,5 +196,35 @@ final class TextMessageCell: UITableViewCell {
     @objc private func avatarLongPressed(_ recognizer: UILongPressGestureRecognizer) {
         guard recognizer.state == .began else { return }
         onAvatarLongPressed?()
+    }
+
+    @objc private func messageTextTapped(_ recognizer: UITapGestureRecognizer) {
+        guard let url = link(at: recognizer.location(in: messageTextLabel)) else { return }
+        onLinkTapped?(url)
+    }
+
+    /// UILabel has no built-in link hit-testing (that's a UITextView-only
+    /// behavior) — lay the attributed text out through TextKit ourselves to
+    /// find which `.link` run, if any, sits under the tap point.
+    private func link(at point: CGPoint) -> URL? {
+        guard let attributedText = messageTextLabel.attributedText, attributedText.length > 0 else { return nil }
+        let textStorage = NSTextStorage(attributedString: attributedText)
+        let layoutManager = NSLayoutManager()
+        textStorage.addLayoutManager(layoutManager)
+        let textContainer = NSTextContainer(size: messageTextLabel.bounds.size)
+        textContainer.lineFragmentPadding = 0
+        textContainer.lineBreakMode = messageTextLabel.lineBreakMode
+        textContainer.maximumNumberOfLines = messageTextLabel.numberOfLines
+        layoutManager.addTextContainer(textContainer)
+
+        let glyphIndex = layoutManager.glyphIndex(for: point, in: textContainer)
+        guard glyphIndex < layoutManager.numberOfGlyphs else { return nil }
+        // Reject taps that land in the trailing whitespace of a short line
+        // rather than on an actual glyph.
+        let glyphRect = layoutManager.boundingRect(forGlyphRange: NSRange(location: glyphIndex, length: 1), in: textContainer)
+        guard glyphRect.contains(point) else { return nil }
+
+        let charIndex = layoutManager.characterIndexForGlyph(at: glyphIndex)
+        return textStorage.attribute(MarkdownRenderer.bubbleLinkAttributeKey, at: charIndex, effectiveRange: nil) as? URL
     }
 }

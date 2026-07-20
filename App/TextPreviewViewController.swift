@@ -46,6 +46,7 @@ final class TextPreviewViewController: UIViewController {
         textView.attributedText = MarkdownRenderer.render(
             text,
             textColor: Theme.textPrimary.resolvedColor(with: traitCollection),
+            linkColor: Theme.link.resolvedColor(with: traitCollection),
             availableWidth: UIScreen.main.bounds.width - 34
         )
     }

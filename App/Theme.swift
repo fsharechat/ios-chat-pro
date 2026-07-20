@@ -40,6 +40,15 @@ public enum Theme {
     public static let link = UIColor { traits in
         traits.userInterfaceStyle == .dark ? .systemBlue : UIColor(hex: 0x3E64E4)
     }
+    /// Link color for text drawn on the accent-colored outgoing bubble.
+    /// `link` alone is unusable there in light mode: it resolves to the same
+    /// cobalt hex as `accent`, so a link would sit invisible on its own
+    /// bubble. Mirrors Android's day-palette send-bubble link tint
+    /// (`message_text_link_send_dark` = `#DCE4FF`, colors.xml). Dark mode's
+    /// green accent doesn't clash with `link`'s systemBlue, so it's reused.
+    public static let linkOnAccent = UIColor { traits in
+        traits.userInterfaceStyle == .dark ? .systemBlue : UIColor(hex: 0xDCE4FF)
+    }
     public static let textOnAccent = UIColor { traits in traits.userInterfaceStyle == .dark ? .black : .white }
 
     public static let bubbleCornerRadius: CGFloat = 14
