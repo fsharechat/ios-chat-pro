@@ -29,11 +29,11 @@ final class ConversationListCell: UITableViewCell {
         nameLabel.textColor = Theme.textPrimary
 
         timestampLabel.font = .systemFont(ofSize: 12, weight: .regular)
-        timestampLabel.textColor = .secondaryLabel
+        timestampLabel.textColor = Theme.textSecondary
         timestampLabel.setContentHuggingPriority(.required, for: .horizontal)
 
         previewLabel.font = .systemFont(ofSize: 14, weight: .regular)
-        previewLabel.textColor = .secondaryLabel
+        previewLabel.textColor = Theme.textSecondary
         previewLabel.numberOfLines = 1
 
         unreadBadge.font = .systemFont(ofSize: 12, weight: .semibold)
@@ -44,7 +44,7 @@ final class ConversationListCell: UITableViewCell {
         unreadBadge.clipsToBounds = true
         unreadBadge.setContentHuggingPriority(.required, for: .horizontal)
 
-        muteIcon.tintColor = .secondaryLabel
+        muteIcon.tintColor = Theme.textSecondary
         muteIcon.setContentHuggingPriority(.required, for: .horizontal)
 
         // 最后一条消息发送失败：预览文字左侧的红色感叹号（微信风格）。
@@ -98,7 +98,7 @@ final class ConversationListCell: UITableViewCell {
                 attributes: [.foregroundColor: UIColor.systemRed])
             preview.append(NSAttributedString(
                 string: row.previewText,
-                attributes: [.foregroundColor: UIColor.secondaryLabel]))
+                attributes: [.foregroundColor: Theme.textSecondary]))
             previewLabel.attributedText = preview
         } else {
             previewLabel.attributedText = nil

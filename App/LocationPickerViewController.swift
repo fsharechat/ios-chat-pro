@@ -25,7 +25,7 @@ final class LocationPickerViewController: UIViewController {
         let cfg = UIImage.SymbolConfiguration(pointSize: 18, weight: .medium)
         b.setImage(UIImage(systemName: "location.fill", withConfiguration: cfg), for: .normal)
         b.backgroundColor = .systemBackground
-        b.tintColor = .systemBlue
+        b.tintColor = Theme.link
         b.layer.cornerRadius = 22
         b.layer.shadowColor = UIColor.black.cgColor
         b.layer.shadowOpacity = 0.18
@@ -260,7 +260,7 @@ private final class POICell: UITableViewCell {
         nameLabel.translatesAutoresizingMaskIntoConstraints = false
 
         addressLabel.font = .systemFont(ofSize: 12)
-        addressLabel.textColor = .secondaryLabel
+        addressLabel.textColor = Theme.textSecondary
         addressLabel.numberOfLines = 2
         addressLabel.translatesAutoresizingMaskIntoConstraints = false
 
@@ -292,14 +292,14 @@ private final class POICell: UITableViewCell {
         addressLabel.text = item.address
         addressLabel.isHidden = item.address.isEmpty
         if selected {
-            dotView.backgroundColor = .systemBlue
+            dotView.backgroundColor = Theme.link
             dotView.layer.borderWidth = 0
-            nameLabel.textColor = .systemBlue
+            nameLabel.textColor = Theme.link
         } else {
             dotView.backgroundColor = .clear
             dotView.layer.borderColor = UIColor.systemGray3.cgColor
             dotView.layer.borderWidth = 1.5
-            nameLabel.textColor = .label
+            nameLabel.textColor = Theme.textPrimary
         }
     }
 }

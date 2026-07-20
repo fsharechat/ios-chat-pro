@@ -54,7 +54,7 @@ final class SingleConversationInfoViewController: UIViewController {
         avatarImageView.translatesAutoresizingMaskIntoConstraints = false
 
         nameLabel.font = .systemFont(ofSize: 12)
-        nameLabel.textColor = .secondaryLabel
+        nameLabel.textColor = Theme.textSecondary
         nameLabel.textAlignment = .center
         nameLabel.translatesAutoresizingMaskIntoConstraints = false
 

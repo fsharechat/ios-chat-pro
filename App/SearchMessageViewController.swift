@@ -98,7 +98,7 @@ private final class SearchResultCell: UITableViewCell {
         summaryLabel.numberOfLines = 2
         summaryLabel.translatesAutoresizingMaskIntoConstraints = false
         timeLabel.font = .systemFont(ofSize: 12)
-        timeLabel.textColor = .secondaryLabel
+        timeLabel.textColor = Theme.textSecondary
         timeLabel.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(summaryLabel)
         contentView.addSubview(timeLabel)

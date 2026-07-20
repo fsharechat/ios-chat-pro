@@ -117,7 +117,7 @@ final class MessageInputBar: UIView {
         textView.delegate = self
 
         placeholderLabel.text = "发消息..."
-        placeholderLabel.textColor = .placeholderText
+        placeholderLabel.textColor = Theme.textSecondary
         placeholderLabel.font = .systemFont(ofSize: 16)
 
         recordButton.setTitle("按住说话", for: .normal)

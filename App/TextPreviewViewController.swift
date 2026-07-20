@@ -25,7 +25,7 @@ final class TextPreviewViewController: UIViewController {
         textView.isEditable = false
         renderContent()
         // Color only, no underline — matches the bubble's link treatment.
-        textView.linkTextAttributes = [.foregroundColor: UIColor.systemBlue]
+        textView.linkTextAttributes = [.foregroundColor: Theme.link]
         textView.backgroundColor = .clear
         textView.textContainerInset = UIEdgeInsets(top: 16, left: 12, bottom: 16, right: 12)
         textView.alwaysBounceVertical = true

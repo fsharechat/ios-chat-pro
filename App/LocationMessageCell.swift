@@ -60,7 +60,7 @@ final class LocationMessageCell: UITableViewCell {
         mapImageView.clipsToBounds = true
         mapImageView.layer.cornerRadius = 8
         mapImageView.backgroundColor = Theme.backgroundTertiary
-        mapImageView.tintColor = .secondaryLabel
+        mapImageView.tintColor = Theme.textSecondary
         mapImageView.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
             mapImageView.widthAnchor.constraint(equalToConstant: 200),
@@ -81,7 +81,7 @@ final class LocationMessageCell: UITableViewCell {
         bubbleStack.addArrangedSubview(titleLabel)
 
         senderNameLabel.font = .systemFont(ofSize: 11)
-        senderNameLabel.textColor = .secondaryLabel
+        senderNameLabel.textColor = Theme.textSecondary
         senderAvatarImageView.isUserInteractionEnabled = true
         let avatarPress = UILongPressGestureRecognizer(target: self, action: #selector(avatarLongPressed(_:)))
         // 比表格整行长按菜单手势（默认 0.5s）先识别，长按头像走 @ 而非弹菜单

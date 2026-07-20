@@ -129,7 +129,7 @@ private final class MentionAllCell: UITableViewCell {
         backgroundColor = Theme.backgroundSecondary
 
         let iconContainer = UIView()
-        iconContainer.backgroundColor = .systemBlue
+        iconContainer.backgroundColor = Theme.link
         iconContainer.layer.cornerRadius = 20
         iconContainer.clipsToBounds = true
         iconContainer.translatesAutoresizingMaskIntoConstraints = false

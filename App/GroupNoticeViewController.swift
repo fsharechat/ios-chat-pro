@@ -22,7 +22,7 @@ final class GroupNoticeViewController: UIViewController {
         view.backgroundColor = .systemBackground
         textView.font = .systemFont(ofSize: 16)
         textView.text = initialNotice?.isEmpty == false ? initialNotice : "暂无公告"
-        textView.textColor = initialNotice?.isEmpty == false ? .label : .secondaryLabel
+        textView.textColor = initialNotice?.isEmpty == false ? Theme.textPrimary : Theme.textSecondary
         isShowingPlaceholder = !(initialNotice?.isEmpty == false)
         textView.isEditable = false
         textView.isSelectable = true
@@ -48,7 +48,7 @@ final class GroupNoticeViewController: UIViewController {
         } else {
             if isShowingPlaceholder {
                 textView.text = ""
-                textView.textColor = .label
+                textView.textColor = Theme.textPrimary
                 isShowingPlaceholder = false
             }
             textView.isEditable = true

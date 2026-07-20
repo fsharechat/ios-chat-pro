@@ -43,7 +43,7 @@ final class MyProfileViewController: UIViewController {
 
         changeAvatarLabel.text = "点击更换头像"
         changeAvatarLabel.font = .systemFont(ofSize: 12)
-        changeAvatarLabel.textColor = .secondaryLabel
+        changeAvatarLabel.textColor = Theme.textSecondary
         changeAvatarLabel.translatesAutoresizingMaskIntoConstraints = false
 
         headerView.addSubview(avatarImageView)

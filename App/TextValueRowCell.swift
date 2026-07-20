@@ -13,7 +13,7 @@ final class TextValueRowCell: UITableViewCell {
         titleLabel.font = .systemFont(ofSize: 16)
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
         valueLabel.font = .systemFont(ofSize: 14)
-        valueLabel.textColor = .secondaryLabel
+        valueLabel.textColor = Theme.textSecondary
         valueLabel.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(titleLabel)
         contentView.addSubview(valueLabel)

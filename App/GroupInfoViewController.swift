@@ -142,7 +142,7 @@ final class GroupInfoViewController: UIViewController {
         case .qrCode:
             let cell = tableView.dequeueReusableCell(withIdentifier: NavigationRowCell.reuseIdentifier, for: indexPath) as! NavigationRowCell
             let qrIcon = UIImageView(image: UIImage(systemName: "qrcode"))
-            qrIcon.tintColor = .label
+            qrIcon.tintColor = Theme.textPrimary
             cell.configure(title: "二维码", detail: nil, rightView: qrIcon)
             return cell
 

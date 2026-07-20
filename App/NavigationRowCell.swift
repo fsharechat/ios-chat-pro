@@ -14,7 +14,7 @@ final class NavigationRowCell: UITableViewCell {
         titleLabel.font = .systemFont(ofSize: 16)
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
         detailLabel.font = .systemFont(ofSize: 14)
-        detailLabel.textColor = .secondaryLabel
+        detailLabel.textColor = Theme.textSecondary
         detailLabel.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(titleLabel)
         contentView.addSubview(detailLabel)

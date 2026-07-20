@@ -1,28 +1,45 @@
 import UIKit
 
-/// Day/night color tokens per the migration design doc §8 (already
-/// user-approved): dark background `#14151A` with 3-level layering
-/// (nav bar / list / card), accent `#3DDC84` used only for unread badges,
-/// the outgoing message bubble, primary buttons, and selected state.
+/// Day/night color tokens. Dark values per the migration design doc §8
+/// (user-approved): background `#14151A` with 3-level layering
+/// (nav bar / list / card), accent `#3DDC84`. Light values port the
+/// android-chat-pro day palette (chat/src/main/res/values/colors.xml):
+/// paper `#F5F7FC` / surface white / fog `#E9EDF6` hairlines, cobalt
+/// `#3E64E4` for the outgoing bubble, primary buttons, and selected
+/// state, mist `#8B93A7` secondary text, ink `#171A21` primary text.
 /// Automatic via `UITraitCollection.userInterfaceStyle` — manual in-app
 /// theme switching is explicitly Phase 4 scope ("设置/换肤"), not built here.
 public enum Theme {
     public static let backgroundPrimary = dynamicColor(dark: 0x14151A, light: 0xFFFFFF)
-    public static let backgroundSecondary = dynamicColor(dark: 0x1B1C22, light: 0xF5F5F7)
-    public static let backgroundTertiary = dynamicColor(dark: 0x232430, light: 0xEAEAEC)
+    public static let backgroundSecondary = dynamicColor(dark: 0x1B1C22, light: 0xF5F7FC)
+    public static let backgroundTertiary = dynamicColor(dark: 0x232430, light: 0xE9EDF6)
 
-    /// Same hue in both themes; lower saturation / higher brightness in
-    /// light mode so it doesn't read as garishly bright on a white
-    /// background (per design doc §8's explicit note on this).
+    /// Dark: the doc §8 green. Light: Android's cobalt brand blue — the
+    /// day palette is cool blue-tinted throughout, so the accent follows.
     public static let accent = UIColor { traits in
-        traits.userInterfaceStyle == .dark ? UIColor(hex: 0x3DDC84) : UIColor(hex: 0x1FAE63)
+        traits.userInterfaceStyle == .dark ? UIColor(hex: 0x3DDC84) : UIColor(hex: 0x3E64E4)
     }
 
-    public static let incomingBubble = dynamicColor(dark: 0x1F212B, light: 0xF0F0F2)
+    public static let incomingBubble = dynamicColor(dark: 0x1F212B, light: 0xE9EDF6)
     /// Elevated popup card (e.g. the nav-bar "+" menu) — white in light mode
     /// like WeChat's, one layer above `backgroundSecondary` in dark mode.
     public static let popupCard = dynamicColor(dark: 0x232430, light: 0xFFFFFF)
-    public static let textPrimary = UIColor.label
+    public static let textPrimary = UIColor { traits in
+        traits.userInterfaceStyle == .dark ? .label : UIColor(hex: 0x171A21)
+    }
+    /// Secondary text (timestamps, previews, hints) — Android "mist".
+    public static let textSecondary = UIColor { traits in
+        traits.userInterfaceStyle == .dark ? .secondaryLabel : UIColor(hex: 0x8B93A7)
+    }
+    /// Hairlines and thin borders — Android "fog"/"line".
+    public static let separator = UIColor { traits in
+        traits.userInterfaceStyle == .dark ? .separator : UIColor(hex: 0xE9EDF6)
+    }
+    /// Brand blue (Android "cobalt") — link text and blue icon chips.
+    /// Stays system blue in dark mode, where the accent is green.
+    public static let link = UIColor { traits in
+        traits.userInterfaceStyle == .dark ? .systemBlue : UIColor(hex: 0x3E64E4)
+    }
     public static let textOnAccent = UIColor { traits in traits.userInterfaceStyle == .dark ? .black : .white }
 
     public static let bubbleCornerRadius: CGFloat = 14

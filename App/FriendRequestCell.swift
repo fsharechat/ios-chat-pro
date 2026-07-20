@@ -29,7 +29,7 @@ final class FriendRequestCell: UITableViewCell {
         nameLabel.translatesAutoresizingMaskIntoConstraints = false
 
         reasonLabel.font = .systemFont(ofSize: 13, weight: .regular)
-        reasonLabel.textColor = .secondaryLabel
+        reasonLabel.textColor = Theme.textSecondary
         reasonLabel.translatesAutoresizingMaskIntoConstraints = false
 
         acceptButton.titleLabel?.font = .systemFont(ofSize: 14, weight: .medium)
@@ -68,7 +68,7 @@ final class FriendRequestCell: UITableViewCell {
         if row.isAccepted {
             acceptButton.setTitle("已添加", for: .normal)
             acceptButton.isEnabled = false
-            acceptButton.setTitleColor(.secondaryLabel, for: .normal)
+            acceptButton.setTitleColor(Theme.textSecondary, for: .normal)
         } else {
             acceptButton.setTitle("接受", for: .normal)
             acceptButton.isEnabled = true

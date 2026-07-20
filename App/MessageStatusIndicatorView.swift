@@ -78,7 +78,7 @@ final class MessageStatusIndicatorView: UIView {
     }
 
     private func applyRingColor() {
-        ringLayer.strokeColor = UIColor.secondaryLabel.resolvedColor(with: traitCollection).cgColor
+        ringLayer.strokeColor = Theme.textSecondary.resolvedColor(with: traitCollection).cgColor
     }
 
     private func startSpinning() {

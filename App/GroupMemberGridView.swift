@@ -146,9 +146,9 @@ private final class ActionCell: UICollectionViewCell {
         super.init(frame: frame)
         iconContainer.layer.cornerRadius = 24
         iconContainer.layer.borderWidth = 1
-        iconContainer.layer.borderColor = UIColor.separator.cgColor
+        iconContainer.layer.borderColor = Theme.separator.cgColor
         iconContainer.translatesAutoresizingMaskIntoConstraints = false
-        imageView.tintColor = .label
+        imageView.tintColor = Theme.textPrimary
         imageView.contentMode = .scaleAspectFit
         imageView.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(iconContainer)

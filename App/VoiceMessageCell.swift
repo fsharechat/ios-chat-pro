@@ -150,7 +150,7 @@ final class VoiceMessageCell: UITableViewCell {
     private func applyBubble(isOutgoing: Bool, duration: Int, status: MessageStatusIndicatorView.Status, avatarURL: String?, senderDisplayName: String?) {
         bubbleView.backgroundColor = isOutgoing ? Theme.accent : Theme.incomingBubble
         iconView.tintColor = isOutgoing ? .white : Theme.accent
-        durationLabel.textColor = isOutgoing ? .white : .label
+        durationLabel.textColor = isOutgoing ? .white : Theme.textPrimary
         statusIndicator.apply(status)
 
         durationLabel.text = "\(duration)秒"

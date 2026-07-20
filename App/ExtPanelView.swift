@@ -89,7 +89,7 @@ final class ExtPanelView: UIView {
         let label = UILabel()
         label.text = title
         label.font = .systemFont(ofSize: 12)
-        label.textColor = .secondaryLabel
+        label.textColor = Theme.textSecondary
 
         let tap = UITapGestureRecognizer(target: self, action: action)
         iconContainer.addGestureRecognizer(tap)

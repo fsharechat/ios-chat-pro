@@ -132,7 +132,7 @@ private final class EmojiCell: UICollectionViewCell {
         deleteLabel.text = "⌫"
         deleteLabel.font = .systemFont(ofSize: 20)
         deleteLabel.textAlignment = .center
-        deleteLabel.textColor = .secondaryLabel
+        deleteLabel.textColor = Theme.textSecondary
         for v in [label, deleteLabel] {
             v.translatesAutoresizingMaskIntoConstraints = false
             contentView.addSubview(v)

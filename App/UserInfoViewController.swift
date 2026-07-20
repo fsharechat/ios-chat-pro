@@ -63,7 +63,7 @@ final class UserInfoViewController: UIViewController {
         nameLabel.translatesAutoresizingMaskIntoConstraints = false
 
         mobileLabel.font = .systemFont(ofSize: 14)
-        mobileLabel.textColor = .secondaryLabel
+        mobileLabel.textColor = Theme.textSecondary
         mobileLabel.translatesAutoresizingMaskIntoConstraints = false
 
         sendMessageButton.setTitle("发消息", for: .normal)
@@ -103,7 +103,7 @@ final class UserInfoViewController: UIViewController {
         headerStack.translatesAutoresizingMaskIntoConstraints = false
 
         let separator = UIView()
-        separator.backgroundColor = .separator
+        separator.backgroundColor = Theme.separator
         separator.translatesAutoresizingMaskIntoConstraints = false
 
         scrollView.alwaysBounceVertical = true

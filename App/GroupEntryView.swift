@@ -20,7 +20,7 @@ final class GroupEntryView: UIView {
     required init?(coder: NSCoder) { fatalError() }
 
     private func layoutViews() {
-        iconBackgroundView.backgroundColor = .systemBlue
+        iconBackgroundView.backgroundColor = Theme.link
         iconBackgroundView.layer.cornerRadius = 8
         iconBackgroundView.translatesAutoresizingMaskIntoConstraints = false
 

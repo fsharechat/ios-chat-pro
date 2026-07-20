@@ -40,7 +40,7 @@ final class FileMessageCell: UITableViewCell {
     private func layoutViews() {
         bubbleView.layer.cornerRadius = 16
         bubbleView.layer.borderWidth = 0.5
-        bubbleView.layer.borderColor = UIColor.separator.cgColor
+        bubbleView.layer.borderColor = Theme.separator.cgColor
         bubbleView.backgroundColor = UIColor { traits in
             traits.userInterfaceStyle == .dark ? .secondarySystemBackground : .white
         }
@@ -69,10 +69,10 @@ final class FileMessageCell: UITableViewCell {
         nameLabel.font = .systemFont(ofSize: 15)
         nameLabel.numberOfLines = 2
         nameLabel.lineBreakMode = .byTruncatingMiddle
-        nameLabel.textColor = .label
+        nameLabel.textColor = Theme.textPrimary
 
         statusLabel.font = .systemFont(ofSize: 12)
-        statusLabel.textColor = .secondaryLabel
+        statusLabel.textColor = Theme.textSecondary
 
         let textStack = UIStackView(arrangedSubviews: [nameLabel, statusLabel])
         textStack.axis = .vertical
@@ -135,7 +135,7 @@ final class FileMessageCell: UITableViewCell {
 
     override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
         super.traitCollectionDidChange(previousTraitCollection)
-        bubbleView.layer.borderColor = UIColor.separator.cgColor
+        bubbleView.layer.borderColor = Theme.separator.cgColor
     }
 
     func configure(with row: StoredMessageRow, state: FileDownloadState) {
