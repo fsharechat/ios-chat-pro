@@ -47,6 +47,31 @@ bash Scripts/generate-proto.sh
 输出写入 `Sources/IMProto/Generated/`，结果需要提交。  
 **不要** 使用系统 `protoc`（版本钉死在 2.5.0 供兄弟项目使用，与本插件不兼容）。
 
+### 真机部署（命令行兜底，不依赖 Xcode UI）
+
+测试机：于任飞的iPhone，iPhone 14 Pro，UDID `00008120-001945391147401E`，bundleID `cn.comsince.fschat`。本机 2017 Intel MacBook Pro（macOS 13.7 到顶）+ Xcode 15.2。
+
+```bash
+# 1. 检查设备状态
+xcrun devicectl list devices
+
+# 2. 编译
+xcodebuild -project ios-chat-pro.xcodeproj -scheme App -destination 'generic/platform=iOS' -allowProvisioningUpdates build
+
+# 3. 安装（DerivedData 路径每次可能变化，用通配符或从上一步输出确认）
+xcrun devicectl device install app --device 00008120-001945391147401E ~/Library/Developer/Xcode/DerivedData/ios-chat-pro-*/Build/Products/Debug-iphoneos/App.app
+```
+
+若第 1 步设备状态不是 `available (paired)`，按对应根因处理：
+
+| 现象 | 根因 | 修法 |
+|---|---|---|
+| Xcode 工具栏显示 "iOS 17.2 Not Installed"，真机从目标列表消失，但 `simctl runtime list` 正常 | Xcode GUI 平台注册状态损坏 | `xcodebuild -runFirstLaunch` → 彻底退出重开 Xcode → 重插线/解锁手机 |
+| 同样报 "Not Installed"，但 `runFirstLaunch`/重启 Xcode 无效；`simctl list runtimes` 返回空 | `simdiskimaged` 挂载态卡死（挂载点是空目录） | `osascript -e 'do shell script "pkill -f simdiskimaged" with administrator privileges'` 弹密码框杀掉重启（sudo 在会话内拿不到 TTY，`!` 前缀也不行；`pkill -f` 自伤报 exit 144 可忽略） |
+| `devicectl list devices` 直接显示 `unavailable`，USB 层能看到设备已 paired | CoreDevice 连接隧道未建立 | ①手机解锁+确认"信任此电脑"弹窗 ②`ps aux \| grep CoreDeviceService` 找到用户态 `CoreDeviceService.xpc` 进程 `kill <pid>`（无需 sudo，自动重启）③物理拔插一次 USB 数据线重新触发枚举——三步缺一不可，单独重启进程不够 |
+
+老设备 iPhone 6（iOS 12.5.6）偶尔连接，走 Xcode 内置/第三方 DeviceSupport（已补到 16.4）。
+
 ---
 
 ## 模块架构
