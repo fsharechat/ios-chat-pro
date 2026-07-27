@@ -38,6 +38,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             self?.messageAlertPlayer.handle(isMuted: isMuted, isActiveConversation: isActiveConversation, isGroupNotification: isGroupNotification)
         }
 
+        Theme.applyGlobalBarAppearance()
         let window = UIWindow(windowScene: windowScene)
         window.rootViewController = rootViewController()
         window.overrideUserInterfaceStyle = themePreferenceStore.mode.userInterfaceStyle

@@ -55,6 +55,26 @@ public enum Theme {
     public static let cardCornerRadius: CGFloat = 12
     public static let standardSpacing: CGFloat = 12
 
+    /// 全局导航栏/标签栏外观：scrollEdgeAppearance 与 standardAppearance
+    /// 用同一份不透明外观,让顶部标题栏和底部 tab 栏的背景与 hairline
+    /// 始终可见,而不是 iOS 15 默认的"滚动到边缘时透明、滚起来才出现"。
+    public static func applyGlobalBarAppearance() {
+        let navAppearance = UINavigationBarAppearance()
+        navAppearance.configureWithOpaqueBackground()
+        navAppearance.backgroundColor = backgroundPrimary
+        navAppearance.shadowColor = separator
+        UINavigationBar.appearance().standardAppearance = navAppearance
+        UINavigationBar.appearance().scrollEdgeAppearance = navAppearance
+        UINavigationBar.appearance().compactAppearance = navAppearance
+
+        let tabAppearance = UITabBarAppearance()
+        tabAppearance.configureWithOpaqueBackground()
+        tabAppearance.backgroundColor = backgroundPrimary
+        tabAppearance.shadowColor = separator
+        UITabBar.appearance().standardAppearance = tabAppearance
+        UITabBar.appearance().scrollEdgeAppearance = tabAppearance
+    }
+
     private static func dynamicColor(dark: UInt32, light: UInt32) -> UIColor {
         UIColor { traits in traits.userInterfaceStyle == .dark ? UIColor(hex: dark) : UIColor(hex: light) }
     }
