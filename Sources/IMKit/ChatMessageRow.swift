@@ -162,6 +162,27 @@ public struct SystemTipRow: Equatable, Hashable {
     }
 }
 
+/// 流式 AI(官方客服)回复的占位气泡——从未入库,仅存在于
+/// `ConversationViewModel` 的内存态;`done` 后保留,等真实完整消息经
+/// MN 通道入库到达时被移除(原位替换),对齐 Android `ConversationActivity`
+/// 的 streamingPlaceholder。
+public struct StreamingRow: Equatable, Hashable {
+    public let streamId: String
+    public let text: String
+    public let done: Bool
+    /// 客服(target)的头像 URL,行创建/恢复时从 `UserStore` 解析一次——
+    /// 与 `buildStoredMessageRow` 对真实消息的头像解析同源,否则占位
+    /// 气泡是灰圈而真实消息有头像,替换瞬间会闪变。
+    public let senderAvatarURL: String?
+
+    public init(streamId: String, text: String, done: Bool, senderAvatarURL: String? = nil) {
+        self.streamId = streamId
+        self.text = text
+        self.done = done
+        self.senderAvatarURL = senderAvatarURL
+    }
+}
+
 /// A single row in the chat message list: a real, persisted message; an
 /// in-flight image upload placeholder; a group system-notification tip; or a
 /// synthetic time separator injected between messages with a gap ≥ 5 minutes.
@@ -175,6 +196,7 @@ public enum ChatMessageRow: Equatable, Hashable {
     /// following message, making each header globally unique even when two
     /// gaps produce the same formatted time string.
     case timeHeader(String, Int64)
+    case streaming(StreamingRow)
 }
 
 extension ChatMessageRow {
@@ -186,7 +208,7 @@ extension ChatMessageRow {
         switch self {
         case .message(let row): return row.storageId
         case .systemTip(let row): return row.storageId
-        case .pendingImage, .pendingVideo, .pendingVoice, .timeHeader: return nil
+        case .pendingImage, .pendingVideo, .pendingVoice, .timeHeader, .streaming: return nil
         }
     }
 
@@ -194,7 +216,7 @@ extension ChatMessageRow {
         switch self {
         case .message(let row): return row.timestamp
         case .systemTip(let row): return row.timestamp
-        case .pendingImage, .pendingVideo, .pendingVoice, .timeHeader: return nil
+        case .pendingImage, .pendingVideo, .pendingVoice, .timeHeader, .streaming: return nil
         }
     }
 
@@ -207,7 +229,7 @@ extension ChatMessageRow {
         switch self {
         case .message(let row): return row.messageUid == 0 ? nil : row.messageUid
         case .systemTip(let row): return row.messageUid == 0 ? nil : row.messageUid
-        case .pendingImage, .pendingVideo, .pendingVoice, .timeHeader: return nil
+        case .pendingImage, .pendingVideo, .pendingVoice, .timeHeader, .streaming: return nil
         }
     }
 }

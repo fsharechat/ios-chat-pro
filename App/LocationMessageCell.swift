@@ -100,7 +100,8 @@ final class LocationMessageCell: UITableViewCell {
 
         spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
         rowStack.axis = .horizontal
-        rowStack.alignment = .bottom
+        // 头像与气泡顶部对齐(微信风格),同 TextMessageCell。
+        rowStack.alignment = .top
         rowStack.spacing = 8
         rowStack.translatesAutoresizingMaskIntoConstraints = false
 

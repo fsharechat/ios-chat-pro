@@ -74,7 +74,8 @@ final class VoiceMessageCell: UITableViewCell {
         bubbleColumn.addArrangedSubview(bubbleView)
 
         rowStack.axis = .horizontal
-        rowStack.alignment = .center
+        // 头像与气泡顶部对齐(微信风格),同 TextMessageCell。
+        rowStack.alignment = .top
         rowStack.spacing = 8
         rowStack.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(rowStack)

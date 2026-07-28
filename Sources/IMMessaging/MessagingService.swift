@@ -23,6 +23,7 @@ public final class MessagingService {
     private let recallNotifyHandler: RecallNotifyMessageHandler
     private let recallAckHandler: RecallAckHandler
     private let remoteMessageAckHandler: RemoteMessageAckHandler
+    private let streamingAiHandler: StreamingAiHandler
     private let scheduler: Scheduler
     private var pendingRecalls: [UInt16: (Bool) -> Void] = [:]
 
@@ -83,6 +84,20 @@ public final class MessagingService {
         set { recallNotifyHandler.onRecalled = newValue }
     }
 
+    /// 当前活跃的流式 AI(官方客服)回复,对齐 Android `ChatManager` 的
+    /// `activeStream`——会话页中途退出重进时用它恢复占位气泡;真实完整
+    /// 消息入库替换占位后由 UI 调 `clearActiveStream()` 清掉。
+    public private(set) var activeStream: StreamingState?
+
+    /// SAI 增量事件的单监听者(同 Android `setOnSaiTokenListener`),由
+    /// 当前打开的会话页 ViewModel 绑定;无论状态机是否吃下该事件都会
+    /// 原样上抛(与 Android 先更新 activeStream 再回调 listener 一致)。
+    public var onSaiToken: ((_ streamId: String, _ delta: String, _ done: Bool, _ target: String) -> Void)?
+
+    public func clearActiveStream() {
+        activeStream = nil
+    }
+
     public init(
         imClient: IMClient,
         storage: IMStorage,
@@ -113,6 +128,8 @@ public final class MessagingService {
         recallAckHandler = recallAckHandlerInstance
         let remoteAckHandlerInstance = RemoteMessageAckHandler()
         remoteMessageAckHandler = remoteAckHandlerInstance
+        let streamingHandler = StreamingAiHandler()
+        streamingAiHandler = streamingHandler
 
         let notifyHandler = NotifyMessageHandler()
         notifyHandler.onNotify = { [weak self] head, type in self?.pullMessages(from: head, type: type) }
@@ -126,6 +143,10 @@ public final class MessagingService {
             self?.handleRemoteMessagesResult(wireId: wireId, messages: messages)
         }
         imClient.register(remoteAckHandlerInstance)
+        streamingHandler.onSaiToken = { [weak self] streamId, delta, done, target in
+            self?.handleSaiToken(streamId: streamId, delta: delta, done: done, target: target)
+        }
+        imClient.register(streamingHandler)
     }
 
     /// Call once after a successful login (wire this to
@@ -456,5 +477,16 @@ public final class MessagingService {
         request.type = type
         guard let body = try? request.serializedData() else { return }
         imClient.sendFrame(signal: .publish, subSignal: .mp, body: body)
+    }
+
+    private func handleSaiToken(streamId: String, delta: String, done: Bool, target: String) {
+        if !done, delta.isEmpty, activeStream == nil {
+            activeStream = StreamingState(streamId: streamId, target: target, accumulatedText: "", done: false)
+        } else if !done, !delta.isEmpty, let stream = activeStream, stream.streamId == streamId {
+            activeStream = StreamingState(streamId: streamId, target: target, accumulatedText: stream.accumulatedText + delta, done: false)
+        } else if done, let stream = activeStream, stream.streamId == streamId {
+            activeStream = StreamingState(streamId: streamId, target: target, accumulatedText: stream.accumulatedText, done: true)
+        }
+        onSaiToken?(streamId, delta, done, target)
     }
 }

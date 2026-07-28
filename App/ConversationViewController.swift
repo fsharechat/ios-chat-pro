@@ -31,6 +31,11 @@ final class ConversationViewController: UIViewController {
     private var inputBarBottomConstraint: NSLayoutConstraint!
     private var previousRawRows: [ChatMessageRow] = []
     private var tableReady = false
+    /// 流式输出完成后保持全文展开的消息(占位行被真实消息替换时继承),
+    /// 用户点"收起"后移除,回到普通的缩略+查看全文形态。
+    private var expandedMessageIds: Set<Int64> = []
+    /// done 占位行阶段就被用户手动收起的流——替换后的真实消息不再展开。
+    private var collapsedDoneStreamIds: Set<String> = []
     /// UIRefreshControl fires .valueChanged mid-drag, the moment the pull
     /// crosses the threshold. Loading then would prepend rows while the pan
     /// gesture still owns contentOffset, so the keep-position adjustment in
@@ -205,11 +210,19 @@ final class ConversationViewController: UIViewController {
                 return cell
             case .message(let message) where message.text != nil:
                 let cell = tableView.dequeueReusableCell(withIdentifier: TextMessageCell.reuseIdentifier, for: indexPath) as! TextMessageCell
-                cell.configure(with: message)
+                // 刚结束的流式消息保持全文展开,"收起"后回到缩略+查看全文。
+                let expanded = self?.expandedMessageIds.contains(message.storageId) ?? false
+                cell.configure(with: message, displayMode: expanded ? .fullText(showCollapse: true) : .folded)
                 cell.onRetryTapped = { [weak self] in self?.viewModel.retry(row: row) }
                 cell.onExpandTapped = { [weak self] in
-                    guard let text = message.text else { return }
-                    self?.navigationController?.pushViewController(TextPreviewViewController(text: text), animated: true)
+                    guard let self else { return }
+                    if expanded {
+                        self.expandedMessageIds.remove(message.storageId)
+                        self.reloadRow(row)
+                    } else {
+                        guard let text = message.text else { return }
+                        self.navigationController?.pushViewController(TextPreviewViewController(text: text), animated: true)
+                    }
                 }
                 cell.onAvatarLongPressed = { [weak self] in self?.insertMentionFromAvatar(message) }
                 cell.onLinkTapped = { url in UIApplication.shared.open(url) }
@@ -244,6 +257,39 @@ final class ConversationViewController: UIViewController {
                 cell.configurePending(pending)
                 cell.onRetryTapped = { [weak self] in self?.viewModel.retry(row: row) }
                 return cell
+            case .streaming(let streamingRow):
+                let cell = tableView.dequeueReusableCell(withIdentifier: TextMessageCell.reuseIdentifier, for: indexPath) as! TextMessageCell
+                // 复用 TextMessageCell:拼一个未入库的合成行,流式中尾部带 ▌ 光标
+                //(对齐 Android TextMessageContentViewHolder 的 displayText)。
+                // 流式输出全程不折叠(产品要求新增文字始终可见);done 后给
+                // "收起",点击回到普通的缩略+查看全文形态。
+                let manuallyCollapsed = self?.collapsedDoneStreamIds.contains(streamingRow.streamId) ?? false
+                let displayMode: TextMessageCell.TextDisplayMode =
+                    manuallyCollapsed ? .folded : .fullText(showCollapse: streamingRow.done)
+                cell.configure(with: StoredMessageRow(
+                    storageId: -1,
+                    localMessageId: -1,
+                    isOutgoing: false,
+                    status: .unread,
+                    timestamp: 0,
+                    text: streamingRow.done ? streamingRow.text : streamingRow.text + "▌",
+                    imageThumbnail: nil,
+                    imageRemoteURL: nil,
+                    senderAvatarURL: streamingRow.senderAvatarURL
+                ), displayMode: displayMode)
+                cell.setWaitingCursorBlink(!streamingRow.done && streamingRow.text.isEmpty)
+                if streamingRow.done, !manuallyCollapsed {
+                    cell.onExpandTapped = { [weak self] in
+                        self?.collapsedDoneStreamIds.insert(streamingRow.streamId)
+                        self?.reloadRow(row)
+                    }
+                } else {
+                    cell.onExpandTapped = { [weak self] in
+                        self?.navigationController?.pushViewController(TextPreviewViewController(text: streamingRow.text), animated: true)
+                    }
+                }
+                cell.onLinkTapped = { url in UIApplication.shared.open(url) }
+                return cell
             case .systemTip(let tip):
                 let cell = tableView.dequeueReusableCell(withIdentifier: SystemTipMessageCell.reuseIdentifier, for: indexPath) as! SystemTipMessageCell
                 cell.configure(with: tip)
@@ -263,6 +309,15 @@ final class ConversationViewController: UIViewController {
             .store(in: &cancellables)
     }
 
+    /// 展开/收起切换时就地重建单行:行值本身没变(展开态存在 VC 而非行里),
+    /// diffable 不会自己刷新,需要显式 reload。
+    private func reloadRow(_ row: ChatMessageRow) {
+        var snapshot = dataSource.snapshot()
+        guard snapshot.itemIdentifiers.contains(row) else { return }
+        snapshot.reloadItems([row])
+        dataSource.apply(snapshot, animatingDifferences: false)
+    }
+
     /// Distinguishes three update shapes so scroll position behaves
     /// sensibly: a prepend (loaded older history — keep the user's current
     /// reading position by offsetting `contentOffset` by the inserted
@@ -276,6 +331,23 @@ final class ConversationViewController: UIViewController {
         let oldRows = previousRawRows
         let isPrepend = !oldRows.isEmpty && rows.count > oldRows.count && Array(rows.suffix(oldRows.count)) == oldRows
         let isAppend = Self.rowIdentity(rows.last) != Self.rowIdentity(oldRows.last)
+        // 流式增量:同一占位行原地长文本,始终跟底(产品要求:输出过程
+        // 中不管多长都保持最新内容可见)。
+        let isStreamingUpdate: Bool = {
+            guard !isAppend, case .streaming = rows.last else { return false }
+            return rows.last != oldRows.last
+        }()
+        // 流式占位被真实消息替换:若用户未在 done 阶段手动收起,替换后的
+        // 消息继承"全文展开"形态,直到用户点"收起"。
+        if case .streaming(let oldStream) = oldRows.last,
+           !rows.contains(where: { if case .streaming = $0 { return true }; return false }) {
+            if !collapsedDoneStreamIds.contains(oldStream.streamId),
+               let replacement = rows.last(where: { if case .message(let m) = $0, !m.isOutgoing { return true }; return false }),
+               case .message(let replacementRow) = replacement {
+                expandedMessageIds.insert(replacementRow.storageId)
+            }
+            collapsedDoneStreamIds.remove(oldStream.streamId)
+        }
         previousRawRows = rows
 
         let displayRows = injectTimeHeaders(rows)
@@ -299,6 +371,8 @@ final class ConversationViewController: UIViewController {
                 }
                 self.scrollToBottom(animated: false)
                 self.tableView.alpha = 1
+            } else if isStreamingUpdate {
+                self.scrollToBottom(animated: false)
             }
         }
     }
@@ -409,6 +483,7 @@ final class ConversationViewController: UIViewController {
         case .pendingVoice(let pending): return "pendingVoice-\(pending.id)"
         case .systemTip(let tip): return "systemTip-\(tip.storageId)"
         case .timeHeader(let text, let anchorId): return "timeHeader-\(anchorId)-\(text)"
+        case .streaming(let streamingRow): return "streaming-\(streamingRow.streamId)"
         case nil: return nil
         }
     }

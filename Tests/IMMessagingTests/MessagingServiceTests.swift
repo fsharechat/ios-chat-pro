@@ -469,4 +469,42 @@ final class MessagingServiceTests: XCTestCase {
         XCTAssertEqual(try MessageContentCodec.decode(wireMessage.content),
                        .location(lat: 31.23, lng: 121.47, title: "上海", thumbnail: thumbnail))
     }
+
+    // MARK: - SAI 流式状态机
+
+    private func simulateSai(_ json: String) {
+        let body = Data(json.utf8)
+        fakeTransport.simulateReceivedData(FrameEncoder.encode(signal: .publish, subSignal: .sai, messageId: 0, body: body))
+    }
+
+    func test_saiStream_stateMachine_accumulatesTextAndMarksDone() {
+        simulateSai(#"{"i":"s1","d":"","f":false,"t":"agent"}"#)
+        XCTAssertEqual(service.activeStream, StreamingState(streamId: "s1", target: "agent", accumulatedText: "", done: false))
+
+        simulateSai(#"{"i":"s1","d":"你","f":false,"t":"agent"}"#)
+        simulateSai(#"{"i":"s1","d":"好","f":false,"t":"agent"}"#)
+        XCTAssertEqual(service.activeStream?.accumulatedText, "你好")
+        XCTAssertEqual(service.activeStream?.done, false)
+
+        simulateSai(#"{"i":"s1","d":"","f":true,"t":"agent"}"#)
+        XCTAssertEqual(service.activeStream?.accumulatedText, "你好")
+        XCTAssertEqual(service.activeStream?.done, true)
+    }
+
+    func test_saiStream_mismatchedStreamId_ignoredByStateMachine_butStillForwarded() {
+        var forwarded: [String] = []
+        service.onSaiToken = { streamId, _, _, _ in forwarded.append(streamId) }
+
+        simulateSai(#"{"i":"s1","d":"","f":false,"t":"agent"}"#)
+        simulateSai(#"{"i":"s2","d":"x","f":false,"t":"agent"}"#)
+
+        XCTAssertEqual(service.activeStream, StreamingState(streamId: "s1", target: "agent", accumulatedText: "", done: false))
+        XCTAssertEqual(forwarded, ["s1", "s2"])
+    }
+
+    func test_saiStream_clearActiveStream_resetsState() {
+        simulateSai(#"{"i":"s1","d":"","f":false,"t":"agent"}"#)
+        service.clearActiveStream()
+        XCTAssertNil(service.activeStream)
+    }
 }

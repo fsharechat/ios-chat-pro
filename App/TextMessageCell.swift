@@ -43,6 +43,27 @@ final class TextMessageCell: UITableViewCell {
         onExpandTapped = nil
         onAvatarLongPressed = nil
         onLinkTapped = nil
+        setWaitingCursorBlink(false)
+    }
+
+    private static let cursorBlinkAnimationKey = "streamingCursorBlink"
+
+    /// 流式占位气泡等待期(还没收到任何文本)让 ▌ 光标闪烁——此时没有
+    /// delta 驱动刷新,纯静态文本会让用户以为卡住了。文本开始增长后由
+    /// 调用方关掉(增长本身就是活跃反馈,整段文本闪烁反而晃眼)。
+    func setWaitingCursorBlink(_ on: Bool) {
+        if on {
+            guard messageTextLabel.layer.animation(forKey: Self.cursorBlinkAnimationKey) == nil else { return }
+            let blink = CABasicAnimation(keyPath: "opacity")
+            blink.fromValue = 1.0
+            blink.toValue = 0.2
+            blink.duration = 0.5
+            blink.autoreverses = true
+            blink.repeatCount = .infinity
+            messageTextLabel.layer.add(blink, forKey: Self.cursorBlinkAnimationKey)
+        } else {
+            messageTextLabel.layer.removeAnimation(forKey: Self.cursorBlinkAnimationKey)
+        }
     }
 
     private func layoutViews() {
@@ -84,7 +105,9 @@ final class TextMessageCell: UITableViewCell {
         bubbleColumn.addArrangedSubview(expandButton)
 
         rowStack.axis = .horizontal
-        rowStack.alignment = .bottom
+        // 头像与气泡顶部对齐(微信风格),与 Image/Video cell 一致;多行长
+        // 气泡时头像不能沉底。
+        rowStack.alignment = .top
         rowStack.spacing = 8
         rowStack.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(rowStack)
@@ -119,14 +142,32 @@ final class TextMessageCell: UITableViewCell {
     /// 12pt+12pt text insets. Used as the markdown table's render width.
     static var maxContentWidth: CGFloat { UIScreen.main.bounds.width - reservedHorizontalSpace - 24 }
 
-    func configure(with row: StoredMessageRow) {
+    /// 文本气泡的展示形态:`folded` 超长时缩略+查看全文(默认);
+    /// `fullText` 渲染全文不折叠——流式输出中 `showCollapse=false`(无按钮),
+    /// 输出完毕后 `showCollapse=true`(超长时给"收起",点击回到 folded)。
+    enum TextDisplayMode {
+        case folded
+        case fullText(showCollapse: Bool)
+    }
+
+    private var lastDisplayMode: TextDisplayMode = .folded
+
+    func configure(with row: StoredMessageRow, displayMode: TextDisplayMode = .folded) {
         lastConfiguredRow = row
+        lastDisplayMode = displayMode
         let isOutgoing = row.isOutgoing
         // Collapse very long text — a single self-sizing label holding a
         // multi-thousand-character message makes the bubble taller than the
         // GPU's maximum texture size and stalls open/scroll on TextKit
         // layout. Full text remains available via 查看全文/copy/forward.
-        let preview = LongTextPreview.preview(for: row.text ?? "")
+        // (.fullText 模式跳过折叠:流式输出用户要求全程可见,展开态是
+        // 用户主动点开,均以可接受的布局开销换完整呈现。)
+        let rawText = row.text ?? ""
+        let preview: (text: String, isTruncated: Bool)
+        switch displayMode {
+        case .folded: preview = LongTextPreview.preview(for: rawText)
+        case .fullText: preview = (rawText, false)
+        }
         // Resolve the dynamic color against this cell's traits *now*: the
         // table renderer bakes it into a bitmap (which can't re-resolve),
         // and the resolved value keys the render cache per appearance.
@@ -141,7 +182,14 @@ final class TextMessageCell: UITableViewCell {
             linkAttributeKey: MarkdownRenderer.bubbleLinkAttributeKey,
             availableWidth: Self.maxContentWidth
         )
-        expandButton.isHidden = !preview.isTruncated
+        switch displayMode {
+        case .folded:
+            expandButton.setTitle("查看全文", for: .normal)
+            expandButton.isHidden = !preview.isTruncated
+        case .fullText(let showCollapse):
+            expandButton.setTitle("收起", for: .normal)
+            expandButton.isHidden = !(showCollapse && rawText.count > LongTextPreview.characterLimit)
+        }
         let showsSender = !isOutgoing && row.senderDisplayName != nil
 
         senderNameLabel.isHidden = !showsSender
@@ -189,7 +237,7 @@ final class TextMessageCell: UITableViewCell {
               let row = lastConfiguredRow else { return }
         // Callbacks (onRetryTapped etc.) are untouched — re-running
         // configure only refreshes the appearance-dependent content.
-        configure(with: row)
+        configure(with: row, displayMode: lastDisplayMode)
     }
 
     @objc private func expandTapped() { onExpandTapped?() }

@@ -29,6 +29,7 @@ public final class ConversationViewModel {
     private let videoUploading: VideoUploading?
     private let remoteHistory: RemoteHistoryFetching?
     private let activeTracking: ActiveConversationTracking?
+    private let streaming: StreamingAiObserving?
     /// Set once the server confirms there's nothing older than what's
     /// stored locally — stops `loadMoreHistory` from re-asking every pull.
     private var remoteHistoryExhausted = false
@@ -49,6 +50,7 @@ public final class ConversationViewModel {
     private var pendingImages: [PendingImageUpload] = []
     private var pendingVideos: [PendingVideoUpload] = []
     private var pendingVoices: [PendingVoiceUpload] = []
+    private var streamingRow: StreamingRow?
     private var lastMessages: [StoredMessage] = []
     private var cancellable: AnyCancellable?
 
@@ -61,6 +63,7 @@ public final class ConversationViewModel {
         videoUploading: VideoUploading? = nil,
         remoteHistory: RemoteHistoryFetching? = nil,
         activeTracking: ActiveConversationTracking? = nil,
+        streaming: StreamingAiObserving? = nil,
         target: String,
         conversationType: ConversationType = .single,
         line: Int = 0,
@@ -75,6 +78,7 @@ public final class ConversationViewModel {
         self.videoUploading = videoUploading
         self.remoteHistory = remoteHistory
         self.activeTracking = activeTracking
+        self.streaming = streaming
         self.target = target
         self.conversationType = conversationType
         self.line = line
@@ -85,6 +89,7 @@ public final class ConversationViewModel {
             .messagesPublisher(conversationType: conversationType, target: target, line: line, limit: pageSize)
             .replaceError(with: [])
             .sink { [weak self] messages in self?.handleMessagesUpdate(messages) }
+        bindStreaming()
     }
 
     /// Failure (e.g. serialization, or no `messageSending` configured) is
@@ -210,7 +215,7 @@ public final class ConversationViewModel {
         case .message(let message):
             guard message.status == .sendFailure else { return }
             try? messageSending?.resend(localMessageId: message.localMessageId)
-        case .systemTip, .timeHeader:
+        case .systemTip, .timeHeader, .streaming:
             break
         }
     }
@@ -222,11 +227,49 @@ public final class ConversationViewModel {
     /// 会话详情页可见期间调用(viewWillAppear)——期间到达的新消息不计未读。
     public func markActive() {
         activeTracking?.markConversationActive(conversationType: conversationType, target: target, line: line)
+        bindStreaming()
     }
 
     /// 会话详情页离开时调用(viewWillDisappear),与 `markActive` 成对。
     public func markInactive() {
         activeTracking?.markConversationInactive(conversationType: conversationType, target: target, line: line)
+    }
+
+    /// 绑定 SAI 单监听者并恢复未完成的流(init 与 markActive 都调:
+    /// 后打开的会话页会覆盖绑定,viewWillAppear 时需要抢回来)。
+    private func bindStreaming() {
+        guard conversationType == .single, let streaming else { return }
+        streaming.onSaiToken = { [weak self] streamId, delta, done, target in
+            self?.handleSaiToken(streamId: streamId, delta: delta, done: done, target: target)
+        }
+        if streamingRow == nil, let stream = streaming.activeStream,
+           stream.target == target, !stream.done {
+            streamingRow = StreamingRow(streamId: stream.streamId, text: stream.accumulatedText, done: false, senderAvatarURL: agentAvatarURL())
+            publishRows()
+        }
+    }
+
+    /// 占位行头像与真实消息同源(`buildStoredMessageRow` 同样查
+    /// `UserStore`);单聊 target 即客服 uid。
+    private func agentAvatarURL() -> String? {
+        (try? storage.users.user(uid: target))?.portrait
+    }
+
+    /// 占位行状态机,分支条件与 Android `ConversationActivity` 的
+    /// `setOnSaiTokenListener` 逐条对齐;done 后保留占位行,等真实消息
+    /// 入库时在 `handleMessagesUpdate` 里移除。
+    private func handleSaiToken(streamId: String, delta: String, done: Bool, target tokenTarget: String) {
+        guard tokenTarget == target else { return }
+        if !done, delta.isEmpty, streamingRow == nil {
+            streamingRow = StreamingRow(streamId: streamId, text: "", done: false, senderAvatarURL: agentAvatarURL())
+        } else if !done, !delta.isEmpty, let row = streamingRow, row.streamId == streamId {
+            streamingRow = StreamingRow(streamId: streamId, text: row.text + delta, done: false, senderAvatarURL: row.senderAvatarURL)
+        } else if done, let row = streamingRow, row.streamId == streamId {
+            streamingRow = StreamingRow(streamId: streamId, text: row.text, done: true, senderAvatarURL: row.senderAvatarURL)
+        } else {
+            return
+        }
+        publishRows()
     }
 
     /// Loads one older page of history before the currently-oldest loaded
@@ -388,6 +431,7 @@ public final class ConversationViewModel {
 
     private func handleMessagesUpdate(_ messages: [StoredMessage]) {
         lastMessages = messages
+        let previousStorageIds = Set((olderRows + liveRows).compactMap(\.storageId))
         // `messagesPublisher` always reports the full current "latest
         // pageSize" window (already ascending), so it wholesale-replaces
         // `liveRows` rather than merging — see `liveRows`'s doc comment.
@@ -429,11 +473,23 @@ public final class ConversationViewModel {
             }
         }
         liveRows = newLiveRows
+        // 真实消息入库到达 → 移除流式占位行(Android 的"原位替换"):
+        // 单聊里 target 发来的任何一条新消息都视为流的最终落库形态。
+        if streamingRow != nil {
+            let hasNewIncoming = newLiveRows.contains { row in
+                guard case .message(let message) = row, !message.isOutgoing else { return false }
+                return !previousStorageIds.contains(message.storageId)
+            }
+            if hasNewIncoming {
+                streamingRow = nil
+                streaming?.clearActiveStream()
+            }
+        }
         publishRows()
     }
 
     private func publishRows() {
-        rows = olderRows + liveRows + pendingImages.map { .pendingImage($0) } + pendingVideos.map { .pendingVideo($0) } + pendingVoices.map { .pendingVoice($0) }
+        rows = olderRows + liveRows + pendingImages.map { .pendingImage($0) } + pendingVideos.map { .pendingVideo($0) } + pendingVoices.map { .pendingVoice($0) } + (streamingRow.map { [ChatMessageRow.streaming($0)] } ?? [])
     }
 
     /// `message.id` is always non-nil for a row fetched back from the
