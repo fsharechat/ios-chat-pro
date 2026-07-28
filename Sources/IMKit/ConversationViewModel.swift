@@ -39,12 +39,13 @@ public final class ConversationViewModel {
     private let pageSize: Int
     private let currentUserId: String
 
-    /// Older history loaded via `loadMore`, strictly before `liveRows`.
-    /// One-shot (not reactive) — see `liveRows`'s doc comment for the full
-    /// eviction/migration contract, unchanged from Phase 1 except that both
-    /// arrays now hold `ChatMessageRow` (so a `.systemTip` row can appear in
-    /// the same paging window as ordinary messages) instead of
-    /// `StoredMessageRow`.
+    /// Older history loaded via `loadMore`, strictly before the live window.
+    /// One-shot (not reactive). Source of truth is `olderMessages` (raw
+    /// `StoredMessage`s); `olderRows` is re-derived from it on every rebuild
+    /// so presentation-affecting state (nickname toggle, profile updates)
+    /// reaches paged-in history too — deriving rows once and keeping them
+    /// was how `reprocessMessages` ended up refreshing only the live window.
+    private var olderMessages: [StoredMessage] = []
     private var olderRows: [ChatMessageRow] = []
     private var liveRows: [ChatMessageRow] = []
     private var pendingImages: [PendingImageUpload] = []
@@ -53,6 +54,12 @@ public final class ConversationViewModel {
     private var streamingRow: StreamingRow?
     private var lastMessages: [StoredMessage] = []
     private var cancellable: AnyCancellable?
+    /// Per-batch user lookup, filled by `makeRows` with one bulk
+    /// `users(uids:)` query — `buildStoredMessageRow`/`resolveDisplayName`
+    /// read from here instead of issuing one `dbQueue.read` per message,
+    /// which serialized 30+ round-trips through the database queue on every
+    /// rows rebuild (the dominant cost of opening a conversation).
+    private var userCache: [String: StoredUser] = [:]
 
     public init(
         storage: IMStorage,
@@ -325,7 +332,8 @@ public final class ConversationViewModel {
         )) ?? []
         if older.count < pageSize { canLoadMore = false }
         guard !older.isEmpty else { return 0 }
-        olderRows.insert(contentsOf: older.map(makeRow), at: 0)
+        olderMessages.insert(contentsOf: older, at: 0)
+        olderRows = makeRows(olderMessages)
         publishRows()
         return older.count
     }
@@ -430,53 +438,58 @@ public final class ConversationViewModel {
     }
 
     private func handleMessagesUpdate(_ messages: [StoredMessage]) {
+        let previousLiveMessages = lastMessages
         lastMessages = messages
-        let previousStorageIds = Set((olderRows + liveRows).compactMap(\.storageId))
+        let previousStorageIds = Set((olderMessages + previousLiveMessages).compactMap(\.id))
         // `messagesPublisher` always reports the full current "latest
         // pageSize" window (already ascending), so it wholesale-replaces
-        // `liveRows` rather than merging — see `liveRows`'s doc comment.
-        // But once `loadMore()` has paged in real history (`olderRows`
-        // non-empty), anything that was visible in the OLD `liveRows` and
-        // isn't in the NEW one (because a newer message pushed the window
-        // forward) must not simply vanish — migrate it into `olderRows`
-        // instead. Before any paging has happened, `olderRows` is empty and
-        // this migration is skipped on purpose: early on, a burst of writes
-        // (e.g. initial backlog sync) can make the live window itself slide
-        // forward through several transient intermediate states before the
-        // very first page has ever been explicitly requested, and treating
-        // every one of those transient slides as a permanent boundary
-        // crossing would defeat the "latest pageSize" windowing entirely.
-        let newLiveRows = messages.map(makeRow)
-        let newStorageIds = Set(newLiveRows.compactMap(\.storageId))
+        // the live window rather than merging — see `olderMessages`'s doc
+        // comment. But once `loadMore()` has paged in real history
+        // (`olderMessages` non-empty), anything that was visible in the OLD
+        // live window and isn't in the NEW one (because a newer message
+        // pushed the window forward) must not simply vanish — migrate it
+        // into `olderMessages` instead. Before any paging has happened,
+        // `olderMessages` is empty and this migration is skipped on purpose:
+        // early on, a burst of writes (e.g. initial backlog sync) can make
+        // the live window itself slide forward through several transient
+        // intermediate states before the very first page has ever been
+        // explicitly requested, and treating every one of those transient
+        // slides as a permanent boundary crossing would defeat the "latest
+        // pageSize" windowing entirely.
+        let newStorageIds = Set(messages.compactMap(\.id))
         // The reverse of eviction: when the conversation holds fewer than
         // pageSize messages, persisting remote history *expands the live
-        // window backward* over rows `loadMoreHistory` just paged into
-        // `olderRows`. Keep the two arrays disjoint or `publishRows` emits
-        // the same storageId twice — a fatal "supplied item identifiers are
-        // not unique" in the diffable data source downstream.
-        olderRows.removeAll { row in
-            guard let id = row.storageId else { return false }
+        // window backward* over messages `loadMoreHistory` just paged into
+        // `olderMessages`. Keep the two arrays disjoint or `publishRows`
+        // emits the same storageId twice — a fatal "supplied item
+        // identifiers are not unique" in the diffable data source downstream.
+        olderMessages.removeAll { message in
+            guard let id = message.id else { return false }
             return newStorageIds.contains(id)
         }
-        if !olderRows.isEmpty {
-            let evicted = liveRows.filter { row in
-                guard let id = row.storageId else { return false }
+        if !olderMessages.isEmpty {
+            let evicted = previousLiveMessages.filter { message in
+                guard let id = message.id else { return false }
                 return !newStorageIds.contains(id)
             }
             if !evicted.isEmpty {
-                olderRows.append(contentsOf: evicted)
-                olderRows.sort { lhs, rhs in
-                    let lhsTime = lhs.timestamp ?? 0
-                    let rhsTime = rhs.timestamp ?? 0
-                    return lhsTime == rhsTime ? (lhs.storageId ?? 0) < (rhs.storageId ?? 0) : lhsTime < rhsTime
+                olderMessages.append(contentsOf: evicted)
+                olderMessages.sort { lhs, rhs in
+                    lhs.timestamp == rhs.timestamp
+                        ? (lhs.id ?? 0) < (rhs.id ?? 0)
+                        : lhs.timestamp < rhs.timestamp
                 }
             }
         }
-        liveRows = newLiveRows
+        // Older + live rebuilt together in one batch (a single bulk user
+        // fetch) so `reprocessMessages` refreshes paged-in history too.
+        let allRows = makeRows(olderMessages + messages)
+        olderRows = Array(allRows.prefix(olderMessages.count))
+        liveRows = Array(allRows.suffix(from: olderMessages.count))
         // 真实消息入库到达 → 移除流式占位行(Android 的"原位替换"):
         // 单聊里 target 发来的任何一条新消息都视为流的最终落库形态。
         if streamingRow != nil {
-            let hasNewIncoming = newLiveRows.contains { row in
+            let hasNewIncoming = liveRows.contains { row in
                 guard case .message(let message) = row, !message.isOutgoing else { return false }
                 return !previousStorageIds.contains(message.storageId)
             }
@@ -490,6 +503,31 @@ public final class ConversationViewModel {
 
     private func publishRows() {
         rows = olderRows + liveRows + pendingImages.map { .pendingImage($0) } + pendingVideos.map { .pendingVideo($0) } + pendingVoices.map { .pendingVoice($0) } + (streamingRow.map { [ChatMessageRow.streaming($0)] } ?? [])
+    }
+
+    /// Batch entry point over `makeRow`: collects every uid the rows will
+    /// resolve (sender avatars, group-notification operators/members, recall
+    /// operators) and fetches them in a single `users(uids:)` query into
+    /// `userCache` first. Callers must use this instead of mapping `makeRow`
+    /// directly — per-row lookups were 30+ serialized reads per rebuild.
+    private func makeRows(_ messages: [StoredMessage]) -> [ChatMessageRow] {
+        guard !messages.isEmpty else { return [] }
+        var uids: Set<String> = [currentUserId]
+        for message in messages {
+            uids.insert(message.from)
+            switch message.content {
+            case .groupNotification(_, let operatorUid, let memberUids, _):
+                uids.insert(operatorUid)
+                uids.formUnion(memberUids)
+            case .recalled(let operatorId):
+                uids.insert(operatorId)
+            default:
+                break
+            }
+        }
+        let fetched = (try? storage.users.users(uids: Array(uids))) ?? []
+        userCache = Dictionary(uniqueKeysWithValues: fetched.map { ($0.uid, $0) })
+        return messages.map(makeRow)
     }
 
     /// `message.id` is always non-nil for a row fetched back from the
@@ -559,7 +597,7 @@ public final class ConversationViewModel {
         var senderDisplayName: String?
         // Always resolve the avatar — own portrait for outgoing, sender's for incoming.
         let avatarUid = message.direction == .send ? currentUserId : message.from
-        let user = try? storage.users.user(uid: avatarUid)
+        let user = userCache[avatarUid]
         let senderAvatarURL = user?.portrait
         // Sender name only appears in group incoming bubbles, and only when the user hasn't turned off the setting.
         if conversationType == .group, message.direction == .receive {
@@ -596,7 +634,7 @@ public final class ConversationViewModel {
     /// pronoun for the acting user's own actions.
     private func resolveDisplayName(_ uid: String) -> String {
         guard uid != currentUserId else { return "您" }
-        guard let user = try? storage.users.user(uid: uid) else { return uid }
+        guard let user = userCache[uid] else { return uid }
         return user.displayName ?? user.name ?? uid
     }
 

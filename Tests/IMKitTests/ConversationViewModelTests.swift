@@ -890,4 +890,54 @@ final class ConversationViewModelTests: XCTestCase {
         guard case .message(let row) = viewModel.rows.first else { return XCTFail("expected message row") }
         XCTAssertEqual(row.messageUid, 9999)
     }
+
+    /// 群资料页切换「显示群成员昵称」后返回,会话页靠 reprocessMessages
+    /// 重建行来立即反映开关——锁住这条链路:开关翻转 + reprocess 后,
+    /// **所有**消息行(包括 loadMore 分页进来的老历史)的 senderDisplayName
+    /// 必须跟着翻转。此前 reprocess 只重建 live 窗口,分页行保持旧昵称,
+    /// 表现为"要重开会话页才生效"。
+    func test_reprocessMessages_reflectsNicknameToggleFlip_includingPagedHistory() throws {
+        let groupId = "group-nick"
+        let defaultsKey = "showMemberNicknames_\(groupId)"
+        UserDefaults.standard.removeObject(forKey: defaultsKey)
+        defer { UserDefaults.standard.removeObject(forKey: defaultsKey) }
+
+        try storage.users.upsertProfile(uid: "u1", name: nil, displayName: "Alice", portrait: nil, mobile: nil, gender: 0, updateDt: 0)
+        // 6 条消息、pageSize 3:后 3 条进 live 窗口,前 3 条留给 loadMore。
+        for index in 0..<6 {
+            try storage.messages.insert(StoredMessage(
+                localMessageId: Int64(60 + index), conversationType: .group, target: groupId, from: "u1",
+                content: .text("msg\(index)"), timestamp: Int64(1_000 + index), status: .unread, direction: .receive
+            ))
+        }
+
+        let groupViewModel = ConversationViewModel(
+            storage: storage, messageSending: sending, imageUploading: uploading,
+            target: groupId, conversationType: .group, pageSize: 3, currentUserId: "me"
+        )
+        if groupViewModel.rows.isEmpty {
+            let expectation = expectation(description: "group rows appear")
+            expectation.assertForOverFulfill = false
+            groupViewModel.$rows.dropFirst().sink { rows in if !rows.isEmpty { expectation.fulfill() } }.store(in: &cancellables)
+            wait(for: [expectation], timeout: 2)
+        }
+        groupViewModel.loadMore()
+
+        func nicknameStates() -> [String?] {
+            groupViewModel.rows.compactMap { row -> String?? in
+                if case .message(let m) = row { return .some(m.senderDisplayName) }
+                return nil
+            }.map { $0 }
+        }
+        XCTAssertEqual(nicknameStates().count, 6, "live 3 条 + 分页 3 条应全部在场")
+        XCTAssertTrue(nicknameStates().allSatisfy { $0 == "Alice" }, "开关默认打开,全部行应显示昵称")
+
+        UserDefaults.standard.set(false, forKey: defaultsKey)
+        groupViewModel.reprocessMessages()
+        XCTAssertTrue(nicknameStates().allSatisfy { $0 == nil }, "关闭开关 + reprocess 后,分页行的昵称也必须消失: \(nicknameStates())")
+
+        UserDefaults.standard.set(true, forKey: defaultsKey)
+        groupViewModel.reprocessMessages()
+        XCTAssertTrue(nicknameStates().allSatisfy { $0 == "Alice" }, "重新打开开关 + reprocess 后全部行应恢复昵称")
+    }
 }

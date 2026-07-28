@@ -63,11 +63,27 @@ final class ConversationViewController: UIViewController {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) is not supported") }
 
+    /// 首次 viewWillAppear 不做任何数据库/行重建工作——VM init 刚同步建完
+    /// 全部行,此时 push 动画正要开始,任何主线程开销都会直接变成转场卡顿。
+    /// 从资料页等下级页面返回时(hasAppearedOnce)才需要 reprocess:期间
+    /// 「显示群成员昵称」开关或用户资料可能已变化。
+    private var hasAppearedOnce = false
+
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
-        viewModel.clearUnread()
         viewModel.markActive()
-        viewModel.reprocessMessages()
+        if hasAppearedOnce {
+            viewModel.reprocessMessages()
+        }
+    }
+
+    /// clearUnread 是同步写事务(DatabaseQueue 串行,可能被后台入库阻塞),
+    /// 挪到转场动画完成后执行,不挡首帧;markActive 已保证期间到达的新消息
+    /// 不计未读,晚清几百毫秒无感知差异。
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        hasAppearedOnce = true
+        viewModel.clearUnread()
     }
 
     override func viewWillDisappear(_ animated: Bool) {
@@ -429,6 +445,28 @@ final class ConversationViewController: UIViewController {
         return result
     }
 
+    /// DateFormatter 创建成本高(首次数毫秒级),而 injectTimeHeaders 在每次
+    /// 快照应用时都会格式化多个时间头——三个格式各建一次复用。仅主线程访问,
+    /// 与本类其余部分同一线程契约,无需加锁。
+    private static let hourMinuteFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "zh_CN")
+        f.dateFormat = "HH:mm"
+        return f
+    }()
+    private static let monthDayFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "zh_CN")
+        f.dateFormat = "M月d日"
+        return f
+    }()
+    private static let yearMonthDayFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "zh_CN")
+        f.dateFormat = "yyyy年M月d日"
+        return f
+    }()
+
     private static func formatMessageTime(_ timestamp: Int64) -> String {
         let date = Date(timeIntervalSince1970: TimeInterval(timestamp) / 1000)
         let calendar = Calendar.current
@@ -442,12 +480,7 @@ final class ConversationViewController: UIViewController {
         case 13..<18: period = "下午"
         default:     period = "晚上"
         }
-        let timeStr: String = {
-            let f = DateFormatter()
-            f.locale = Locale(identifier: "zh_CN")
-            f.dateFormat = "HH:mm"
-            return f.string(from: date)
-        }()
+        let timeStr = hourMinuteFormatter.string(from: date)
         if calendar.isDateInToday(date) {
             return "\(period) \(timeStr)"
         } else if calendar.isDateInYesterday(date) {
@@ -457,15 +490,9 @@ final class ConversationViewController: UIViewController {
             let weekday = calendar.component(.weekday, from: date) - 1
             return "\(weekdays[weekday]) \(period) \(timeStr)"
         } else if calendar.component(.year, from: date) == calendar.component(.year, from: now) {
-            let f = DateFormatter()
-            f.locale = Locale(identifier: "zh_CN")
-            f.dateFormat = "M月d日"
-            return "\(f.string(from: date)) \(period) \(timeStr)"
+            return "\(monthDayFormatter.string(from: date)) \(period) \(timeStr)"
         } else {
-            let f = DateFormatter()
-            f.locale = Locale(identifier: "zh_CN")
-            f.dateFormat = "yyyy年M月d日"
-            return "\(f.string(from: date)) \(period) \(timeStr)"
+            return "\(yearMonthDayFormatter.string(from: date)) \(period) \(timeStr)"
         }
     }
 
