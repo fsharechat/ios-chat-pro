@@ -12,6 +12,7 @@ final class VoiceMessageCell: UITableViewCell {
     private let bubbleView = UIView()
     private let iconView = UIImageView()
     private let durationLabel = UILabel()
+    private let senderNameLabel = UILabel()
     private let statusIndicator = MessageStatusIndicatorView()
     private let avatarView = AvatarImageView(loader: AvatarLoader.shared)
     private let bubbleColumn = UIStackView()
@@ -70,7 +71,13 @@ final class VoiceMessageCell: UITableViewCell {
             bubbleWidthConstraint,
         ])
 
+        // 群聊接收方向的发送者昵称，样式与 TextMessageCell 一致。
+        senderNameLabel.font = .systemFont(ofSize: 12)
+        senderNameLabel.textColor = Theme.textPrimary.withAlphaComponent(0.6)
+
         bubbleColumn.axis = .vertical
+        bubbleColumn.spacing = 2
+        bubbleColumn.addArrangedSubview(senderNameLabel)
         bubbleColumn.addArrangedSubview(bubbleView)
 
         rowStack.axis = .horizontal
@@ -161,6 +168,13 @@ final class VoiceMessageCell: UITableViewCell {
         let maxDuration: CGFloat = 120
         let extra = UIScreen.main.bounds.width / 2 * min(CGFloat(duration), maxDuration) / maxDuration
         bubbleWidthConstraint.constant = 80 + extra
+
+        let showsSender = !isOutgoing && senderDisplayName != nil
+        senderNameLabel.isHidden = !showsSender
+        senderNameLabel.text = showsSender ? senderDisplayName : nil
+        // .leading 让气泡保持自身宽度约束,长昵称不会把气泡拉宽(同
+        // TextMessageCell 的 alignment 处理)。
+        bubbleColumn.alignment = isOutgoing ? .trailing : .leading
 
         for view in rowStack.arrangedSubviews {
             rowStack.removeArrangedSubview(view)

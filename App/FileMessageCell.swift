@@ -16,6 +16,7 @@ final class FileMessageCell: UITableViewCell {
     private let foldLayer = CAShapeLayer()
     private let nameLabel = UILabel()
     private let statusLabel = UILabel()
+    private let senderNameLabel = UILabel()
     private let avatarView = AvatarImageView(loader: AvatarLoader.shared)
     private let bubbleColumn = UIStackView()
     private let rowStack = UIStackView()
@@ -98,7 +99,13 @@ final class FileMessageCell: UITableViewCell {
             hStack.trailingAnchor.constraint(equalTo: bubbleView.trailingAnchor, constant: -14),
         ])
 
+        // 群聊接收方向的发送者昵称，样式与 TextMessageCell 一致。
+        senderNameLabel.font = .systemFont(ofSize: 12)
+        senderNameLabel.textColor = Theme.textPrimary.withAlphaComponent(0.6)
+
         bubbleColumn.axis = .vertical
+        bubbleColumn.spacing = 2
+        bubbleColumn.addArrangedSubview(senderNameLabel)
         bubbleColumn.addArrangedSubview(bubbleView)
 
         avatarView.isUserInteractionEnabled = true
@@ -153,6 +160,13 @@ final class FileMessageCell: UITableViewCell {
             if view !== bubbleColumn { view.removeFromSuperview() }
         }
         avatarView.removeFromSuperview()
+
+        let showsSender = !row.isOutgoing && row.senderDisplayName != nil
+        senderNameLabel.isHidden = !showsSender
+        senderNameLabel.text = showsSender ? row.senderDisplayName : nil
+        // .leading 让卡片保持内容宽度,长昵称不会把卡片拉宽(同
+        // TextMessageCell 的 alignment 处理)。
+        bubbleColumn.alignment = row.isOutgoing ? .trailing : .leading
 
         if row.isOutgoing {
             rowStack.addArrangedSubview(spacer)
