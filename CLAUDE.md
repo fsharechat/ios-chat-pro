@@ -72,6 +72,26 @@ xcrun devicectl device install app --device 00008120-001945391147401E ~/Library/
 
 老设备 iPhone 6（iOS 12.5.6）偶尔连接，走 Xcode 内置/第三方 DeviceSupport（已补到 16.4）。
 
+### 真机调试日志（Xcode 15.2 devicectl 无 --console）
+
+Xcode 15.2 的 `devicectl device process launch` **不支持 `--console`**（后续 Xcode 才加入），真机上无法从 CLI 挂控制台看 print/os_log。替代手法（2026-07 排查昵称开关不生效时验证可行）：
+
+1. 临时在代码里把埋点写入沙盒文件（如 `Documents/xxx-debug.log`，用 `FileHandle` 追加）；IMKit 层也能用（无 UIKit 依赖）。
+2. 装机后复现问题，然后拉文件：
+
+```bash
+xcrun devicectl device copy from --device 00008120-001945391147401E \
+  --user mobile \
+  --source Documents/xxx-debug.log --destination <本地路径> \
+  --domain-type appDataContainer --domain-identifier cn.comsince.fschat
+```
+
+注意：`--user mobile` 必填（targeting data container 时报 "must specify a username"）；`--device` 参数要放在其他 flag 之前，否则解析报错。
+
+3. 排查完删除埋点与临时日志工具类；设备上残留的 log 文件覆盖安装不会清，删 App 才会。
+
+拉起 App：`xcrun devicectl device process launch --device <UDID> --terminate-existing cn.comsince.fschat`。
+
 ---
 
 ## 模块架构
