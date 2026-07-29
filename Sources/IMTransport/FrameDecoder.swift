@@ -11,7 +11,29 @@ import Foundation
 public final class FrameDecoder {
     private var buffer: [UInt8] = []
 
+    /// Fired whenever `feed` returns with a *partially* received frame still
+    /// in the buffer: its 10-byte header is complete (so `signal`,
+    /// `subSignal` and `messageId` are already known) but its body isn't.
+    /// Arguments: that header, and how many body bytes have arrived so far.
+    ///
+    /// This is the only place a large in-flight response is observable
+    /// before it completes — a 180 KB history page takes seconds to stream
+    /// in over a slow link, and without this the layers above see nothing at
+    /// all until the very last byte lands. `IMMessaging` uses it to keep an
+    /// idle-timeout alive while its response is demonstrably still arriving.
+    public var onPartialFrameProgress: ((Header, Int) -> Void)?
+
     public init() {}
+
+    /// Drops everything buffered so far. Call when the underlying byte
+    /// stream is replaced (a new connection): leftover bytes from a frame
+    /// that was cut off mid-transfer would otherwise be prepended to the new
+    /// stream, desynchronising it until the magic-byte check below throws
+    /// the whole buffer away — taking any healthy frames buffered behind it
+    /// along with it.
+    public func reset() {
+        buffer.removeAll()
+    }
 
     /// Feed newly-received bytes; returns zero or more frames that became
     /// complete as a result. Safe to call repeatedly with arbitrarily-sized
@@ -39,6 +61,7 @@ public final class FrameDecoder {
             let totalLength = Header.length + Int(header.bodyLength)
             guard buffer.count >= totalLength else {
                 print("[DEBUG-FP][\({ let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"; return f.string(from: Date()) }())] FrameDecoder: have \(buffer.count) bytes, need \(totalLength) for signal=\(header.signal) subSignal=\(header.subSignal) bodyLength=\(header.bodyLength) — waiting for more")
+                onPartialFrameProgress?(header, buffer.count - Header.length)
                 break
             }
 

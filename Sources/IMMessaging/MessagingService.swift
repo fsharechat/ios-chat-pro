@@ -27,9 +27,21 @@ public final class MessagingService {
     private let scheduler: Scheduler
     private var pendingRecalls: [UInt16: (Bool) -> Void] = [:]
 
+    /// 远程历史请求的**空闲**超时：从"最后一次观察到该响应有新字节到达"
+    /// 起算，而不是从请求发出起算。一页 30 条历史在慢链路上实测能到
+    /// 180 KB / 7 秒以上，用固定的发出后 5 秒（`OutgoingMessageTracker`
+    /// 给单条消息 ack 用的值）必然误杀。
+    private static let remoteLoadIdleTimeout: TimeInterval = 10
+    /// 空闲续期的硬上限，从请求发出起算：防止服务端以慢速滴灌的方式把
+    /// 一个请求无限吊住。
+    private static let remoteLoadMaxDuration: TimeInterval = 60
+
     private struct PendingRemoteLoad {
-        let timeoutToken: SchedulerToken
+        var timeoutToken: SchedulerToken
         let completion: (Int?) -> Void
+        let startedAtMillis: Int64
+        /// 已观察到的 body 字节数，用于忽略不推进的重复进度回调。
+        var receivedBodyBytes: Int
     }
     private var pendingRemoteLoads: [UInt16: PendingRemoteLoad] = [:]
 
@@ -147,6 +159,12 @@ public final class MessagingService {
             self?.handleSaiToken(streamId: streamId, delta: delta, done: done, target: target)
         }
         imClient.register(streamingHandler)
+        imClient.onIncomingFrameProgress = { [weak self] header, receivedBodyBytes in
+            self?.handleIncomingFrameProgress(header: header, receivedBodyBytes: receivedBodyBytes)
+        }
+        imClient.onDisconnected = { [weak self] in
+            self?.failAllPendingRemoteLoads()
+        }
     }
 
     /// Call once after a successful login (wire this to
@@ -392,26 +410,67 @@ public final class MessagingService {
         request.count = Int32(count)
         guard let body = try? request.serializedData() else { completion(nil); return }
         let wireId = imClient.sendFrame(signal: .publish, subSignal: .lrm, body: body)
-        let timeoutToken = scheduler.scheduleOnce(after: 5) { [weak self] in
+        pendingRemoteLoads[wireId] = PendingRemoteLoad(
+            timeoutToken: scheduleRemoteLoadTimeout(wireId: wireId),
+            completion: completion,
+            startedAtMillis: nowMillis(),
+            receivedBodyBytes: 0
+        )
+    }
+
+    private func scheduleRemoteLoadTimeout(wireId: UInt16) -> SchedulerToken {
+        scheduler.scheduleOnce(after: Self.remoteLoadIdleTimeout) { [weak self] in
             self?.pendingRemoteLoads.removeValue(forKey: wireId)?.completion(nil)
         }
-        pendingRemoteLoads[wireId] = PendingRemoteLoad(timeoutToken: timeoutToken, completion: completion)
+    }
+
+    /// 该请求的响应帧正在流式到达 → 把空闲超时窗口整体后移。只认自己那
+    /// 一笔（`PUB_ACK`/`LRM` + 匹配的 `messageId`，帧头一到就都已知），
+    /// 不会被连接上的其它流量（心跳 ack、别人的推送）误续。
+    private func handleIncomingFrameProgress(header: Header, receivedBodyBytes: Int) {
+        guard header.signal == .pubAck, header.subSignal == .lrm,
+              var pending = pendingRemoteLoads[header.messageId],
+              receivedBodyBytes > pending.receivedBodyBytes else { return }
+        // 硬上限到点后停止续期：不主动结掉请求，而是让当前这枚计时器自然
+        // 烧完——超出上限的幅度因此最多一个空闲窗口，换来的是这里不必处理
+        // "在进度回调里同步触发 completion" 的重入。
+        let elapsed = TimeInterval(nowMillis() - pending.startedAtMillis) / 1000
+        guard elapsed < Self.remoteLoadMaxDuration else { return }
+        pending.timeoutToken.cancel()
+        pending.timeoutToken = scheduleRemoteLoadTimeout(wireId: header.messageId)
+        pending.receivedBodyBytes = receivedBodyBytes
+        pendingRemoteLoads[header.messageId] = pending
+    }
+
+    /// 连接断开 → 在途的历史请求不可能再有响应，立刻判失败，而不是让调用
+    /// 方（下拉刷新的菊花）干等满整个空闲窗口。
+    private func failAllPendingRemoteLoads() {
+        let cancelled = pendingRemoteLoads
+        pendingRemoteLoads.removeAll()
+        for (_, pending) in cancelled {
+            pending.timeoutToken.cancel()
+            pending.completion(nil)
+        }
     }
 
     private func handleRemoteMessagesResult(wireId: UInt16, messages: [Im_Message]?) {
-        guard let pending = pendingRemoteLoads.removeValue(forKey: wireId) else { return }
-        pending.timeoutToken.cancel()
+        // 找不到 pending = 这一笔已经超时（或因断连）被判失败了。响应仍然
+        // 照常入库：字节已经收下来、protobuf 已经解完，此刻丢掉只会让下次
+        // 下拉重新下载同样的一页——慢链路上那正是历史永远拉不出来的死循环。
+        // 只是不再回调调用方（它早已收到 nil 并结束了自己的刷新）。
+        let pending = pendingRemoteLoads.removeValue(forKey: wireId)
+        pending?.timeoutToken.cancel()
         // `nil` = server-reported error → a failed request; an empty page is
         // a *successful* "no more history" and completes with 0.
-        guard let messages else { pending.completion(nil); return }
-        guard !messages.isEmpty else { pending.completion(0); return }
+        guard let messages else { pending?.completion(nil); return }
+        guard !messages.isEmpty else { pending?.completion(0); return }
         var inserted = 0
         try? storage.write { db in
             for wireMessage in messages where persistHistory(wireMessage, db: db) {
                 inserted += 1
             }
         }
-        pending.completion(inserted)
+        pending?.completion(inserted)
     }
 
     /// Persist path for remote *history* — same wire-to-stored conversion as

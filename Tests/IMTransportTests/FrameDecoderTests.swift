@@ -72,6 +72,45 @@ final class FrameDecoderTests: XCTestCase {
         XCTAssertEqual(secondChunkFrames[0].body, Data(Array(0..<20)))
     }
 
+    func test_partialBodyReportsProgressWithItsAlreadyKnownHeader() {
+        let decoder = FrameDecoder()
+        var progress: [(Header, Int)] = []
+        decoder.onPartialFrameProgress = { progress.append(($0, $1)) }
+        let bytes = makeFrameBytes(signal: .pubAck, subSignal: .lrm, messageId: 161, body: Array(repeating: 0xab, count: 100))
+
+        _ = decoder.feed(bytes.prefix(Header.length + 30))
+        _ = decoder.feed(bytes[(Header.length + 30)..<(Header.length + 70)])
+
+        // 帧头一到,signal/subSignal/messageId 就已可用——上层正是靠这个把
+        // 进度归属到自己发出的那一笔请求上。
+        XCTAssertEqual(progress.map(\.1), [30, 70])
+        XCTAssertEqual(progress.map(\.0.messageId), [161, 161])
+        XCTAssertEqual(progress.map(\.0.subSignal), [.lrm, .lrm])
+    }
+
+    func test_completeFrameReportsNoPartialProgress() {
+        let decoder = FrameDecoder()
+        var progressCallCount = 0
+        decoder.onPartialFrameProgress = { _, _ in progressCallCount += 1 }
+
+        _ = decoder.feed(makeFrameBytes(signal: .ping, subSignal: .none, messageId: 1, body: [0x01]))
+
+        XCTAssertEqual(progressCallCount, 0)
+    }
+
+    func test_resetDiscardsHalfReceivedFrameSoNextStreamDecodesCleanly() {
+        let decoder = FrameDecoder()
+        let cutOff = makeFrameBytes(signal: .pubAck, subSignal: .lrm, messageId: 7, body: Array(repeating: 0xcd, count: 50))
+        _ = decoder.feed(cutOff.prefix(Header.length + 20)) // 连接在这里断了,半帧留在 buffer 里
+
+        decoder.reset()
+
+        // 没有 reset 的话,残留的 20 字节会被顶到新帧前面,把新字节流整个错位。
+        let frames = decoder.feed(makeFrameBytes(signal: .ping, subSignal: .none, messageId: 1, body: [0x02]))
+        XCTAssertEqual(frames.count, 1)
+        XCTAssertEqual(frames[0].body, Data([0x02]))
+    }
+
     func test_invalidMagicByteDropsBufferRatherThanLoopingForever() {
         let decoder = FrameDecoder()
         let garbage = Data([0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09])

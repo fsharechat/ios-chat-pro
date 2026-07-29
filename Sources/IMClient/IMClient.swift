@@ -63,9 +63,24 @@ enum LoginHandshakeError: Error, Equatable {
 /// `Scheduler` and `transportFactory` that both deliver on that same queue.
 public final class IMClient {
     public private(set) var connectionStatus: IMConnectionStatus = .disconnected {
-        didSet { onConnectionStatusChange?(connectionStatus) }
+        didSet {
+            onConnectionStatusChange?(connectionStatus)
+            if connectionStatus == .disconnected, oldValue != .disconnected { onDisconnected?() }
+        }
     }
     public var onConnectionStatusChange: ((IMConnectionStatus) -> Void)?
+
+    /// 连接刚刚断开（`.connecting`/`.connected` → `.disconnected` 的沿）。
+    /// 独立于 `onConnectionStatusChange` 那个通用状态钩子，是因为后者已被
+    /// `AppEnvironment` 占用于驱动 UI，而这两个监听者的生命周期不同——
+    /// `IMMessaging` 用本钩子把在途请求（如远程历史拉取）立刻判失败，
+    /// 而不是让它们干等满自己的超时窗口。
+    public var onDisconnected: (() -> Void)?
+
+    /// 某个正在流式到达、尚未收全的帧的进度：帧头已完整（`signal`/
+    /// `subSignal`/`messageId` 均已知），参数二为已到达的 body 字节数。
+    /// 转发自内部 `FrameDecoder` 的同名回调——见那里的文档注释。
+    public var onIncomingFrameProgress: ((Header, Int) -> Void)?
 
     /// 服务器时间(毫秒,来自最近一次 CONNECT_ACK 里 `Im_ConnectAckPayload.
     /// server_time`)减本机当前时间的差值。默认 0(尚未收到过 ConnectAck)。
@@ -113,6 +128,9 @@ public final class IMClient {
         self.heartbeatManager = heartbeatManager
         self.transportFactory = transportFactory
         hostSelector = try RoundRobinHostSelector(hostsString: configuration.hosts)
+        frameDecoder.onPartialFrameProgress = { [weak self] header, receivedBodyBytes in
+            self?.onIncomingFrameProgress?(header, receivedBodyBytes)
+        }
     }
 
     public func register(_ handler: MessageHandler) {
@@ -168,6 +186,9 @@ public final class IMClient {
     private func startConnection() {
         guard !userDisconnect else { return }
         connectionStatus = .connecting
+        // 上一条连接可能是在某个帧收到一半时断的（大响应尤其容易），残留的
+        // 半帧字节不属于即将建立的新字节流，必须丢掉再开始解码。
+        frameDecoder.reset()
         let host = hostSelector.nextHost()
         let newTransport = transportFactory(host, configuration.port)
         newTransport.onEvent = { [weak self] event in self?.handleTransportEvent(event) }

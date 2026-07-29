@@ -154,6 +154,54 @@ final class IMClientTests: XCTestCase {
         XCTAssertEqual(handler.captured?.body, Data("hi".utf8))
     }
 
+    // MARK: - 大响应的流式进度与跨连接的解码器状态
+
+    func test_partiallyReceivedFrame_reportsProgressWithHeaderAndByteCount() {
+        client.connect()
+        fakeTransport.simulate(.connected)
+        fakeTransport.completeOldestSend()
+
+        var progress: [(Header, Int)] = []
+        client.onIncomingFrameProgress = { progress.append(($0, $1)) }
+
+        let bigFrame = FrameEncoder.encode(signal: .pubAck, subSignal: .lrm, messageId: 161, body: Data(repeating: 0xab, count: 500))
+        fakeTransport.simulateReceivedData(bigFrame.prefix(Header.length + 200))
+
+        XCTAssertEqual(progress.count, 1)
+        XCTAssertEqual(progress.first?.0.messageId, 161)
+        XCTAssertEqual(progress.first?.0.subSignal, .lrm)
+        XCTAssertEqual(progress.first?.1, 200)
+    }
+
+    /// 大响应收到一半时断线,残留的半帧不能污染重连后的新字节流。
+    func test_reconnect_afterFrameCutOffMidBody_decodesNewStreamCleanly() {
+        client.connect()
+        fakeTransport.simulate(.connected)
+        fakeTransport.completeOldestSend()
+
+        final class CapturingHandler: MessageHandler {
+            var captured: [Frame] = []
+            func canHandle(signal: Signal, subSignal: SubSignal) -> Bool { signal == .push }
+            func handle(frame: Frame) { captured.append(frame) }
+        }
+        let handler = CapturingHandler()
+        client.register(handler)
+
+        let cutOff = FrameEncoder.encode(signal: .pubAck, subSignal: .lrm, messageId: 161, body: Data(repeating: 0xab, count: 500))
+        fakeTransport.simulateReceivedData(cutOff.prefix(Header.length + 200))
+
+        fakeTransport.simulate(.cancelled)
+        scheduler.fireNext() // 退避重连
+        fakeTransport.simulate(.connected)
+        fakeTransport.completeOldestSend()
+
+        let pushFrame = FrameEncoder.encode(signal: .push, subSignal: .none, messageId: 9, body: Data("hi".utf8))
+        fakeTransport.simulateReceivedData(pushFrame)
+
+        XCTAssertEqual(handler.captured.count, 1)
+        XCTAssertEqual(handler.captured.first?.body, Data("hi".utf8))
+    }
+
     // MARK: - serverTimeDeltaMillis (Fix 2: 90s 来电新鲜度需要服务器时间校正)
 
     func test_serverTimeDeltaMillis_defaultsToZeroBeforeAnyConnectAck() {
