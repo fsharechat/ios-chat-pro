@@ -31,15 +31,15 @@ final class ConversationListViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = Theme.backgroundPrimary
-        navigationItem.rightBarButtonItem = UIBarButtonItem(barButtonSystemItem: .add, target: self, action: #selector(plusTapped))
         layoutTableView()
         configureDataSource()
         bindViewModel()
     }
 
-    @objc private func plusTapped() {
-        guard let hostView = navigationController?.view else { return }
-        PlusMenuView.show(in: hostView, items: [
+    /// 加号菜单由三个 tab 共用的固定顶栏触发（见 `AppHeaderBar`），所以宿主
+    /// 视图和锚点都从外部传入，而不是取自己的导航栏。
+    func showPlusMenu(in hostView: UIView, anchorRect: CGRect) {
+        PlusMenuView.show(in: hostView, anchorRect: anchorRect, items: [
             .init(symbolName: "ellipsis.message", title: "发起聊天") { [weak self] in self?.onStartChatTapped?() },
             .init(symbolName: "person.badge.plus", title: "添加朋友") { [weak self] in self?.onAddFriendTapped?() },
             .init(symbolName: "qrcode.viewfinder", title: "扫一扫") { [weak self] in self?.onScanTapped?() },
@@ -58,7 +58,10 @@ final class ConversationListViewController: UIViewController {
         NSLayoutConstraint.activate([
             tableView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             tableView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            tableView.topAnchor.constraint(equalTo: view.topAnchor),
+            // 顶到 safe area（已含固定顶栏让出的高度）而不是 view 顶端：
+            // 列表内容不铺到顶栏底下，顶栏在 push/pop 转场中淡出时才不会
+            // 把列表内容透出来。
+            tableView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
             tableView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
         ])
     }

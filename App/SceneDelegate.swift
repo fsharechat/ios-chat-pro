@@ -16,6 +16,8 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     /// 调一次;用 cancellables 里已有订阅做幂等门(callManager 重建仅发生在
     /// 重新登录,那时 SceneDelegate 也会重走这里)。
     private var callManagerWired = false
+    /// 固定顶栏的加号菜单要复用「消息」tab 上已 wire 好的三个入口动作。
+    private weak var conversationListViewController: ConversationListViewController?
     private let themePreferenceStore = ThemePreferenceStore()
     private let ringtonePlayer = CallRingtonePlayer()
     private let messageAlertPlayer = MessageAlertPlayer()
@@ -60,11 +62,12 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     /// Three tabs: conversations (default landing tab), contacts, and
     /// "我的" (Phase 4). All three are independent `UINavigationController`s.
     private func makeMainTabBarController() -> UIViewController {
-        let tabBarController = UITabBarController()
+        let tabBarController = MainTabBarController()
 
         let conversationListViewModel = ConversationListViewModel(storage: environment.storage, contactSync: environment.contactSyncService, groupSync: environment.groupSyncService, currentUserId: environment.imClient?.userId ?? "")
         let conversationListNav = makeConversationListNavigationController(viewModel: conversationListViewModel)
-        conversationListNav.tabBarItem = UITabBarItem(title: "消息", image: UIImage(systemName: "message"), tag: 0)
+        conversationListNav.tabBarItem = UITabBarItem(title: "消息", image: UIImage(systemName: "message"), selectedImage: UIImage(systemName: "message.fill"))
+        conversationListNav.tabBarItem.tag = 0
         conversationListViewModel.$totalUnreadCount
             .sink { [weak conversationListNav] count in
                 conversationListNav?.tabBarItem.badgeValue = count > 0 ? (count > 99 ? "99+" : "\(count)") : nil
@@ -73,7 +76,8 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 
         let contactListViewModel = ContactListViewModel(storage: environment.storage, contactSync: environment.contactSyncService)
         let contactListNav = makeContactListNavigationController(viewModel: contactListViewModel)
-        contactListNav.tabBarItem = UITabBarItem(title: "联系人", image: UIImage(systemName: "person.2"), tag: 1)
+        contactListNav.tabBarItem = UITabBarItem(title: "联系人", image: UIImage(systemName: "person.2"), selectedImage: UIImage(systemName: "person.2.fill"))
+        contactListNav.tabBarItem.tag = 1
         contactListViewModel.$unreadFriendRequestCount
             .sink { [weak contactListNav] count in
                 contactListNav?.tabBarItem.badgeValue = count > 0 ? "\(count)" : nil
@@ -87,9 +91,30 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             contactSync: environment.contactSyncService
         )
         let meNav = makeMeNavigationController(viewModel: myProfileViewModel)
-        meNav.tabBarItem = UITabBarItem(title: "我的", image: UIImage(systemName: "person.crop.circle"), tag: 2)
+        meNav.tabBarItem = UITabBarItem(title: "我的", image: UIImage(systemName: "person.crop.circle"), selectedImage: UIImage(systemName: "person.crop.circle.fill"))
+        meNav.tabBarItem.tag = 2
 
         tabBarController.viewControllers = [conversationListNav, contactListNav, meNav]
+
+        // 加号菜单挂在共用顶栏上，动作仍复用「消息」tab 已 wire 好的闭包。
+        tabBarController.onPlusTapped = { [weak tabBarController, weak self] in
+            guard let tabBarController, let listViewController = self?.conversationListViewController else { return }
+            listViewController.showPlusMenu(in: tabBarController.view, anchorRect: tabBarController.headerPlusButtonFrame)
+        }
+
+        // 对齐 Android：连接状态体现在共用顶栏的标题上（tab bar 文字不变）。
+        // 根页面的导航栏已隐藏，原先挂在「消息」页 navigationItem 上的状态
+        // 提示改由顶栏承接。
+        let applyConnectionStatus: (IMConnectionStatus) -> Void = { [weak tabBarController] status in
+            switch status {
+            case .connected: tabBarController?.headerTitle = "飞享IM"
+            case .connecting: tabBarController?.headerTitle = "飞享IM(正在连接...)"
+            case .disconnected: tabBarController?.headerTitle = "飞享IM(连接断开)"
+            }
+        }
+        environment.onConnectionStatusChange = applyConnectionStatus
+        applyConnectionStatus(environment.connectionStatus)
+
         return tabBarController
     }
 
@@ -149,17 +174,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     /// 订阅 `$totalUnreadCount` 驱动「消息」tab 角标。
     private func makeConversationListNavigationController(viewModel: ConversationListViewModel) -> UIViewController {
         let listViewController = ConversationListViewController(viewModel: viewModel)
-        // 对齐 Android：连接状态只体现在「消息」tab 的导航栏标题上（tab bar
-        // 文字不变——nav 的 tabBarItem 带显式 title，不受 navigationItem 影响)。
-        let applyConnectionStatus: (IMConnectionStatus) -> Void = { [weak listViewController] status in
-            switch status {
-            case .connected: listViewController?.navigationItem.title = "消息"
-            case .connecting: listViewController?.navigationItem.title = "消息(正在连接...)"
-            case .disconnected: listViewController?.navigationItem.title = "消息(连接断开)"
-            }
-        }
-        environment.onConnectionStatusChange = applyConnectionStatus
-        applyConnectionStatus(environment.connectionStatus)
+        conversationListViewController = listViewController
         listViewController.onConversationSelected = { [weak self, weak listViewController] row in
             guard let self else { return }
             let conversationViewModel = ConversationViewModel(
@@ -198,6 +213,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         }
         listViewController.onStartChatTapped = { [weak self, weak listViewController] in
             guard let self else { return }
+            self.switchToConversationTab()
             let createGroupViewModel = CreateGroupViewModel(
                 storage: self.environment.storage,
                 groupActing: self.environment.groupSyncService,
@@ -247,10 +263,12 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         }
         listViewController.onAddFriendTapped = { [weak self, weak listViewController] in
             guard let self else { return }
+            self.switchToConversationTab()
             listViewController?.navigationController?.pushViewController(self.makeSearchUserViewController(), animated: true)
         }
         listViewController.onScanTapped = { [weak self, weak listViewController] in
             guard let self else { return }
+            self.switchToConversationTab()
             let scanViewController = ScanQRCodeViewController()
             scanViewController.hidesBottomBarWhenPushed = true
             scanViewController.onScanned = { [weak self, weak scanViewController, weak listViewController] raw in
@@ -265,6 +283,13 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     /// Routes a scanned QR payload the same way Android's
     /// `MainActivity.onScanPcQrCode` does for the code types iOS supports;
     /// anything unrecognized is surfaced as raw text and scanning resumes.
+    /// 顶栏加号在三个 tab 上都能点，但「发起聊天/添加朋友/扫一扫」及其后续
+    /// 流程（建群后进会话、扫码后打开会话）都挂在「消息」tab 的导航栈上，
+    /// 所以先切回该 tab；否则页面会被压进后台那条栈里、看起来像没反应。
+    private func switchToConversationTab() {
+        (window?.rootViewController as? MainTabBarController)?.selectTabWithoutAnimation(0)
+    }
+
     private func dispatchScannedCode(
         _ raw: String,
         from scanViewController: ScanQRCodeViewController,
