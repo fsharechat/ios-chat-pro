@@ -43,7 +43,13 @@ enum LoginHandshakeError: Error, Equatable {
 ///   automatic attempts then stop (Java: `receiveException`'s
 ///   `reconnectNum <= 3` guard, checked *before* incrementing — so this is
 ///   shared by every failure source, including a `sendConnectMessage` token
-///   decode error, not just transport failures)
+///   decode error, not just transport failures). One *disconnect* advances
+///   the backoff by one step, not one failure *event*: the same disconnect
+///   commonly surfaces twice (see the `.failed`/`.cancelled` branch)
+/// - TCP ready but no `Signal.CONNECT_ACK` within `handshakeTimeoutSeconds`
+///   → cancel the connection, falling into the same failure path above (no
+///   Java counterpart; iOS needs it because nothing else can move the state
+///   machine out of `.connecting` while the socket itself stays healthy)
 /// - heartbeat send completion → `reportHeartbeatSendSuccessTime`/
 ///   `reportHeartbeatExceptionTime`, then (success only) reschedule via
 ///   `scheduleNextHeartbeatTimer`, whose *fired* action computes
@@ -98,6 +104,12 @@ public final class IMClient {
     /// 还没恢复就主动 cancel 走统一失败路径。太短会在信号抖动时误杀
     /// 还能自愈的连接，太长则"已连接"假象持续太久。
     private static let viabilityGraceSeconds: TimeInterval = 10
+    /// TCP 已 ready、CONNECT 已发出，但迟迟等不到 CONNECT_ACK 的容忍窗口。
+    /// 这一段是整个状态机唯一没有自愈能力的空档：TCP 层健康所以不会有
+    /// `.failed`/`.notViable`，心跳又要等 ACK 才启动，服务端若静默丢弃
+    /// 登录（token 过期、被别处踢下线、backlog 堆积）状态就永久卡在
+    /// `.connecting`。到点主动 cancel，转入统一的断开 + 退避重连路径。
+    private static let handshakeTimeoutSeconds: TimeInterval = 15
 
     private let configuration: IMClientConfiguration
     private let transportFactory: (String, UInt16) -> IMTransportConnection
@@ -112,7 +124,11 @@ public final class IMClient {
     private var userDisconnect = false
     private var heartbeatToken: SchedulerToken?
     private var reconnectToken: SchedulerToken?
+    /// `reconnectToken` 是否指向一个尚未触发的重连。单靠 token 非 nil 判断
+    /// 不出"已经 fire 过"，而这个标志正是防止同一次断开叠加出多轮重连的门。
+    private var hasPendingReconnect = false
     private var viabilityGraceToken: SchedulerToken?
+    private var handshakeTimeoutToken: SchedulerToken?
     private var nextMessageId: UInt16 = 0
 
     public init(
@@ -150,8 +166,9 @@ public final class IMClient {
     public func disconnect() {
         userDisconnect = true
         heartbeatToken?.cancel()
-        reconnectToken?.cancel()
+        cancelPendingReconnect()
         cancelViabilityGraceTimer()
+        cancelHandshakeTimeoutTimer()
         detachAndCancelTransport()
         connectionStatus = .disconnected
     }
@@ -167,12 +184,9 @@ public final class IMClient {
             return
         }
         reconnectAttempt = 0
-        reconnectToken?.cancel()
         heartbeatToken?.cancel()
-        cancelViabilityGraceTimer()
-        // 先摘掉回调再 cancel：在途旧连接的 `.cancelled` 事件不应再触发
-        // 一轮退避重连，下面 startConnection() 已经是最新的重连。
-        detachAndCancelTransport()
+        // 在途旧连接的清场（摘回调 + cancel + 取消各类定时器）统一由
+        // `startConnection()` 负责，见那里的注释。
         startConnection()
     }
 
@@ -183,8 +197,24 @@ public final class IMClient {
         transport = nil
     }
 
+    /// 每一轮连接的唯一入口，因此"清掉上一轮的一切"也只在这里做一次。
+    ///
+    /// 旧 transport 必须先摘回调再 cancel：`.failed`/`.cancelled` 分支并
+    /// **不**销毁 transport（一次断开可能双发事件，销毁动作放在那里会重复），
+    /// 若不在这里清场，旧 socket 的回调会一直挂着——它后续到达的字节和
+    /// 新连接的字节交织进同一个 `FrameDecoder`，帧边界立刻错位，坏掉的
+    /// magic byte 会让整个缓冲区（连同夹在其中的 CONNECT_ACK）被整批丢弃。
+    /// 后果正是"业务消息照收照发，标题却永远停在正在连接"：`.connected`
+    /// 的唯一来源就是那一帧。
+    ///
+    /// 在途的重连/宽限/握手定时器同样要取消，否则它们会在这条新连接握手
+    /// 到一半时再起一条，制造出同样的多 socket 局面。
     private func startConnection() {
         guard !userDisconnect else { return }
+        detachAndCancelTransport()
+        cancelPendingReconnect()
+        cancelViabilityGraceTimer()
+        cancelHandshakeTimeoutTimer()
         connectionStatus = .connecting
         // 上一条连接可能是在某个帧收到一半时断的（大响应尤其容易），残留的
         // 半帧字节不属于即将建立的新字节流，必须丢掉再开始解码。
@@ -201,9 +231,17 @@ public final class IMClient {
         switch event {
         case .connected:
             cancelViabilityGraceTimer()
+            startHandshakeTimeoutTimer()
             sendConnectMessage()
         case .failed, .cancelled:
             cancelViabilityGraceTimer()
+            cancelHandshakeTimeoutTimer()
+            // 同一次断开会双发失败事件：`NWConnection` 的 receive completion
+            // 带着 error 报一次，紧接着 stateUpdateHandler 转 `.failed`/
+            // `.cancelled` 又报一次（主动 cancel 时尤其典型——receive 会拿到
+            // ECANCELED）。已经处于断开态就直接返回，否则心跳异常会被重复
+            // 上报（双重收缩心跳间隔），退避轮次也会凭空多跳一级。
+            guard connectionStatus != .disconnected else { return }
             heartbeatManager.reportHeartbeatExceptionTime(nowMillis())
             heartbeatToken?.cancel()
             connectionStatus = .disconnected
@@ -233,13 +271,47 @@ public final class IMClient {
         viabilityGraceToken = nil
     }
 
+    /// TCP 已 ready 后开始计时，收到 CONNECT_ACK 即取消。到点仍停在
+    /// `.connecting` 就 cancel 这条连接，其 `.cancelled` 事件走统一的断开 +
+    /// 退避重连路径。弱捕获计时时的 transport 并在触发时比对当前 transport：
+    /// 定时器若因任何原因迟到，绝不能误杀已经换上的新连接。
+    private func startHandshakeTimeoutTimer() {
+        guard !userDisconnect else { return }
+        cancelHandshakeTimeoutTimer()
+        handshakeTimeoutToken = scheduler.scheduleOnce(after: Self.handshakeTimeoutSeconds) { [weak self, weak transportAtStart = transport] in
+            guard let self else { return }
+            self.handshakeTimeoutToken = nil
+            guard self.connectionStatus == .connecting,
+                  let transportAtStart, transportAtStart === self.transport else { return }
+            transportAtStart.cancel()
+        }
+    }
+
+    private func cancelHandshakeTimeoutTimer() {
+        handshakeTimeoutToken?.cancel()
+        handshakeTimeoutToken = nil
+    }
+
+    /// 一次断开只排一轮重连（`hasPendingReconnect` 门），退避计数因此按
+    /// "重连轮次"而非"失败事件个数"递增——后者会被双发的失败事件、以及
+    /// 同一轮里 viability 与 receive 各报一次的情况凭空撑爆。
     private func scheduleReconnectIfNeeded() {
-        guard !userDisconnect, reconnectAttempt <= Self.maxAutomaticReconnectAttempts - 1 else { return }
+        guard !userDisconnect, !hasPendingReconnect,
+              reconnectAttempt <= Self.maxAutomaticReconnectAttempts - 1 else { return }
         reconnectAttempt += 1
+        hasPendingReconnect = true
         let delaySeconds = TimeInterval(reconnectAttempt) * 2
         reconnectToken = scheduler.scheduleOnce(after: delaySeconds) { [weak self] in
-            self?.startConnection()
+            guard let self else { return }
+            self.hasPendingReconnect = false
+            self.startConnection()
         }
+    }
+
+    private func cancelPendingReconnect() {
+        reconnectToken?.cancel()
+        reconnectToken = nil
+        hasPendingReconnect = false
     }
 
     private func sendConnectMessage() {
@@ -300,7 +372,8 @@ public final class IMClient {
 
     private func handleConnectAck(body: Data) {
         reconnectAttempt = 0
-        reconnectToken?.cancel()
+        cancelPendingReconnect()
+        cancelHandshakeTimeoutTimer()
         connectionStatus = .connected
         updateServerTimeDelta(fromConnectAckBody: body)
         sendHeartbeat(interval: heartbeatManager.currentHeartInterval())

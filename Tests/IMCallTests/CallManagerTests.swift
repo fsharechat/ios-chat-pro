@@ -11,6 +11,10 @@ import IMMessaging
 final class CallManagerTests: XCTestCase {
     private var fakeTransport: FakeTransportConnection!
     private var scheduler: ManualScheduler!
+    /// `IMClient` 自己的定时器(握手超时/心跳/退避重连)走独立 scheduler,
+    /// 这样 `scheduler` 上排的就只有被测层的定时器,`fireNext()` 的顺序不会
+    /// 被连接层的内部计时打乱。
+    private var clientScheduler: ManualScheduler!
     private var imClient: IMClient!
     private var storage: IMStorage!
     private var messagingService: MessagingService!
@@ -24,12 +28,13 @@ final class CallManagerTests: XCTestCase {
         try super.setUpWithError()
         fakeTransport = FakeTransportConnection()
         scheduler = ManualScheduler()
+        clientScheduler = ManualScheduler()
         storage = try IMStorage.openInMemory()
 
         let plaintext = Data("\(Data("password".utf8).base64EncodedString())|mySecretKey12345|ignored".utf8)
         let token = try WireCrypto.encrypt(plaintext, key: WireCrypto.defaultKey).base64EncodedString()
         let configuration = IMClientConfiguration(hosts: "host", port: 6789, userId: "me", token: token, clientIdentifier: "device-1")
-        imClient = try IMClient(configuration: configuration, scheduler: scheduler, transportFactory: { [unowned self] _, _ in self.fakeTransport })
+        imClient = try IMClient(configuration: configuration, scheduler: clientScheduler, transportFactory: { [unowned self] _, _ in self.fakeTransport })
         messagingService = MessagingService(imClient: imClient, storage: storage, scheduler: scheduler)
         imClient.connect()
         fakeTransport.simulate(.connected)

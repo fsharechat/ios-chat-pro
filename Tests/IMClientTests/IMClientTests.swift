@@ -82,22 +82,115 @@ final class IMClientTests: XCTestCase {
 
         XCTAssertEqual(statuses, [.connected])
         XCTAssertEqual(fakeTransport.sentFrames.count, 2) // CONNECT + first heartbeat PING
-        XCTAssertTrue(scheduler.scheduledDelays.isEmpty) // heartbeat timer not scheduled until the PING's own send completes
+        // [15] 是 transport ready 时排上的握手超时定时器(收到 ACK 时已取消,
+        // 但 scheduledDelays 记录的是"曾被请求过的"全部延时)。心跳定时器
+        // 要等 PING 自己的 send 完成才排。
+        XCTAssertEqual(scheduler.scheduledDelays, [15])
 
         fakeTransport.completeOldestSend() // heartbeat PING send completes
-        XCTAssertEqual(scheduler.scheduledDelays, [30]) // HeartbeatManager.minHeartbeatInterval (30_000ms) = 30s
+        XCTAssertEqual(scheduler.scheduledDelays, [15, 30]) // HeartbeatManager.minHeartbeatInterval (30_000ms) = 30s
     }
 
     func test_transportFailure_schedulesReconnectWithIncreasingBackoff_thenStopsAfterFourAttempts() {
         client.connect()
 
+        // 每一轮:失败 → 排上退避 → 定时器触发(重连,回到 .connecting)。
         for _ in 1...4 {
             fakeTransport.simulate(.failed(NSError(domain: "test", code: 1)))
+            XCTAssertTrue(scheduler.fireNext())
         }
         XCTAssertEqual(scheduler.scheduledDelays, [2, 4, 6, 8])
 
         fakeTransport.simulate(.failed(NSError(domain: "test", code: 1))) // 5th failure
         XCTAssertEqual(scheduler.scheduledDelays, [2, 4, 6, 8]) // unchanged — no further automatic reconnect
+    }
+
+    /// 一次断开在 `NWConnection` 上会双发失败事件(receive completion 的
+    /// error 一次、stateUpdateHandler 转 .failed/.cancelled 又一次)。若每个
+    /// 事件都排一轮重连,两条定时器会先后各起一条 socket,它们的字节交织进
+    /// 同一个 FrameDecoder 后 CONNECT_ACK 会被整批丢弃 —— 状态永远停在
+    /// .connecting。退避必须按"重连轮次"而非"失败事件个数"推进。
+    func test_duplicateFailureEventsForSameDisconnect_scheduleOnlyOneReconnect() {
+        client.connect()
+
+        fakeTransport.simulate(.failed(NSError(domain: "test", code: 1)))
+        fakeTransport.simulate(.cancelled) // 同一次断开的第二个事件
+        fakeTransport.simulate(.failed(NSError(domain: "test", code: 1)))
+
+        XCTAssertEqual(scheduler.scheduledDelays, [2])
+        XCTAssertTrue(scheduler.fireNext())
+        XCTAssertFalse(scheduler.fireNext()) // 没有第二条重连定时器在队列里
+        XCTAssertEqual(fakeTransport.startCallCount, 2) // 只重连了一次
+    }
+
+    /// 新一轮连接开始前必须摘掉上一条 transport 的回调并 cancel,否则旧
+    /// socket 迟到的字节会和新连接的字节交织进同一个 FrameDecoder,把流
+    /// 解码错位。用每轮发新实例的工厂才能观察到这一点(默认的
+    /// `transportFactory` 每次返回同一个 fake)。
+    func test_startingNewConnection_detachesAndCancelsThePreviousTransport() {
+        var transports: [FakeTransportConnection] = []
+        let scheduler = ManualScheduler()
+        let client = try! IMClient(
+            configuration: IMClientConfiguration(hosts: "host-a", port: 6789, userId: "u1", token: makeTestToken(), clientIdentifier: "device-1"),
+            scheduler: scheduler,
+            heartbeatManager: HeartbeatManager(),
+            transportFactory: { _, _ in
+                let transport = FakeTransportConnection()
+                transports.append(transport)
+                return transport
+            }
+        )
+
+        client.connect()
+        let first = transports[0]
+        first.simulate(.connected)
+        first.completeOldestSend()
+        first.simulate(.cancelled)
+        scheduler.fireNext() // 退避重连 → startConnection()
+
+        XCTAssertEqual(transports.count, 2)
+        XCTAssertEqual(first.cancelCallCount, 1) // 旧 transport 被 cancel
+        XCTAssertNil(first.onEvent) // 回调已摘,迟到的事件打不到 IMClient
+        XCTAssertNil(first.onDataReceived)
+
+        // 旧 socket 的迟到字节不再进入解码流:即便它送来一个完整的
+        // CONNECT_ACK,状态也不该被它改写。
+        var statuses: [IMConnectionStatus] = []
+        client.onConnectionStatusChange = { statuses.append($0) }
+        first.simulateReceivedData(makeConnectAckFrameBytes())
+        XCTAssertTrue(statuses.isEmpty)
+    }
+
+    // MARK: - 握手超时(TCP ready 但 CONNECT_ACK 不来)
+
+    func test_transportReadyButNoConnectAck_cancelsConnectionAfterHandshakeTimeout() {
+        client.connect()
+        fakeTransport.simulate(.connected)
+        fakeTransport.completeOldestSend() // CONNECT 已发出
+
+        XCTAssertEqual(scheduler.scheduledDelays, [15]) // 握手超时定时器
+        XCTAssertTrue(scheduler.fireNext())
+
+        XCTAssertEqual(fakeTransport.cancelCallCount, 1)
+
+        // cancel 的 .cancelled 事件走统一的断开 + 退避重连路径。
+        var statuses: [IMConnectionStatus] = []
+        client.onConnectionStatusChange = { statuses.append($0) }
+        fakeTransport.simulate(.cancelled)
+        XCTAssertEqual(statuses, [.disconnected])
+        XCTAssertEqual(scheduler.scheduledDelays.last, 2)
+    }
+
+    func test_connectAck_cancelsHandshakeTimeout() {
+        client.connect()
+        fakeTransport.simulate(.connected)
+        fakeTransport.completeOldestSend()
+        fakeTransport.simulateReceivedData(makeConnectAckFrameBytes())
+        fakeTransport.completeOldestSend() // 心跳 PING
+
+        // 队列里只剩心跳定时器;握手超时定时器已取消,不会误杀活连接。
+        while scheduler.fireNext() {}
+        XCTAssertEqual(fakeTransport.cancelCallCount, 0)
     }
 
     func test_firingScheduledReconnect_startsANewConnectionAttempt() {
@@ -297,22 +390,28 @@ final class IMClientTests: XCTestCase {
         fakeTransport.completeOldestSend() // CONNECT
         fakeTransport.simulateReceivedData(makeConnectAckFrameBytes())
 
+        let delaysBefore = scheduler.scheduledDelays // [15] 握手超时(已随 ACK 取消)
         fakeTransport.completeOldestSend(.failure(NSError(domain: "test", code: 1))) // 心跳 PING 发送失败
 
         XCTAssertEqual(fakeTransport.cancelCallCount, 1)
-        XCTAssertTrue(scheduler.scheduledDelays.isEmpty) // 不再排下一次心跳,等重连成功后重启
+        XCTAssertEqual(scheduler.scheduledDelays, delaysBefore) // 不再排下一次心跳,等重连成功后重启
     }
 
     // MARK: - reconnectIfNeeded(网络恢复 / 回前台)
 
     func test_reconnectIfNeeded_afterReconnectAttemptsExhausted_reconnectsImmediatelyAndResetsBackoff() {
         client.connect()
-        for _ in 1...5 { fakeTransport.simulate(.failed(NSError(domain: "test", code: 1))) }
+        for _ in 1...4 {
+            fakeTransport.simulate(.failed(NSError(domain: "test", code: 1)))
+            scheduler.fireNext()
+        }
+        fakeTransport.simulate(.failed(NSError(domain: "test", code: 1))) // 第 5 次:不再自动重连
         XCTAssertEqual(scheduler.scheduledDelays, [2, 4, 6, 8]) // 4 次耗尽,自动重连已放弃
+        let startsBefore = fakeTransport.startCallCount
 
         client.reconnectIfNeeded()
 
-        XCTAssertEqual(fakeTransport.startCallCount, 2) // 立即重连,不等退避
+        XCTAssertEqual(fakeTransport.startCallCount, startsBefore + 1) // 立即重连,不等退避
         fakeTransport.simulate(.failed(NSError(domain: "test", code: 1)))
         XCTAssertEqual(scheduler.scheduledDelays.last, 2) // 退避计数已重置,从 2s 重来
     }
