@@ -127,7 +127,7 @@ App             UIKit ViewControllers，入口为 SceneDelegate
 ### 生产服务器
 
 - HTTP API：`https://backend-http.fsharechat.cn`
-- IM TCP：`backend-tcp.fsharechat.cn:6789`（主）/ `backend-tcp-s2.fsharechat.cn:6789`（备）
+- IM TCP：`sh-backend-tcp.fsharechat.cn:6789`（主）/ `backend-tcp.fsharechat.cn:6789` / `backend-tcp-s2.fsharechat.cn:6789`（备）。`imHosts` 是 `:` 分隔的列表，`RoundRobinHostSelector` 从第一个开始轮询，所以列表首位就是首选
 - 配置统一在 `AppCore/AppConfig.swift` 的 `AppConfig.production`。
 
 ### proto 与代码生成

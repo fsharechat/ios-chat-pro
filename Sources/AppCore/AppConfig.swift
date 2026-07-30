@@ -30,7 +30,7 @@ public struct AppConfig {
 
     public static let production = AppConfig(
         apiBaseURL: URL(string: "https://backend-http.fsharechat.cn")!,
-        imHosts: "backend-tcp.fsharechat.cn:backend-tcp-s2.fsharechat.cn",
+        imHosts: "sh-backend-tcp.fsharechat.cn:backend-tcp.fsharechat.cn:backend-tcp-s2.fsharechat.cn",
         imPort: 6789,
         // Same TURN servers `android-chat-pro`'s `Config.java` already
         // points at in production — `chat-server-pro` plays no part in ICE
