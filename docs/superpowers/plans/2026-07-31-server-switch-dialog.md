@@ -1176,7 +1176,7 @@ git commit -m "feat(AppCore): AppEnvironment 接入 ServerNodeStore，暴露 con
 
 - [ ] **Step 4: 编译验证**
 
-Run: `xcodebuild -project ios-chat-pro.xcodeproj -scheme App -destination 'platform=iOS Simulator,name=iPhone 16' build`
+Run: `xcodebuild -project ios-chat-pro.xcodeproj -scheme App -destination 'platform=iOS Simulator,name=iPhone 15' build`
 Expected: BUILD SUCCEEDED。
 
 - [ ] **Step 5: 提交**
@@ -1629,7 +1629,7 @@ private extension NSLayoutConstraint {
 
 - [ ] **Step 4: 编译验证**
 
-Run: `xcodebuild -project ios-chat-pro.xcodeproj -scheme App -destination 'platform=iOS Simulator,name=iPhone 16' build`
+Run: `xcodebuild -project ios-chat-pro.xcodeproj -scheme App -destination 'platform=iOS Simulator,name=iPhone 15' build`
 Expected: BUILD SUCCEEDED。
 
 - [ ] **Step 5: 提交**
@@ -1903,7 +1903,7 @@ private final class NodeRow: UIControl {
 
 - [ ] **Step 3: 编译验证**
 
-Run: `xcodebuild -project ios-chat-pro.xcodeproj -scheme App -destination 'platform=iOS Simulator,name=iPhone 16' build`
+Run: `xcodebuild -project ios-chat-pro.xcodeproj -scheme App -destination 'platform=iOS Simulator,name=iPhone 15' build`
 Expected: BUILD SUCCEEDED。
 
 - [ ] **Step 4: 全量单测不回归**
