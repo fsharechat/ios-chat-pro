@@ -10,6 +10,9 @@ final class AppHeaderBar: UIView {
 
     var onPlusTapped: (() -> Void)?
 
+    /// 点击标题的动作（弹出连接服务弹窗），由 `SceneDelegate` 注入。
+    var onTitleTapped: (() -> Void)?
+
     var title: String? {
         get { titleLabel.text }
         set { titleLabel.text = newValue }
@@ -32,6 +35,11 @@ final class AppHeaderBar: UIView {
         titleLabel.font = .systemFont(ofSize: 24, weight: .bold)
         titleLabel.adjustsFontSizeToFitWidth = true
         titleLabel.minimumScaleFactor = 0.7
+        // 手势只挂在 label 上、不挂整个顶栏：否则标题右侧那片空白也会
+        // 变成可点区域，与 Android 版把监听挂在 Toolbar 标题 TextView 上
+        // 而不是 Toolbar 本身的理由一致。
+        titleLabel.isUserInteractionEnabled = true
+        titleLabel.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(titleTapped)))
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
         addSubview(titleLabel)
 
@@ -72,5 +80,9 @@ final class AppHeaderBar: UIView {
 
     @objc private func plusTapped() {
         onPlusTapped?()
+    }
+
+    @objc private func titleTapped() {
+        onTitleTapped?()
     }
 }

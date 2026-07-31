@@ -51,6 +51,14 @@ public enum Theme {
     }
     public static let textOnAccent = UIColor { traits in traits.userInterfaceStyle == .dark ? .black : .white }
 
+    /// 连接状态语义色（连接服务弹窗的状态圆点与「连接状态」行）。
+    /// 深色下用偏亮的绿/红，保证在 `popupCard`(#232430) 上仍有足够对比度；
+    /// 浅色下取更深的同色系，配白底。刻意不复用 `accent`——它在深色是绿、
+    /// 浅色是蓝，无法表达「连上/没连上」的语义。
+    public static let statusOnline = dynamicColor(dark: 0x3DDC84, light: 0x2BA84A)
+    public static let statusConnecting = dynamicColor(dark: 0x5B8DEF, light: 0x3E64E4)
+    public static let statusOffline = dynamicColor(dark: 0xFF6B6B, light: 0xE53935)
+
     public static let bubbleCornerRadius: CGFloat = 14
     public static let cardCornerRadius: CGFloat = 12
     public static let standardSpacing: CGFloat = 12

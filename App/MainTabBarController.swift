@@ -23,6 +23,8 @@ final class MainTabBarController: UITabBarController {
     private var dragRejected = false
     /// 固定顶栏加号的点击动作，由 `SceneDelegate` 注入。
     var onPlusTapped: (() -> Void)?
+    /// 顶栏标题的点击动作，由 `SceneDelegate` 注入。
+    var onTitleTapped: (() -> Void)?
     /// 顶栏标题，连接状态变化时由 `SceneDelegate` 更新。
     var headerTitle: String? {
         get { headerBar.title }
@@ -63,6 +65,7 @@ final class MainTabBarController: UITabBarController {
 
     private func setupHeaderBar() {
         headerBar.onPlusTapped = { [weak self] in self?.onPlusTapped?() }
+        headerBar.onTitleTapped = { [weak self] in self?.onTitleTapped?() }
         headerBar.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(headerBar)
         NSLayoutConstraint.activate([
