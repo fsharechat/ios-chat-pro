@@ -583,12 +583,52 @@ final class HostLatencyProbeTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(milliseconds, 0)
     }
 
+    /// 占住一个端口但**不** `listen()`：没有监听队列，内核对到该端口的连接
+    /// 直接回 RST，探测必然拿到 `.unreachable`。
+    ///
+    /// 刻意不用「起 `NWListener` 再 `cancel()`」拿这个端口——`NWListener.cancel()`
+    /// 是异步的，从调用到内核真正撤销监听 socket 之间有个几毫秒的窗口，
+    /// 落在窗口里的 connect 会意外成功，测试因此偶发变红（实测失败率
+    /// 30%~70%）。`bind()` 不 `listen()` 是同步生效的，没有这个窗口。
+    private func reserveClosedPort() throws -> (descriptor: Int32, port: UInt16) {
+        let descriptor = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)
+        guard descriptor >= 0 else { throw XCTSkip("socket() failed, errno=\(errno)") }
+
+        var address = sockaddr_in()
+        address.sin_family = sa_family_t(AF_INET)
+        address.sin_port = 0 // 让内核分配一个空闲端口
+        address.sin_addr.s_addr = inet_addr("127.0.0.1")
+        var bindResult: Int32 = -1
+        withUnsafePointer(to: &address) { pointer in
+            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockaddrPointer in
+                bindResult = bind(descriptor, sockaddrPointer, socklen_t(MemoryLayout<sockaddr_in>.size))
+            }
+        }
+        guard bindResult == 0 else {
+            close(descriptor)
+            throw XCTSkip("bind() failed, errno=\(errno)")
+        }
+
+        var boundAddress = sockaddr_in()
+        var length = socklen_t(MemoryLayout<sockaddr_in>.size)
+        var nameResult: Int32 = -1
+        withUnsafeMutablePointer(to: &boundAddress) { pointer in
+            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockaddrPointer in
+                nameResult = getsockname(descriptor, sockaddrPointer, &length)
+            }
+        }
+        guard nameResult == 0 else {
+            close(descriptor)
+            throw XCTSkip("getsockname() failed, errno=\(errno)")
+        }
+        return (descriptor, UInt16(bigEndian: boundAddress.sin_port))
+    }
+
     /// 没有任何进程在监听的本地端口 → 内核立刻回 RST，必须报 `.unreachable`，
     /// 不能报成耗时。这条是"假绿灯"的核心防线。
     func test_probeAll_closedLocalPort_reportsUnreachable() throws {
-        // 先起 listener 拿一个确定空闲的端口，再关掉它，端口随即无人监听。
-        let (listener, port) = try startLocalListener()
-        listener.cancel()
+        let (descriptor, port) = try reserveClosedPort()
+        defer { close(descriptor) }
 
         let done = expectation(description: "probe finished")
         var result: HostLatencyProbe.ProbeResult?
