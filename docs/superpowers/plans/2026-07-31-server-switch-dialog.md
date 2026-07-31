@@ -4,9 +4,9 @@
 
 **Goal:** 点击共用顶栏的「飞享IM」标题弹出连接服务信息弹窗，展示当前地址/端口/状态/延迟，并允许在三个预置 IM 节点之间固定选择或恢复自动轮询。
 
-**Architecture:** 节点表下沉到 `AppConfig.serverNodes`，pin 选择由 `AppCore/ServerNodeStore`（UserDefaults）持久化。运行时切换靠 `IMClient.switchHosts(_:)`——换掉 `hostSelector` 后调既有的 `startConnection()`，后者本就是每一轮连接的唯一入口并已做完整清场，因此不需要 Android 版为跨进程与旧连接泄漏所写的任何额外代码。延迟统一为到 `host:6789` 的 TCP 建连耗时，由 `IMClient/HostLatencyProbe` 用 `NWConnection` 采集。UI 是 `App` 层一个 `.overFullScreen` 的居中卡片弹窗，两状态在同一张卡片内切换。
+**Architecture:** 节点表下沉到 `AppConfig.serverNodes`，pin 选择由 `AppCore/ServerNodeStore`（UserDefaults）持久化。运行时切换靠 `IMClient.switchHosts(_:)`——换掉 `hostSelector` 后调既有的 `startConnection()`，后者本就是每一轮连接的唯一入口并已做完整清场，因此不需要 Android 版为跨进程与旧连接泄漏所写的任何额外代码。延迟统一为到 `host:6789` 的 TCP 建连耗时，由 `IMClient/HostLatencyProbe` 用非阻塞 BSD socket 采集（**不能用 `NWConnection`**，它走系统代理，见 Task 3 开头的实测记录）。UI 是 `App` 层一个 `.overFullScreen` 的居中卡片弹窗，两状态在同一张卡片内切换。
 
-**Tech Stack:** Swift / UIKit / Network.framework(`NWConnection`) / XCTest / SwiftPM（包名 `IMCore`）+ XcodeGen。
+**Tech Stack:** Swift / UIKit / BSD socket(`connect`+`poll`) / XCTest / SwiftPM（包名 `IMCore`）+ XcodeGen。
 
 ## Global Constraints
 
@@ -526,6 +526,17 @@ git commit -m "feat(IMClient): 暴露 currentHost 并支持 switchHosts 运行�
   - `HostLatencyProbe.probeAll(hosts: [String], port: UInt16, timeout: TimeInterval = timeoutSeconds, onResult: @escaping (String, ProbeResult) -> Void) -> Handle`
   - `HostLatencyProbe.timeoutSeconds: TimeInterval`（= 2）
 
+> **实现方式已在 2026-07-31 被实测推翻一次，务必读这段再动手。**
+> 初版计划用 `NWConnection` 探测，实测发现 **`NWConnection` 遵守系统代理设置**：
+> 在一台开了 `SOCKS 127.0.0.1:1089` 的 Mac 上，对不可路由的 `192.0.2.1:6789`
+> 探测会在 15ms 得到 `.ready`——它连上的是本地代理，跟目标是否可达无关。
+> 同机裸 BSD socket 对同一地址正确返回超时。
+> 后果不是「测不准」而是「测错」：任何开代理或 VPN 的真机上，三个节点都会
+> 显示成 ~1ms，用户据此选节点等于抓阄。
+> 因此本 task **必须用非阻塞 BSD socket `connect()` + `poll()`**，与 Android
+> `HostLatencyProbe.probeOnce()` 的 `Socket.connect(addr, 2000)` 是同一件事。
+> 不要「优化」回 `NWConnection`。
+
 - [ ] **Step 1: 写失败的测试**
 
 创建 `Tests/IMClientTests/HostLatencyProbeTests.swift`：
@@ -537,6 +548,8 @@ import Network
 
 final class HostLatencyProbeTests: XCTestCase {
     /// 起一个真实的本地 TCP listener，返回它实际绑定到的端口。
+    /// 用进程内 listener 而不是线上服务器：结果确定、不依赖外网、不受
+    /// 被测机器的代理设置影响。
     private func startLocalListener() throws -> (listener: NWListener, port: UInt16) {
         let listener = try NWListener(using: .tcp, on: .any)
         listener.newConnectionHandler = { connection in
@@ -570,8 +583,29 @@ final class HostLatencyProbeTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(milliseconds, 0)
     }
 
+    /// 没有任何进程在监听的本地端口 → 内核立刻回 RST，必须报 `.unreachable`，
+    /// 不能报成耗时。这条是"假绿灯"的核心防线。
+    func test_probeAll_closedLocalPort_reportsUnreachable() throws {
+        // 先起 listener 拿一个确定空闲的端口，再关掉它，端口随即无人监听。
+        let (listener, port) = try startLocalListener()
+        listener.cancel()
+
+        let done = expectation(description: "probe finished")
+        var result: HostLatencyProbe.ProbeResult?
+        _ = HostLatencyProbe.probeAll(hosts: ["127.0.0.1"], port: port) { _, probeResult in
+            result = probeResult
+            done.fulfill()
+        }
+        wait(for: [done], timeout: 5)
+
+        XCTAssertEqual(result, .unreachable)
+    }
+
     /// 192.0.2.1 是 RFC 5737 的 TEST-NET-1，保证不可路由：连接既不会成功
     /// 也不会立刻被拒，正好走超时分支。
+    ///
+    /// 这条用例同时是"没走系统代理"的回归防线——若实现被改回
+    /// `NWConnection`，在配了代理的机器上这里会拿到 `.latency` 而失败。
     func test_probeAll_unroutableAddress_timesOut() {
         let done = expectation(description: "probe finished")
         var result: HostLatencyProbe.ProbeResult?
@@ -582,6 +616,22 @@ final class HostLatencyProbeTests: XCTestCase {
         wait(for: [done], timeout: 5)
 
         XCTAssertEqual(result, .timedOut)
+    }
+
+    func test_probeAll_unresolvableHostname_reportsUnresolved() {
+        let done = expectation(description: "probe finished")
+        var result: HostLatencyProbe.ProbeResult?
+        _ = HostLatencyProbe.probeAll(
+            hosts: ["no-such-host.invalid"],
+            port: 6789,
+            timeout: 3
+        ) { _, probeResult in
+            result = probeResult
+            done.fulfill()
+        }
+        wait(for: [done], timeout: 10)
+
+        XCTAssertEqual(result, .unresolved)
     }
 
     func test_cancel_suppressesTheCallback() {
@@ -610,6 +660,21 @@ final class HostLatencyProbeTests: XCTestCase {
 
         XCTAssertEqual(Set(reported), ["127.0.0.1", "localhost"])
     }
+
+    func test_probeAll_deliversCallbacksOnTheMainQueue() throws {
+        let (listener, port) = try startLocalListener()
+        defer { listener.cancel() }
+
+        let done = expectation(description: "probe finished")
+        var wasMainQueue = false
+        _ = HostLatencyProbe.probeAll(hosts: ["127.0.0.1"], port: port) { _, _ in
+            wasMainQueue = Thread.isMainThread
+            done.fulfill()
+        }
+        wait(for: [done], timeout: 5)
+
+        XCTAssertTrue(wasMainQueue)
+    }
 }
 ```
 
@@ -624,19 +689,24 @@ Expected: 编译失败，`cannot find 'HostLatencyProbe' in scope`。
 
 ```swift
 import Foundation
-import Network
 
 /// 测「到 `host` + `port` 建立一条 TCP 连接要多久」。
 ///
 /// 刻意用与 IM 完全相同的 host 和端口，避免出现「ICMP 通但 IM 端口不通」的
-/// 假绿灯。探测连接一 `.ready` 就立刻 cancel，不发送任何协议数据。
+/// 假绿灯。探测连接一建立就立刻 `close()`，不发送任何协议数据。
 ///
-/// 已知取舍：服务端 TCP 能 accept 但业务逻辑卡死时，这里仍会给出正常耗时。
-/// 那种场景由 `IMClient.connectionStatus` 覆盖——两者分工是「延迟管网络
-/// 往返，连接状态管应用层健康」。
+/// **为什么是裸 BSD socket 而不是 `NWConnection`：** `NWConnection` 遵守系统
+/// 代理设置。在配了 HTTP/SOCKS 代理或 VPN 的设备上，它连的是代理而不是目标
+/// 节点，`.ready` 会在十几毫秒内到达且与目标是否可达无关——2026-07-31 实测：
+/// 一台开了 `SOCKS 127.0.0.1:1089` 的 Mac 对不可路由的 `192.0.2.1:6789` 探测
+/// 得到 `.ready`(15ms)，同机裸 socket 正确超时。那会让所有节点都显示成 ~1ms，
+/// 是错误答案而不是慢答案。这里与 Android `HostLatencyProbe.probeOnce()` 的
+/// `Socket.connect(new InetSocketAddress(host, port), 2000)` 保持同一实现方式。
 ///
-/// **Threading contract:** 全部回调投递在主队列，与 `IMClient` 的单队列
-/// 约定一致；调用方也必须在主队列调用 `probeAll` / `Handle.cancel()`。
+/// **Threading contract:** 阻塞的 connect 跑在后台队列，结果一律投递回主队列，
+/// 与 `IMClient` 的单队列约定一致；调用方必须在主队列调用 `probeAll` /
+/// `Handle.cancel()`。`Handle.isCancelled` 只在主队列读写，因此无需加锁——
+/// 与全仓库「无内部锁」的约定一致。
 public enum HostLatencyProbe {
     public static let timeoutSeconds: TimeInterval = 2
 
@@ -653,23 +723,15 @@ public enum HostLatencyProbe {
 
     /// 一批在途探测。调用方必须在界面销毁时 `cancel()`，否则回调会打到
     /// 已销毁的 view 上。
+    ///
+    /// `cancel()` 不中断已经发出的 connect —— 那需要跨线程操作 fd，会把锁
+    /// 引回来。阻塞的 connect 最多挂到 `timeout` 就自己结束，届时结果在
+    /// 主队列上被这个标志丢弃，代价是一个短暂的空转线程，换来的是零锁。
     public final class Handle {
-        private var connections: [NWConnection] = []
         fileprivate private(set) var isCancelled = false
 
-        fileprivate func track(_ connection: NWConnection) {
-            guard !isCancelled else {
-                connection.cancel()
-                return
-            }
-            connections.append(connection)
-        }
-
         public func cancel() {
-            guard !isCancelled else { return }
             isCancelled = true
-            connections.forEach { $0.cancel() }
-            connections.removeAll()
         }
     }
 
@@ -682,103 +744,131 @@ public enum HostLatencyProbe {
         onResult: @escaping (String, ProbeResult) -> Void
     ) -> Handle {
         let handle = Handle()
+        let timeoutMilliseconds = Int32(max(1, timeout * 1000))
         for host in hosts {
-            probe(host: host, port: port, timeout: timeout, handle: handle) { result in
-                onResult(host, result)
+            DispatchQueue.global(qos: .userInitiated).async {
+                let result = probeOnce(host: host, port: port, timeoutMilliseconds: timeoutMilliseconds)
+                DispatchQueue.main.async {
+                    guard !handle.isCancelled else { return }
+                    onResult(host, result)
+                }
             }
         }
         return handle
     }
 
-    private static func probe(
-        host: String,
-        port: UInt16,
-        timeout: TimeInterval,
-        handle: Handle,
-        completion: @escaping (ProbeResult) -> Void
-    ) {
-        guard let endpointPort = NWEndpoint.Port(rawValue: port) else {
-            DispatchQueue.main.async {
-                guard !handle.isCancelled else { return }
-                completion(.unreachable)
-            }
-            return
-        }
-        let connection = NWConnection(host: NWEndpoint.Host(host), port: endpointPort, using: .tcp)
-        handle.track(connection)
+    /// 同步探测一个 host，阻塞调用线程，**不得在主队列调用**。
+    static func probeOnce(host: String, port: UInt16, timeoutMilliseconds: Int32) -> ProbeResult {
+        var hints = addrinfo(
+            ai_flags: 0,
+            ai_family: AF_UNSPEC,
+            ai_socktype: SOCK_STREAM,
+            ai_protocol: IPPROTO_TCP,
+            ai_addrlen: 0,
+            ai_canonname: nil,
+            ai_addr: nil,
+            ai_next: nil
+        )
+        var addressList: UnsafeMutablePointer<addrinfo>?
+        guard getaddrinfo(host, String(port), &hints, &addressList) == 0,
+              let address = addressList else { return .unresolved }
+        defer { freeaddrinfo(addressList) }
+
+        let descriptor = socket(address.pointee.ai_family, address.pointee.ai_socktype, address.pointee.ai_protocol)
+        guard descriptor >= 0 else { return .unreachable }
+        defer { close(descriptor) }
+
+        // 非阻塞 connect + poll：阻塞式 connect 的超时由内核决定（可达 75 秒），
+        // 没法压到我们要的 2 秒。
+        var flags = fcntl(descriptor, F_GETFL, 0)
+        guard flags >= 0 else { return .unreachable }
+        flags |= O_NONBLOCK
+        guard fcntl(descriptor, F_SETFL, flags) >= 0 else { return .unreachable }
 
         let start = DispatchTime.now()
-        // 首个到达的终局事件赢，其余丢弃。全部在主队列上串行执行，
-        // 所以这个标志无需加锁——与全仓库「无内部锁」的线程约定一致。
-        var didFinish = false
-        let finish: (ProbeResult) -> Void = { result in
-            guard !didFinish else { return }
-            didFinish = true
-            connection.stateUpdateHandler = nil
-            connection.cancel()
-            guard !handle.isCancelled else { return }
-            completion(result)
+        if connect(descriptor, address.pointee.ai_addr, address.pointee.ai_addrlen) != 0 {
+            guard errno == EINPROGRESS else { return .unreachable }
+            var descriptorSet = pollfd(fd: descriptor, events: Int16(POLLOUT), revents: 0)
+            let ready = poll(&descriptorSet, 1, timeoutMilliseconds)
+            if ready == 0 { return .timedOut }
+            guard ready > 0 else { return .unreachable }
+            // poll 报可写只说明 connect 有了结论，成败要看 SO_ERROR ——
+            // 被 RST 拒绝的连接同样会让 fd 变可写。
+            var socketError: Int32 = 0
+            var length = socklen_t(MemoryLayout<Int32>.size)
+            guard getsockopt(descriptor, SOL_SOCKET, SO_ERROR, &socketError, &length) == 0,
+                  socketError == 0 else { return .unreachable }
         }
-
-        connection.stateUpdateHandler = { state in
-            switch state {
-            case .ready:
-                let elapsedNanoseconds = DispatchTime.now().uptimeNanoseconds - start.uptimeNanoseconds
-                finish(.latency(Int(elapsedNanoseconds / 1_000_000)))
-            case .failed(let error):
-                finish(classify(error))
-            case .waiting(let error):
-                // 探测不等路径恢复：DNS 解析失败在 NWConnection 上表现为
-                // `.waiting(.dns)` 并持续重试，永远不会转 `.failed`，
-                // 不在这里收口就只能靠超时兜底、丢掉「无法解析」的区分度。
-                finish(classify(error))
-            default:
-                break
-            }
-        }
-        connection.start(queue: .main)
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + timeout) {
-            finish(.timedOut)
-        }
-    }
-
-    private static func classify(_ error: NWError) -> ProbeResult {
-        if case .dns = error { return .unresolved }
-        return .unreachable
+        let elapsedNanoseconds = DispatchTime.now().uptimeNanoseconds - start.uptimeNanoseconds
+        return .latency(Int(elapsedNanoseconds / 1_000_000))
     }
 }
 ```
 
 - [ ] **Step 4: 跑测试确认通过**
 
-Run: `swift test --filter IMClientTests.HostLatencyProbeTests`
-Expected: 4 个用例 PASS。
+Run: `swift test --filter IMClientTests.HostLatencyProbeTests 2>&1 | grep -E "Test Case|Test Suite|Executed|error:"`
+Expected: 7 个用例全 PASS。
 
-若 `test_probeAll_unroutableAddress_timesOut` 在本机返回 `.unreachable` 而非 `.timedOut`（部分网络环境对 TEST-NET-1 会立刻回 EHOSTUNREACH，而不是让连接挂到超时），说明被测语义是「不可路由地址不会被误报成功」，具体走哪个失败分支由环境决定。此时把该用例改成下面这个更精确的断言，**不要**改成宽松的非空判断：
+三条用例的预期结果不可动摇，它们各自守着一条真实的失败模式，**任何一条改成更宽松的断言都是缺陷**：
 
-```swift
-    func test_probeAll_unroutableAddress_neverReportsSuccess() {
-        let done = expectation(description: "probe finished")
-        var result: HostLatencyProbe.ProbeResult?
-        _ = HostLatencyProbe.probeAll(hosts: ["192.0.2.1"], port: 6789, timeout: 1) { _, probeResult in
-            result = probeResult
-            done.fulfill()
-        }
-        wait(for: [done], timeout: 5)
+- `test_probeAll_closedLocalPort_reportsUnreachable` → `.unreachable`（守「端口无人监听不得报成耗时」）
+- `test_probeAll_unroutableAddress_timesOut` → `.timedOut`（守「不可路由不得报成耗时」，同时是「没走系统代理」的回归防线）
+- `test_probeAll_unresolvableHostname_reportsUnresolved` → `.unresolved`（守「域名解析失败要能和网络不可达区分开」）
 
-        // 走超时还是走不可达取决于网络环境，两者都是正确行为；
-        // 唯一不可接受的是报成一个耗时。
-        switch result {
-        case .timedOut, .unreachable:
-            break
-        default:
-            XCTFail("unroutable address must not report success, got \(String(describing: result))")
-        }
+若 `test_probeAll_unresolvableHostname_reportsUnresolved` 在你的网络下失败，先查 DNS 是否被劫持到了一个应答页（`dig no-such-host.invalid` 应返回 NXDOMAIN）。**不要**为了让它变绿而放宽断言。
+
+- [ ] **Step 5: 手工核验数字合理（不进自动化用例）**
+
+自动化用例只跑本地地址、不碰外网（外网用例会随网络抖动变红，不适合进 CI）。
+真实节点的数字量级用下面这个一次性脚本核验，**它不进仓库**：
+
+```bash
+cat > /tmp/probe-check.swift <<'SWIFT'
+import Foundation
+
+func probeOnce(host: String, port: UInt16, timeoutMilliseconds: Int32) -> String {
+    var hints = addrinfo(ai_flags: 0, ai_family: AF_UNSPEC, ai_socktype: SOCK_STREAM,
+                         ai_protocol: IPPROTO_TCP, ai_addrlen: 0, ai_canonname: nil,
+                         ai_addr: nil, ai_next: nil)
+    var addressList: UnsafeMutablePointer<addrinfo>?
+    guard getaddrinfo(host, String(port), &hints, &addressList) == 0,
+          let address = addressList else { return "unresolved" }
+    defer { freeaddrinfo(addressList) }
+    let fd = socket(address.pointee.ai_family, address.pointee.ai_socktype, address.pointee.ai_protocol)
+    guard fd >= 0 else { return "unreachable" }
+    defer { close(fd) }
+    var flags = fcntl(fd, F_GETFL, 0)
+    flags |= O_NONBLOCK
+    _ = fcntl(fd, F_SETFL, flags)
+    let start = DispatchTime.now()
+    if connect(fd, address.pointee.ai_addr, address.pointee.ai_addrlen) != 0 {
+        guard errno == EINPROGRESS else { return "unreachable(errno=\(errno))" }
+        var set = pollfd(fd: fd, events: Int16(POLLOUT), revents: 0)
+        let ready = poll(&set, 1, timeoutMilliseconds)
+        if ready == 0 { return "timedOut" }
+        guard ready > 0 else { return "unreachable" }
+        var socketError: Int32 = 0
+        var length = socklen_t(MemoryLayout<Int32>.size)
+        getsockopt(fd, SOL_SOCKET, SO_ERROR, &socketError, &length)
+        if socketError != 0 { return "unreachable(so_error=\(socketError))" }
     }
+    return "latency(\((DispatchTime.now().uptimeNanoseconds - start.uptimeNanoseconds) / 1_000_000)ms)"
+}
+
+for host in ["192.0.2.1", "sh-backend-tcp.fsharechat.cn",
+             "backend-tcp.fsharechat.cn", "backend-tcp-s2.fsharechat.cn"] {
+    print("\(host) -> \(probeOnce(host: host, port: 6789, timeoutMilliseconds: 2000))")
+}
+SWIFT
+swiftc -O /tmp/probe-check.swift -o /tmp/probe-check && /tmp/probe-check
 ```
 
-- [ ] **Step 5: 提交**
+期望：`192.0.2.1` 是 `timedOut`，三个生产节点都是几十到几百毫秒的 `latency`。
+参考量级（2026-07-31 在开发机实测）：上海 ~33ms，主节点 ~219ms，备节点 S2 ~187ms。
+**若三个节点都返回个位数毫秒**，说明你的实现又走上了系统代理，回 Step 3 检查。
+
+- [ ] **Step 6: 提交**
 
 ```bash
 git add Sources/IMClient/HostLatencyProbe.swift Tests/IMClientTests/HostLatencyProbeTests.swift

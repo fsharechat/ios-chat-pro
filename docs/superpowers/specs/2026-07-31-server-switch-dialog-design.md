@@ -72,12 +72,14 @@ UI 兜底（对齐 Android）：`connectedHost` 为 nil（未登录 / 尚未发�
 
 ## 延迟指标
 
-统一为**到 `host` + `AppConfig.imPort`(6789) 的 TCP 建连耗时**：新开一条 `NWConnection`，计时到 `.ready` 后立即 `cancel()`，2s 超时。
+统一为**到 `host` + `AppConfig.imPort`(6789) 的 TCP 建连耗时**：非阻塞 BSD socket `connect()` + `poll()` 计时，2s 超时，完成即 `close()`。与 Android `HostLatencyProbe.probeOnce()` 的 `Socket.connect(new InetSocketAddress(host, port), 2000)` 是同一件事。
 
 选择这个指标的理由：
 
 - 状态 1 的「延迟」与状态 2 列表中的数字是同一指标，可直接横向比较（「我现在 318ms，上海节点 41ms，该切」）。
 - 探测路径与端口和真实 IM 连接完全一致，不会出现「ICMP 通但 IM 端口不通」的假绿灯。
+
+**明确不用 `NWConnection` 做探测**（2026-07-31 实测推翻了初版设计）：`NWConnection` 遵守系统代理设置，开了 HTTP/SOCKS 代理或 VPN 时它连的是代理而非目标节点，`.ready` 会在十几毫秒内到达且与目标是否可达无关。实测在一台配了 `SOCKS 127.0.0.1:1089` 的 Mac 上，对不可路由的 `192.0.2.1:6789` 探测返回 `.ready`(15ms)，而同机裸 socket 正确返回超时。若沿用 `NWConnection`，任何开代理的真机上三个节点都会显示成 ~1ms，选择列表彻底失去意义——**这是错误答案而非慢答案，比没有这个功能更糟**。裸 socket 不走代理，测的是应用真正要走的那条 TCP 路径（`IMClient` 的 `NWConnectionTransport` 虽然是 `NWConnection`，但它连的是真实节点，代理只影响可达性判断的语义，不影响这里「哪个节点更近」的相对比较）。
 
 已知取舍：若服务端 TCP 能 accept 但 IM 业务逻辑卡死，建连耗时仍显示正常。该场景由「连接状态」行覆盖——它由 `IMConnectionStatus` 驱动（CONNECT_ACK + 心跳），会掉到「未连接」。两行各管一件事：连接状态管应用层健康，延迟管网络往返。
 
