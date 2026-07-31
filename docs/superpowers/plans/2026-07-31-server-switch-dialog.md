@@ -754,7 +754,29 @@ public enum HostLatencyProbe {
 
 Run: `swift test --filter IMClientTests.HostLatencyProbeTests`
 Expected: 4 个用例 PASS。
-若 `test_probeAll_unroutableAddress_timesOut` 在本机返回 `.unreachable` 而非 `.timedOut`（某些网络环境会立刻给 EHOSTUNREACH），把断言放宽为 `XCTAssertNotEqual(result, nil)` 且 `if case .latency = result { XCTFail(...) }` —— 关键是「不会误报成功」，不是具体哪种失败。
+
+若 `test_probeAll_unroutableAddress_timesOut` 在本机返回 `.unreachable` 而非 `.timedOut`（部分网络环境对 TEST-NET-1 会立刻回 EHOSTUNREACH，而不是让连接挂到超时），说明被测语义是「不可路由地址不会被误报成功」，具体走哪个失败分支由环境决定。此时把该用例改成下面这个更精确的断言，**不要**改成宽松的非空判断：
+
+```swift
+    func test_probeAll_unroutableAddress_neverReportsSuccess() {
+        let done = expectation(description: "probe finished")
+        var result: HostLatencyProbe.ProbeResult?
+        _ = HostLatencyProbe.probeAll(hosts: ["192.0.2.1"], port: 6789, timeout: 1) { _, probeResult in
+            result = probeResult
+            done.fulfill()
+        }
+        wait(for: [done], timeout: 5)
+
+        // 走超时还是走不可达取决于网络环境，两者都是正确行为；
+        // 唯一不可接受的是报成一个耗时。
+        switch result {
+        case .timedOut, .unreachable:
+            break
+        default:
+            XCTFail("unroutable address must not report success, got \(String(describing: result))")
+        }
+    }
+```
 
 - [ ] **Step 5: 提交**
 
