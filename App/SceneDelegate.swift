@@ -202,6 +202,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
                 storage: self.environment.storage,
                 messageSending: self.environment.messagingService,
                 imageUploading: self.environment.mediaUploadService,
+                contactSync: self.environment.contactSyncService,
                 voiceUploading: self.environment.mediaUploadService,
                 fileUploading: self.environment.mediaUploadService,
                 videoUploading: self.environment.mediaUploadService,
@@ -250,6 +251,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
                     storage: self.environment.storage,
                     messageSending: self.environment.messagingService,
                     imageUploading: self.environment.mediaUploadService,
+                    contactSync: self.environment.contactSyncService,
                     voiceUploading: self.environment.mediaUploadService,
                     fileUploading: self.environment.mediaUploadService,
                     videoUploading: self.environment.mediaUploadService,
@@ -345,6 +347,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
                 groupActing: environment.groupSyncService,
                 groupSyncing: environment.groupSyncService,
                 storage: environment.storage,
+                contactSync: environment.contactSyncService,
                 currentUserId: environment.imClient?.userId ?? ""
             )
             let groupInfoViewController = GroupInfoViewController(viewModel: groupInfoViewModel)
@@ -411,6 +414,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
                 groupActing: self.environment.groupSyncService,
                 groupSyncing: self.environment.groupSyncService,
                 storage: self.environment.storage,
+                contactSync: self.environment.contactSyncService,
                 currentUserId: self.environment.imClient?.userId ?? ""
             )
             let groupInfoViewController = GroupInfoViewController(viewModel: groupInfoViewModel)
@@ -446,6 +450,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
                         storage: self.environment.storage,
                         messageSending: self.environment.messagingService,
                         imageUploading: self.environment.mediaUploadService,
+                        contactSync: self.environment.contactSyncService,
                         voiceUploading: self.environment.mediaUploadService,
                         fileUploading: self.environment.mediaUploadService,
                         videoUploading: self.environment.mediaUploadService,
@@ -565,6 +570,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
                     storage: self.environment.storage,
                     messageSending: self.environment.messagingService,
                     imageUploading: self.environment.mediaUploadService,
+                    contactSync: self.environment.contactSyncService,
                     voiceUploading: self.environment.mediaUploadService,
                     fileUploading: self.environment.mediaUploadService,
                     videoUploading: self.environment.mediaUploadService,
@@ -610,6 +616,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
                     storage: self.environment.storage,
                     messageSending: self.environment.messagingService,
                     imageUploading: self.environment.mediaUploadService,
+                    contactSync: self.environment.contactSyncService,
                     voiceUploading: self.environment.mediaUploadService,
                     fileUploading: self.environment.mediaUploadService,
                     videoUploading: self.environment.mediaUploadService,

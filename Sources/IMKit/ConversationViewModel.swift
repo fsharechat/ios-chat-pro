@@ -23,6 +23,7 @@ public final class ConversationViewModel {
 
     private let storage: IMStorage
     private let messageSending: MessageSending?
+    private let contactSync: ContactInfoFetching?
     private let imageUploading: ImageUploading?
     private let voiceUploading: VoiceUploading?
     private let fileUploading: FileUploading?
@@ -54,17 +55,30 @@ public final class ConversationViewModel {
     private var streamingRow: StreamingRow?
     private var lastMessages: [StoredMessage] = []
     private var cancellable: AnyCancellable?
+    private var usersCancellable: AnyCancellable?
     /// Per-batch user lookup, filled by `makeRows` with one bulk
     /// `users(uids:)` query — `buildStoredMessageRow`/`resolveDisplayName`
     /// read from here instead of issuing one `dbQueue.read` per message,
     /// which serialized 30+ round-trips through the database queue on every
     /// rows rebuild (the dominant cost of opening a conversation).
     private var userCache: [String: StoredUser] = [:]
+    /// Every uid the current rows resolve a name or avatar for — the exact
+    /// key set `makeRows` just looked up. `handleUsersUpdate` filters the
+    /// whole-table `usersPublisher` feed against this so an unrelated
+    /// profile write doesn't trigger a rows rebuild.
+    private var referencedUids: Set<String> = []
+    /// uids already asked for over `UPUI`. Rows rebuild on every message
+    /// change and every relevant profile change; without this, each rebuild
+    /// would re-request the same still-unresolved uid (a profile the server
+    /// simply has no `displayName` for never stops looking unresolved — see
+    /// `ContactSyncService.fetchUserInfo`'s own note on that trade-off).
+    private var requestedProfileUids: Set<String> = []
 
     public init(
         storage: IMStorage,
         messageSending: MessageSending?,
         imageUploading: ImageUploading?,
+        contactSync: ContactInfoFetching? = nil,
         voiceUploading: VoiceUploading? = nil,
         fileUploading: FileUploading? = nil,
         videoUploading: VideoUploading? = nil,
@@ -79,6 +93,7 @@ public final class ConversationViewModel {
     ) {
         self.storage = storage
         self.messageSending = messageSending
+        self.contactSync = contactSync
         self.imageUploading = imageUploading
         self.voiceUploading = voiceUploading
         self.fileUploading = fileUploading
@@ -96,7 +111,36 @@ public final class ConversationViewModel {
             .messagesPublisher(conversationType: conversationType, target: target, line: line, limit: pageSize)
             .replaceError(with: [])
             .sink { [weak self] messages in self?.handleMessagesUpdate(messages) }
+        // Subscribed *after* the messages feed on purpose: with `.immediate`
+        // scheduling the first emission arrives synchronously here, and it
+        // needs `referencedUids`/`userCache` already filled by the initial
+        // `makeRows` to decide whether anything changed.
+        usersCancellable = storage.users.usersPublisher()
+            .replaceError(with: [])
+            .sink { [weak self] users in self?.handleUsersUpdate(users) }
         bindStreaming()
+    }
+
+    /// A sender's profile resolves asynchronously — the `UPUI` round trip
+    /// `requestUnresolvedProfiles` kicks off lands with no accompanying
+    /// message event. Driving rows off `messagesPublisher` alone left the
+    /// bubble frozen on its uid/no-avatar fallback until a new message
+    /// arrived or the screen was popped and re-pushed (`reprocessMessages`
+    /// on the second `viewWillAppear`), which is exactly what made this look
+    /// intermittent. Only a profile this screen actually renders triggers a
+    /// rebuild: `usersPublisher()` observes the entire `user` table, and a
+    /// friend-list sync writes hundreds of rows at once.
+    private func handleUsersUpdate(_ users: [StoredUser]) {
+        guard !referencedUids.isEmpty else { return }
+        let changed = users.contains { user in
+            guard referencedUids.contains(user.uid) else { return false }
+            let cached = userCache[user.uid]
+            return cached?.displayName != user.displayName
+                || cached?.name != user.name
+                || cached?.portrait != user.portrait
+        }
+        guard changed else { return }
+        reprocessMessages()
     }
 
     /// Failure (e.g. serialization, or no `messageSending` configured) is
@@ -527,7 +571,29 @@ public final class ConversationViewModel {
         }
         let fetched = (try? storage.users.users(uids: Array(uids))) ?? []
         userCache = Dictionary(uniqueKeysWithValues: fetched.map { ($0.uid, $0) })
+        referencedUids = uids
+        requestUnresolvedProfiles(uids)
         return messages.map(makeRow)
+    }
+
+    /// Asks the server for any referenced profile `UserStore` can't render.
+    /// Group senders are the case that matters: `IMGroups` only ever syncs
+    /// membership (uid + role) and never writes `UserStore`, so a member who
+    /// isn't a friend has no profile at all and nothing else on this screen's
+    /// path would ever fetch one.
+    ///
+    /// `displayName == nil` (not row-absence) is the unresolved test, matching
+    /// `ContactSyncService.fetchUserInfo`: `FriendSyncHandler` writes an
+    /// all-nil placeholder row for a newly-flagged friend, and a
+    /// presence-only check would mistake that for a resolved profile.
+    private func requestUnresolvedProfiles(_ uids: Set<String>) {
+        guard let contactSync else { return }
+        let unresolved = uids.filter { uid in
+            !requestedProfileUids.contains(uid) && userCache[uid]?.displayName == nil
+        }
+        guard !unresolved.isEmpty else { return }
+        requestedProfileUids.formUnion(unresolved)
+        contactSync.fetchUserInfo(uids: Array(unresolved), forceRefresh: false)
     }
 
     /// `message.id` is always non-nil for a row fetched back from the

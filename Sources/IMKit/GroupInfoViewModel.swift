@@ -47,15 +47,21 @@ public final class GroupInfoViewModel {
     private let groupActing: GroupActing?
     private let groupSyncing: GroupSyncing?
     private let storage: IMStorage
+    private let contactSync: ContactInfoFetching?
     private let currentUserId: String
     private var groupCancellable: AnyCancellable?
     private var membersCancellable: AnyCancellable?
+    /// uids already asked for over `UPUI` — see `ConversationViewModel`'s
+    /// field of the same name for why re-derivation alone can't be trusted
+    /// to stop re-requesting.
+    private var requestedProfileUids: Set<String> = []
 
-    public init(groupId: String, groupActing: GroupActing?, groupSyncing: GroupSyncing?, storage: IMStorage, currentUserId: String) {
+    public init(groupId: String, groupActing: GroupActing?, groupSyncing: GroupSyncing?, storage: IMStorage, contactSync: ContactInfoFetching? = nil, currentUserId: String) {
         self.groupId = groupId
         self.groupActing = groupActing
         self.groupSyncing = groupSyncing
         self.storage = storage
+        self.contactSync = contactSync
         self.currentUserId = currentUserId
 
         // Load initial conversation settings (isTop, isMuted) from stored conversation
@@ -75,15 +81,30 @@ public final class GroupInfoViewModel {
                 self?.handleGroupUpdate(group)
                 self?.isFav = group?.isFav ?? false
             }
+        // Membership and profiles are synced by two unrelated layers:
+        // `IMGroups` writes `GroupStore` (uid + role) and never touches
+        // `UserStore`, so a member's name/avatar resolves separately and
+        // usually *later* — via the `UPUI` round trip `requestUnresolvedProfiles`
+        // starts below. Deriving rows from `membersPublisher` alone left every
+        // non-friend member frozen on their uid fallback, the same trap
+        // `ConversationListViewModel` documents. Combining with
+        // `usersPublisher()` re-derives whenever a profile lands.
+        //
+        // Unlike `ConversationViewModel` this doesn't filter the feed down to
+        // relevant uids first: re-deriving a member grid is a cheap map on a
+        // background queue (not the 30-row rebuild that dominates opening a
+        // conversation), and the equality guard below keeps an unrelated
+        // profile write from churning the UI anyway.
         membersCancellable = storage.groups.membersPublisher(groupId: groupId)
             .replaceError(with: [])
+            .combineLatest(storage.users.usersPublisher().replaceError(with: []))
             .receive(on: DispatchQueue.global(qos: .userInitiated))
-            .map { [weak self] storedMembers -> [MemberRow] in
-                guard let self else { return [] }
+            .map { [weak self] storedMembers, _ -> (rows: [MemberRow], unresolved: [String]) in
+                guard let self else { return ([], []) }
                 let uids = storedMembers.map { $0.memberId }
                 let userMap = (try? self.storage.users.users(uids: uids))?
                     .reduce(into: [String: StoredUser]()) { $0[$1.uid] = $1 } ?? [:]
-                return storedMembers.map { member in
+                let rows = storedMembers.map { member in
                     let user = userMap[member.memberId]
                     return MemberRow(
                         uid: member.memberId,
@@ -92,17 +113,38 @@ public final class GroupInfoViewModel {
                         isOwner: member.memberType == .owner
                     )
                 }
+                // `displayName == nil` rather than row-absence — see
+                // `requestUnresolvedProfiles`.
+                return (rows, uids.filter { userMap[$0]?.displayName == nil })
             }
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] rows in
+            .sink { [weak self] derived in
                 guard let self else { return }
-                self.members = rows
-                let nowMember = rows.contains { $0.uid == self.currentUserId }
-                if nowMember != self.isMember {
-                    self.isMember = nowMember
-                    self.recomputePermissions()
+                if derived.rows != self.members {
+                    self.members = derived.rows
+                    let nowMember = derived.rows.contains { $0.uid == self.currentUserId }
+                    if nowMember != self.isMember {
+                        self.isMember = nowMember
+                        self.recomputePermissions()
+                    }
                 }
+                self.requestUnresolvedProfiles(derived.unresolved)
             }
+    }
+
+    /// Pulls the profiles the member grid can't render. `displayName == nil`
+    /// (not row-absence) is the unresolved test, matching
+    /// `ContactSyncService.fetchUserInfo`: `FriendSyncHandler` writes an
+    /// all-nil placeholder row for a newly-flagged friend, and a
+    /// presence-only check would mistake that for a resolved profile.
+    /// Called on the main queue only — the derivation above runs on a
+    /// background queue and must not touch `requestedProfileUids`.
+    private func requestUnresolvedProfiles(_ uids: [String]) {
+        guard let contactSync else { return }
+        let unrequested = uids.filter { !requestedProfileUids.contains($0) }
+        guard !unrequested.isEmpty else { return }
+        requestedProfileUids.formUnion(unrequested)
+        contactSync.fetchUserInfo(uids: unrequested, forceRefresh: false)
     }
 
     public func refresh() {
