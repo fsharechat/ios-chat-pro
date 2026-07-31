@@ -99,6 +99,14 @@ public final class IMClient {
     /// 来电永不弹窗。
     public private(set) var serverTimeDeltaMillis: Int64 = 0
 
+    /// 本轮连接尝试选中的 host（`startConnection()` 从 `hostSelector` 取到
+    /// 即赋值），尚未发起过任何连接时为 nil。
+    ///
+    /// 记录的是「正在连谁」而不是「握手成功的是谁」——后者由
+    /// `connectionStatus` 单独表达。连接服务弹窗把两者分别显示成
+    /// 「连接地址」和「连接状态」两行，正是这个分工。
+    public private(set) var currentHost: String?
+
     private static let maxAutomaticReconnectAttempts = 4
     /// 收到 `.notViable`（建连卡在 waiting / 已建连接路径失效）后等多久
     /// 还没恢复就主动 cancel 走统一失败路径。太短会在信号抖动时误杀
@@ -113,7 +121,7 @@ public final class IMClient {
 
     private let configuration: IMClientConfiguration
     private let transportFactory: (String, UInt16) -> IMTransportConnection
-    private let hostSelector: RoundRobinHostSelector
+    private var hostSelector: RoundRobinHostSelector
     private let scheduler: Scheduler
     private let heartbeatManager: HeartbeatManager
     private let handlerRegistry = MessageHandlerRegistry()
@@ -130,6 +138,9 @@ public final class IMClient {
     private var viabilityGraceToken: SchedulerToken?
     private var handshakeTimeoutToken: SchedulerToken?
     private var nextMessageId: UInt16 = 0
+
+    /// 测试逃生口：让用例能对「当前在途的 transport」发事件。生产代码不用。
+    var currentTransportForTesting: IMTransportConnection? { transport }
 
     public init(
         configuration: IMClientConfiguration,
@@ -190,6 +201,30 @@ public final class IMClient {
         startConnection()
     }
 
+    /// 运行时切换 IM 接入节点：换掉轮询器后立刻重连到新目标。
+    ///
+    /// 不走 `disconnect()` —— 那会置 `userDisconnect = true` 永久堵死后续
+    /// 重连（那是登出语义）。旧连接的清场（摘回调 + cancel transport +
+    /// 取消重连/宽限/握手三个定时器 + `frameDecoder.reset()`）全部由
+    /// `startConnection()` 完成，它是每一轮连接的唯一入口。**本方法的正确性
+    /// 依赖这个不变量**：若将来新增绕过 `startConnection()` 的连接路径，
+    /// 这里就会退化成「旧 socket 的字节和新连接交织进同一个 FrameDecoder」。
+    ///
+    /// 不清 `IMStorage`、不动 credentials，重连后照常 `sendConnectMessage()`
+    /// 用已有 token 重新鉴权 —— 同集群 token 通用，用户无需重新登录。
+    ///
+    /// - Parameter hostsString: `:` 分隔的 host 串。单个 host = 固定该节点。
+    /// - Throws: `RoundRobinHostSelector.Error.emptyHostsString`。抛出时不
+    ///   触碰现有连接，调用方可安全忽略。
+    public func switchHosts(_ hostsString: String) throws {
+        // 先构造再赋值：构造失败时现有 hostSelector 与在途连接原封不动。
+        hostSelector = try RoundRobinHostSelector(hostsString: hostsString)
+        userDisconnect = false
+        reconnectAttempt = 0
+        heartbeatToken?.cancel()
+        startConnection()
+    }
+
     private func detachAndCancelTransport() {
         transport?.onEvent = nil
         transport?.onDataReceived = nil
@@ -220,6 +255,7 @@ public final class IMClient {
         // 半帧字节不属于即将建立的新字节流，必须丢掉再开始解码。
         frameDecoder.reset()
         let host = hostSelector.nextHost()
+        currentHost = host
         let newTransport = transportFactory(host, configuration.port)
         newTransport.onEvent = { [weak self] event in self?.handleTransportEvent(event) }
         newTransport.onDataReceived = { [weak self] data in self?.handleReceivedData(data) }

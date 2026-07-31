@@ -437,4 +437,128 @@ final class IMClientTests: XCTestCase {
 
         XCTAssertEqual(fakeTransport.startCallCount, startsBefore)
     }
+
+    // MARK: - switchHosts
+
+    /// 自建 client：`setUp()` 的 factory 不记录 host，这里要断言选中的 host。
+    private func makeRecordingClient(
+        hosts: String,
+        transports: [FakeTransportConnection],
+        recordedHosts: @escaping (String) -> Void
+    ) throws -> IMClient {
+        var index = 0
+        let configuration = IMClientConfiguration(
+            hosts: hosts,
+            port: 6789,
+            userId: "u1",
+            token: makeTestToken(),
+            clientIdentifier: "device-1"
+        )
+        return try IMClient(
+            configuration: configuration,
+            scheduler: scheduler,
+            heartbeatManager: HeartbeatManager(),
+            transportFactory: { host, _ in
+                recordedHosts(host)
+                let transport = transports[min(index, transports.count - 1)]
+                index += 1
+                return transport
+            }
+        )
+    }
+
+    func test_currentHost_isNilBeforeConnectingThenTracksSelectedHost() throws {
+        var hosts: [String] = []
+        let client = try makeRecordingClient(
+            hosts: "host-a:host-b",
+            transports: [FakeTransportConnection(), FakeTransportConnection()],
+            recordedHosts: { hosts.append($0) }
+        )
+        XCTAssertNil(client.currentHost)
+
+        client.connect()
+
+        XCTAssertEqual(client.currentHost, "host-a")
+        XCTAssertEqual(hosts, ["host-a"])
+    }
+
+    func test_switchHosts_cancelsOldTransportAndConnectsToNewHost() throws {
+        let oldTransport = FakeTransportConnection()
+        let newTransport = FakeTransportConnection()
+        var hosts: [String] = []
+        let client = try makeRecordingClient(
+            hosts: "host-a:host-b",
+            transports: [oldTransport, newTransport],
+            recordedHosts: { hosts.append($0) }
+        )
+        client.connect()
+        XCTAssertEqual(oldTransport.cancelCallCount, 0)
+
+        try client.switchHosts("pinned-host")
+
+        XCTAssertEqual(oldTransport.cancelCallCount, 1)
+        XCTAssertEqual(newTransport.startCallCount, 1)
+        XCTAssertEqual(hosts, ["host-a", "pinned-host"])
+        XCTAssertEqual(client.currentHost, "pinned-host")
+        XCTAssertEqual(client.connectionStatus, .connecting)
+    }
+
+    func test_switchHosts_singleHostIsUsedForEveryReconnect() throws {
+        var hosts: [String] = []
+        let client = try makeRecordingClient(
+            hosts: "host-a:host-b",
+            transports: [FakeTransportConnection(), FakeTransportConnection(), FakeTransportConnection()],
+            recordedHosts: { hosts.append($0) }
+        )
+        client.connect()
+
+        try client.switchHosts("pinned-host")
+        // 断开一次，让退避重连再选一次 host
+        client.connect()
+
+        XCTAssertEqual(hosts, ["host-a", "pinned-host", "pinned-host"])
+    }
+
+    func test_switchHosts_resetsBackoffSoAutomaticReconnectsStartOver() throws {
+        var hosts: [String] = []
+        let transports = (0..<8).map { _ in FakeTransportConnection() }
+        let client = try makeRecordingClient(
+            hosts: "host-a",
+            transports: transports,
+            recordedHosts: { hosts.append($0) }
+        )
+        client.connect()
+        // 耗尽 4 次自动重连额度（`maxAutomaticReconnectAttempts` = 4）
+        for _ in 0..<4 {
+            (client.currentTransportForTesting as? FakeTransportConnection)?.simulate(.failed(URLError(.timedOut)))
+            XCTAssertTrue(scheduler.fireNext())
+        }
+        // 初次 connect 1 次 + 4 次退避重连
+        XCTAssertEqual(hosts.count, 5)
+
+        try client.switchHosts("pinned-host")
+        (client.currentTransportForTesting as? FakeTransportConnection)?.simulate(.failed(URLError(.timedOut)))
+
+        // 切换后额度归零，这次失败仍能排到一次自动重连（额度未归零时
+        // `scheduleReconnectIfNeeded` 会直接 return，fireNext 就返回 false）
+        XCTAssertTrue(scheduler.fireNext())
+        XCTAssertEqual(hosts.count, 7)
+        XCTAssertEqual(hosts.last, "pinned-host")
+    }
+
+    func test_switchHosts_emptyStringThrowsAndLeavesExistingConnectionAlone() throws {
+        let transport = FakeTransportConnection()
+        let client = try makeRecordingClient(
+            hosts: "host-a",
+            transports: [transport],
+            recordedHosts: { _ in }
+        )
+        client.connect()
+
+        XCTAssertThrowsError(try client.switchHosts("")) { error in
+            XCTAssertEqual(error as? RoundRobinHostSelector.Error, .emptyHostsString)
+        }
+        XCTAssertEqual(transport.cancelCallCount, 0)
+        XCTAssertEqual(client.currentHost, "host-a")
+    }
 }
