@@ -19,6 +19,9 @@ public final class AppEnvironment {
     public let storage: IMStorage
     public let credentialsStore: CredentialsStore
     public let deviceIdentifierProvider: DeviceIdentifierProvider
+    /// 用户固定的 IM 节点。挂在这里而非塞进 `AppConfig`，因为它是**用户
+    /// 选择**（可变、持久化），`AppConfig` 是编译期常量配置。
+    public let serverNodeStore: ServerNodeStore
     public let config: AppConfig
     private let transportFactory: (String, UInt16) -> IMTransportConnection
 
@@ -61,6 +64,7 @@ public final class AppEnvironment {
         storage: IMStorage,
         credentialsStore: CredentialsStore = CredentialsStore(),
         deviceIdentifierProvider: DeviceIdentifierProvider = DeviceIdentifierProvider(),
+        serverNodeStore: ServerNodeStore = ServerNodeStore(),
         transportFactory: @escaping (String, UInt16) -> IMTransportConnection = { host, port in
             NWConnectionTransport(host: host, port: port)
         }
@@ -69,6 +73,7 @@ public final class AppEnvironment {
         self.storage = storage
         self.credentialsStore = credentialsStore
         self.deviceIdentifierProvider = deviceIdentifierProvider
+        self.serverNodeStore = serverNodeStore
         self.transportFactory = transportFactory
         credentialsStore.clearIfFreshInstall()
         // start(queue: .main) 让回调直接落在主队列，符合本类的单队列约定。
@@ -93,6 +98,25 @@ public final class AppEnvironment {
         imClient?.reconnectIfNeeded()
     }
 
+    /// 本轮连接尝试选中的 host；未登录或尚未发起连接时为 nil。连接服务
+    /// 弹窗用它显示「连接地址」，取不到时由 UI 按 pin 状态兜底。
+    public var connectedHost: String? { imClient?.currentHost }
+
+    /// 固定到某个节点（`pinnedHost` 非 nil）或恢复自动轮询（nil）。
+    /// 先写持久化，再让在途连接立即切过去；未登录（`imClient` 为 nil）时
+    /// 只写持久化，下次 `connectIfPossible()` 自然读到。
+    public func switchServerNode(pinnedHost: String?) {
+        if let pinnedHost {
+            serverNodeStore.pin(pinnedHost)
+        } else {
+            serverNodeStore.unpin()
+        }
+        // 节点表是编译期常量，host 串不可能为空，`switchHosts` 的 throw
+        // 到不了这里——与 `connectIfPossible()` 里对 `IMClient.init` 抛错的
+        // 既有处理保持一致（那里也是 `try?`）。
+        try? imClient?.switchHosts(serverNodeStore.currentHostSpec(nodes: config.serverNodes))
+    }
+
     /// Reads `credentialsStore`; if credentials exist, (re)constructs
     /// `IMClient`/`MessagingService`, wires the sync-state-driven catch-up
     /// pull (`ConnectAckHandler.onSyncState` →
@@ -109,7 +133,7 @@ public final class AppEnvironment {
         guard let credentials = credentialsStore.load() else { return false }
 
         let configuration = IMClientConfiguration(
-            hosts: config.imHosts,
+            hosts: serverNodeStore.currentHostSpec(nodes: config.serverNodes),
             port: config.imPort,
             userId: credentials.userId,
             token: credentials.token,

@@ -182,4 +182,91 @@ final class AppEnvironmentTests: XCTestCase {
         XCTAssertTrue(try storage.conversations.conversations().isEmpty)
         XCTAssertEqual(try storage.syncState.get().msgHead, 0)
     }
+
+    // MARK: - 节点切换
+
+    /// 记录每次建连用的 host。`setUp()` 的 factory 丢弃 host 参数，这里要断言它。
+    private func makeEnvironmentRecordingHosts(
+        serverNodeStore: ServerNodeStore,
+        onHost: @escaping (String) -> Void
+    ) -> AppEnvironment {
+        AppEnvironment(
+            storage: storage,
+            credentialsStore: credentialsStore,
+            deviceIdentifierProvider: DeviceIdentifierProvider(defaults: UserDefaults(suiteName: "AppEnvironmentTests.\(UUID().uuidString)")!),
+            serverNodeStore: serverNodeStore,
+            transportFactory: { [unowned self] host, _ in
+                onHost(host)
+                return self.fakeTransport
+            }
+        )
+    }
+
+    private func makeIsolatedNodeStore() -> ServerNodeStore {
+        ServerNodeStore(defaults: UserDefaults(suiteName: "AppEnvironmentTests.nodes.\(UUID().uuidString)")!)
+    }
+
+    func test_connectIfPossible_pinnedNode_connectsToThatHostOnly() {
+        let nodeStore = makeIsolatedNodeStore()
+        nodeStore.pin("backend-tcp-s2.fsharechat.cn")
+        var hosts: [String] = []
+        let environment = makeEnvironmentRecordingHosts(serverNodeStore: nodeStore) { hosts.append($0) }
+        credentialsStore.save(Credentials(userId: "u1", token: "dG9rZW4="))
+
+        XCTAssertTrue(environment.connectIfPossible())
+
+        XCTAssertEqual(hosts, ["backend-tcp-s2.fsharechat.cn"])
+        XCTAssertEqual(environment.connectedHost, "backend-tcp-s2.fsharechat.cn")
+    }
+
+    func test_connectIfPossible_noPin_connectsToTheFirstNodeInTheTable() {
+        var hosts: [String] = []
+        let environment = makeEnvironmentRecordingHosts(serverNodeStore: makeIsolatedNodeStore()) { hosts.append($0) }
+        credentialsStore.save(Credentials(userId: "u1", token: "dG9rZW4="))
+
+        environment.connectIfPossible()
+
+        XCTAssertEqual(hosts, ["sh-backend-tcp.fsharechat.cn"])
+    }
+
+    func test_switchServerNode_persistsPinAndReconnectsToTheNewHost() {
+        let nodeStore = makeIsolatedNodeStore()
+        var hosts: [String] = []
+        let environment = makeEnvironmentRecordingHosts(serverNodeStore: nodeStore) { hosts.append($0) }
+        credentialsStore.save(Credentials(userId: "u1", token: "dG9rZW4="))
+        environment.connectIfPossible()
+
+        environment.switchServerNode(pinnedHost: "backend-tcp.fsharechat.cn")
+
+        XCTAssertEqual(nodeStore.pinnedHost(nodes: AppConfig.production.serverNodes), "backend-tcp.fsharechat.cn")
+        XCTAssertEqual(hosts, ["sh-backend-tcp.fsharechat.cn", "backend-tcp.fsharechat.cn"])
+        XCTAssertEqual(environment.connectedHost, "backend-tcp.fsharechat.cn")
+    }
+
+    func test_switchServerNode_nilRestoresAutoRoundRobin() {
+        let nodeStore = makeIsolatedNodeStore()
+        nodeStore.pin("backend-tcp-s2.fsharechat.cn")
+        var hosts: [String] = []
+        let environment = makeEnvironmentRecordingHosts(serverNodeStore: nodeStore) { hosts.append($0) }
+        credentialsStore.save(Credentials(userId: "u1", token: "dG9rZW4="))
+        environment.connectIfPossible()
+
+        environment.switchServerNode(pinnedHost: nil)
+
+        XCTAssertNil(nodeStore.pinnedHost(nodes: AppConfig.production.serverNodes))
+        // 恢复轮询后，新一轮从节点表首位开始
+        XCTAssertEqual(hosts.last, "sh-backend-tcp.fsharechat.cn")
+    }
+
+    func test_switchServerNode_whileLoggedOut_onlyPersistsAndDoesNotCrash() {
+        let nodeStore = makeIsolatedNodeStore()
+        var hosts: [String] = []
+        let environment = makeEnvironmentRecordingHosts(serverNodeStore: nodeStore) { hosts.append($0) }
+
+        environment.switchServerNode(pinnedHost: "backend-tcp.fsharechat.cn")
+
+        XCTAssertEqual(nodeStore.pinnedHost(nodes: AppConfig.production.serverNodes), "backend-tcp.fsharechat.cn")
+        XCTAssertTrue(hosts.isEmpty)
+        XCTAssertNil(environment.connectedHost)
+    }
 }
