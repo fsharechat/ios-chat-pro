@@ -16,21 +16,43 @@ public struct AppConfig {
         }
     }
 
+    /// 一个可选的 IM 接入节点。`name` 是给用户看的中文名（连接服务弹窗的
+    /// 单选列表用它），`host` 是实际连接地址。数组顺序即
+    /// `RoundRobinHostSelector` 的轮询顺序，首位就是首选节点。
+    public struct ServerNode: Equatable {
+        public var name: String
+        public var host: String
+
+        public init(name: String, host: String) {
+            self.name = name
+            self.host = host
+        }
+    }
+
     public var apiBaseURL: URL
-    public var imHosts: String
+    public var serverNodes: [ServerNode]
     public var imPort: UInt16
     public var iceServers: [IceServer]
 
-    public init(apiBaseURL: URL, imHosts: String, imPort: UInt16, iceServers: [IceServer]) {
+    /// 全部节点 host 的 `:` 拼接串——`RoundRobinHostSelector` 与
+    /// `AboutViewController` 沿用的既有格式。由 `serverNodes` 派生而非
+    /// 单独存储，避免节点表与拼接串两处失同步。
+    public var imHosts: String { serverNodes.map(\.host).joined(separator: ":") }
+
+    public init(apiBaseURL: URL, serverNodes: [ServerNode], imPort: UInt16, iceServers: [IceServer]) {
         self.apiBaseURL = apiBaseURL
-        self.imHosts = imHosts
+        self.serverNodes = serverNodes
         self.imPort = imPort
         self.iceServers = iceServers
     }
 
     public static let production = AppConfig(
         apiBaseURL: URL(string: "https://backend-http.fsharechat.cn")!,
-        imHosts: "sh-backend-tcp.fsharechat.cn:backend-tcp.fsharechat.cn:backend-tcp-s2.fsharechat.cn",
+        serverNodes: [
+            ServerNode(name: "上海节点", host: "sh-backend-tcp.fsharechat.cn"),
+            ServerNode(name: "主节点", host: "backend-tcp.fsharechat.cn"),
+            ServerNode(name: "备节点 S2", host: "backend-tcp-s2.fsharechat.cn"),
+        ],
         imPort: 6789,
         // Same TURN servers `android-chat-pro`'s `Config.java` already
         // points at in production — `chat-server-pro` plays no part in ICE
