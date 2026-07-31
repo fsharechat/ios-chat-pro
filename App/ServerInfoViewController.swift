@@ -21,6 +21,9 @@ final class ServerInfoViewController: UIViewController {
     /// 当前在途的探测。切状态或弹窗消失时必须 cancel，否则回调会打到已
     /// 销毁的 view 上。
     private var probeHandle: HostLatencyProbe.Handle?
+    /// 状态 2 的 view。首次进入状态 2 时创建，之后复用——弹窗要求两个状态
+    /// 互切而不销毁重建。
+    private var pickerView: ServerNodePickerView?
 
     init(
         nodes: [AppConfig.ServerNode],
@@ -114,10 +117,38 @@ final class ServerInfoViewController: UIViewController {
         }
     }
 
-    // MARK: - 状态 2（Task 7 填充）
+    // MARK: - 状态 2
 
     func showPickerState() {
-        // Task 7 实现
+        let picker = pickerView ?? makePickerView()
+        pickerView = picker
+        // 复用的 picker 可能带着上一轮没确认的选中态和过期耗时，先归位。
+        picker.resetForReuse(selectedHost: pinnedHost())
+        swapCardContent(to: picker, animated: true)
+        startPickerProbe(picker: picker)
+    }
+
+    private func makePickerView() -> ServerNodePickerView {
+        let picker = ServerNodePickerView(nodes: nodes, selectedHost: pinnedHost())
+        picker.onBackTapped = { [weak self] in self?.showInfoState(animated: true) }
+        picker.onConfirm = { [weak self] host in
+            guard let self else { return }
+            // 选中项与当前项相同：直接回状态 1，不触发一次没必要的重连。
+            if host != self.pinnedHost() {
+                self.onSwitch(host)
+            }
+            self.showInfoState(animated: true)
+        }
+        return picker
+    }
+
+    private func startPickerProbe(picker: ServerNodePickerView) {
+        // `probeHandle` 是单槽：状态 1 的单 host 探测可能还在飞，不先 cancel
+        // 的话它的回调会打到已经切走的界面上。
+        probeHandle?.cancel()
+        probeHandle = HostLatencyProbe.probeAll(hosts: nodes.map(\.host), port: port) { [weak picker] host, result in
+            picker?.updateLatency(result, forHost: host)
+        }
     }
 
     // MARK: - 卡片内容切换

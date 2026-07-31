@@ -37,6 +37,7 @@
 		47A9ADF6067FC38530A2ABEA /* ForwardPickerViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B65530874C01F08C0C8B669 /* ForwardPickerViewController.swift */; };
 		4C0E9667BF3FEAD9168A31CC /* ExtPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25D8EA95D53B3D0A78B985BE /* ExtPanelView.swift */; };
 		5178BA7DEFDD3B7EBEFDABE3 /* SearchMessageViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4CDE3524198DE5097D7D78B /* SearchMessageViewController.swift */; };
+		52B4F0690E1E1CDC8B8CBA7D /* ServerNodePickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09E264C88708CED137CE8867 /* ServerNodePickerView.swift */; };
 		53ECB95D10FDFC383AD3BFFF /* GroupQRCodeViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03560F1E35A1CD83F06CBEFF /* GroupQRCodeViewController.swift */; };
 		5419EAD85D7C9132AB94FBA6 /* NewFriendsEntryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1499CDEAF049F73974F200A4 /* NewFriendsEntryView.swift */; };
 		58655D10A6FADB326DBF61E1 /* ConversationViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82A66CD515543FC918230A83 /* ConversationViewController.swift */; };
@@ -96,6 +97,7 @@
 		03560F1E35A1CD83F06CBEFF /* GroupQRCodeViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupQRCodeViewController.swift; sourceTree = "<group>"; };
 		060A7470530CBB16BEE6E37A /* FileDownloadManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileDownloadManager.swift; sourceTree = "<group>"; };
 		0832B3942D777D6A0D67E100 /* NewFriendsViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewFriendsViewController.swift; sourceTree = "<group>"; };
+		09E264C88708CED137CE8867 /* ServerNodePickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerNodePickerView.swift; sourceTree = "<group>"; };
 		0AD23AFE8191A4A283002338 /* CallRingtonePlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CallRingtonePlayer.swift; sourceTree = "<group>"; };
 		0B65530874C01F08C0C8B669 /* ForwardPickerViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ForwardPickerViewController.swift; sourceTree = "<group>"; };
 		0CE65FB3E4BBBDBC011338C7 /* MentionPickerViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MentionPickerViewController.swift; sourceTree = "<group>"; };
@@ -276,6 +278,7 @@
 				690D108BAFD2ED791E23C0A9 /* SearchUserViewController.swift */,
 				CEF4749B0FA1FE54BE243607 /* ServerInfoCardView.swift */,
 				528CE702B21F203ED9DC8960 /* ServerInfoViewController.swift */,
+				09E264C88708CED137CE8867 /* ServerNodePickerView.swift */,
 				85923E6E0B056A0DFB4951CC /* SettingsViewController.swift */,
 				2A868472B0D7644EECCB4752 /* SingleConversationInfoViewController.swift */,
 				3CE3F018CE1845A6A279978F /* SystemTipMessageCell.swift */,
@@ -447,6 +450,7 @@
 				08504DA6B3F3A100FA1C2484 /* SearchUserViewController.swift in Sources */,
 				EC9BFF9BDF5F7CE9E289DF1F /* ServerInfoCardView.swift in Sources */,
 				F49C5688ADA7DC67A06C529E /* ServerInfoViewController.swift in Sources */,
+				52B4F0690E1E1CDC8B8CBA7D /* ServerNodePickerView.swift in Sources */,
 				20975C9275A5F1A2D28AB36B /* SettingsViewController.swift in Sources */,
 				17CC56837FF685D1854C1F77 /* SingleConversationInfoViewController.swift in Sources */,
 				364E10AD59CD0F1727BB41EA /* SystemTipMessageCell.swift in Sources */,
