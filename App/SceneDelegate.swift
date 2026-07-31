@@ -18,6 +18,9 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     private var callManagerWired = false
     /// 固定顶栏的加号菜单要复用「消息」tab 上已 wire 好的三个入口动作。
     private weak var conversationListViewController: ConversationListViewController?
+    /// 在场的连接服务弹窗。连接状态变化时要同步刷新它的状态 1，
+    /// 与顶栏标题同源。
+    private weak var presentedServerInfoViewController: ServerInfoViewController?
     private let themePreferenceStore = ThemePreferenceStore()
     private let ringtonePlayer = CallRingtonePlayer()
     private let messageAlertPlayer = MessageAlertPlayer()
@@ -102,15 +105,33 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             listViewController.showPlusMenu(in: tabBarController.view, anchorRect: tabBarController.headerPlusButtonFrame)
         }
 
+        // 点顶栏标题弹出连接服务弹窗。依赖全部按值/闭包传入，弹窗不认识
+        // AppEnvironment。
+        let serverNodes = environment.config.serverNodes
+        tabBarController.onTitleTapped = { [weak self, weak tabBarController] in
+            guard let self, let tabBarController else { return }
+            let serverInfoViewController = ServerInfoViewController(
+                nodes: serverNodes,
+                port: self.environment.config.imPort,
+                pinnedHost: { [weak self] in self?.environment.serverNodeStore.pinnedHost(nodes: serverNodes) },
+                connectedHost: { [weak self] in self?.environment.connectedHost },
+                connectionStatus: { [weak self] in self?.environment.connectionStatus ?? .disconnected },
+                onSwitch: { [weak self] host in self?.environment.switchServerNode(pinnedHost: host) }
+            )
+            self.presentedServerInfoViewController = serverInfoViewController
+            tabBarController.present(serverInfoViewController, animated: true)
+        }
+
         // 对齐 Android：连接状态体现在共用顶栏的标题上（tab bar 文字不变）。
         // 根页面的导航栏已隐藏，原先挂在「消息」页 navigationItem 上的状态
         // 提示改由顶栏承接。
-        let applyConnectionStatus: (IMConnectionStatus) -> Void = { [weak tabBarController] status in
+        let applyConnectionStatus: (IMConnectionStatus) -> Void = { [weak self, weak tabBarController] status in
             switch status {
             case .connected: tabBarController?.headerTitle = "飞享IM"
             case .connecting: tabBarController?.headerTitle = "飞享IM(正在连接...)"
             case .disconnected: tabBarController?.headerTitle = "飞享IM(连接断开)"
             }
+            self?.presentedServerInfoViewController?.refreshStatus(status)
         }
         environment.onConnectionStatusChange = applyConnectionStatus
         applyConnectionStatus(environment.connectionStatus)
