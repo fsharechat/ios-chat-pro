@@ -583,14 +583,20 @@ final class HostLatencyProbeTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(milliseconds, 0)
     }
 
-    /// 占住一个端口但**不** `listen()`：没有监听队列，内核对到该端口的连接
-    /// 直接回 RST，探测必然拿到 `.unreachable`。
+    /// 拿一个**确定无人占用**的本地端口：`bind()` 到端口 0 让内核分配一个空闲
+    /// 端口，读出端口号后立刻 `close()` 释放。此后到该端口的连接会被内核以
+    /// `ECONNREFUSED` 立即拒绝，探测必然拿到 `.unreachable`。
     ///
-    /// 刻意不用「起 `NWListener` 再 `cancel()`」拿这个端口——`NWListener.cancel()`
-    /// 是异步的，从调用到内核真正撤销监听 socket 之间有个几毫秒的窗口，
-    /// 落在窗口里的 connect 会意外成功，测试因此偶发变红（实测失败率
-    /// 30%~70%）。`bind()` 不 `listen()` 是同步生效的，没有这个窗口。
-    private func reserveClosedPort() throws -> (descriptor: Int32, port: UInt16) {
+    /// 另外两个"看起来更自然"的做法都实测过，都不行：
+    /// - **起 `NWListener` 再 `cancel()`**：`cancel()` 是异步的，从调用到内核真正
+    ///   撤销监听之间有几毫秒窗口，落在窗口里的 connect 会意外成功——实测偶发
+    ///   失败率 30%~70%。
+    /// - **`bind()` 但不 `listen()`、也不 `close()`**：macOS 内核对这种"被占用但
+    ///   无监听队列"的端口收到 SYN 时是**静默丢弃**而非回 RST，探测拿到的是
+    ///   `.timedOut`——实测 100% 复现，是稳定的错误答案。
+    ///
+    /// 裸 `close()` 是同步的，没有窗口；实测连续 5 次全部稳定得到 `ECONNREFUSED`。
+    private func reserveClosedPort() throws -> UInt16 {
         let descriptor = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)
         guard descriptor >= 0 else { throw XCTSkip("socket() failed, errno=\(errno)") }
 
@@ -601,7 +607,10 @@ final class HostLatencyProbeTests: XCTestCase {
         var bindResult: Int32 = -1
         withUnsafePointer(to: &address) { pointer in
             pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockaddrPointer in
-                bindResult = bind(descriptor, sockaddrPointer, socklen_t(MemoryLayout<sockaddr_in>.size))
+                // 必须写全 `Darwin.bind`：`XCTestCase` 在 macOS 上继承自 `NSObject`，
+                // 其 Cocoa Bindings 的 `bind(_:to:withKeyPath:options:)` 会遮蔽全局
+                // 的 `bind`，裸写会编译失败。
+                bindResult = Darwin.bind(descriptor, sockaddrPointer, socklen_t(MemoryLayout<sockaddr_in>.size))
             }
         }
         guard bindResult == 0 else {
@@ -617,18 +626,15 @@ final class HostLatencyProbeTests: XCTestCase {
                 nameResult = getsockname(descriptor, sockaddrPointer, &length)
             }
         }
-        guard nameResult == 0 else {
-            close(descriptor)
-            throw XCTSkip("getsockname() failed, errno=\(errno)")
-        }
-        return (descriptor, UInt16(bigEndian: boundAddress.sin_port))
+        close(descriptor) // 同步释放，端口随即无人占用
+        guard nameResult == 0 else { throw XCTSkip("getsockname() failed, errno=\(errno)") }
+        return UInt16(bigEndian: boundAddress.sin_port)
     }
 
-    /// 没有任何进程在监听的本地端口 → 内核立刻回 RST，必须报 `.unreachable`，
+    /// 没有任何进程占用的本地端口 → 内核立刻回 RST，必须报 `.unreachable`，
     /// 不能报成耗时。这条是"假绿灯"的核心防线。
     func test_probeAll_closedLocalPort_reportsUnreachable() throws {
-        let (descriptor, port) = try reserveClosedPort()
-        defer { close(descriptor) }
+        let port = try reserveClosedPort()
 
         let done = expectation(description: "probe finished")
         var result: HostLatencyProbe.ProbeResult?
