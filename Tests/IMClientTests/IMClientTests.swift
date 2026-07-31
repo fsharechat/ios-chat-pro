@@ -503,6 +503,47 @@ final class IMClientTests: XCTestCase {
         XCTAssertEqual(client.connectionStatus, .connecting)
     }
 
+    /// 切节点会拆掉一条**活着的** socket，但状态是 `.connected → .connecting`，
+    /// 不经过 `.disconnected` 沿。若不手动补一次通知，`IMMessaging` 挂在
+    /// `onDisconnected` 上的「把在途远程请求判失败」就不会跑，用户会看着
+    /// 菊花空转到各自的超时窗口耗尽。
+    func test_switchHosts_notifiesDisconnectedSoInFlightRequestsFailFast() throws {
+        let oldTransport = FakeTransportConnection()
+        let client = try makeRecordingClient(
+            hosts: "host-a",
+            transports: [oldTransport, FakeTransportConnection()],
+            recordedHosts: { _ in }
+        )
+        var disconnectedCount = 0
+        client.onDisconnected = { disconnectedCount += 1 }
+        client.connect()
+        oldTransport.simulate(.connected)
+        oldTransport.simulateReceivedData(makeConnectAckFrameBytes())
+        XCTAssertEqual(client.connectionStatus, .connected)
+        XCTAssertEqual(disconnectedCount, 0)
+
+        try client.switchHosts("pinned-host")
+
+        XCTAssertEqual(disconnectedCount, 1)
+        // 顶栏不能闪「连接断开」：状态直接进 `.connecting`。
+        XCTAssertEqual(client.connectionStatus, .connecting)
+    }
+
+    func test_switchHosts_doesNotNotifyDisconnectedWhenItThrows() throws {
+        let client = try makeRecordingClient(
+            hosts: "host-a",
+            transports: [FakeTransportConnection()],
+            recordedHosts: { _ in }
+        )
+        var disconnectedCount = 0
+        client.onDisconnected = { disconnectedCount += 1 }
+        client.connect()
+
+        XCTAssertThrowsError(try client.switchHosts(""))
+
+        XCTAssertEqual(disconnectedCount, 0)
+    }
+
     func test_switchHosts_singleHostIsUsedForEveryReconnect() throws {
         var hosts: [String] = []
         let client = try makeRecordingClient(
@@ -513,7 +554,8 @@ final class IMClientTests: XCTestCase {
         client.connect()
 
         try client.switchHosts("pinned-host")
-        // 断开一次，让退避重连再选一次 host
+        // 再发起一次连接，确认单 host 仍只返回它（退避重连路径由
+        // `test_switchHosts_resetsBackoffSoAutomaticReconnectsStartOver` 覆盖）
         client.connect()
 
         XCTAssertEqual(hosts, ["host-a", "pinned-host", "pinned-host"])

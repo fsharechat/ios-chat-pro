@@ -81,10 +81,36 @@ public enum HostLatencyProbe {
         )
         var addressList: UnsafeMutablePointer<addrinfo>?
         guard getaddrinfo(host, String(port), &hints, &addressList) == 0,
-              let address = addressList else { return .unresolved }
+              let firstAddress = addressList else { return .unresolved }
         defer { freeaddrinfo(addressList) }
 
-        let descriptor = socket(address.pointee.ai_family, address.pointee.ai_socktype, address.pointee.ai_protocol)
+        // 遍历 `ai_next` 链上的**全部**地址，而不是只试头节点：一个 host 配了
+        // 多条 A 记录、或同时有 A 与 AAAA 时，头节点不通不代表节点不可达——
+        // IM 自己走的 `NWConnection` 会自动 happy-eyeballs 到能通的那个地址，
+        // 只试头节点会让弹窗显示「不可达」而 App 其实连得好好的，正是设计
+        // 文档划的红线：错误答案比慢答案更糟。
+        //
+        // 超时语义：总预算仍是 `timeoutMilliseconds`，每个地址分到的是**剩余
+        // 时间**而不是各自一份完整超时，否则「3 个地址 × 2 秒」会把 UI 卡满
+        // 6 秒。代价是排在后面的地址可能只剩很短的窗口甚至没有——此时直接
+        // 沿用前一个地址的失败结果，保住 `.timedOut` / `.unreachable` 的区分度。
+        let deadline = DispatchTime.now().uptimeNanoseconds &+ UInt64(timeoutMilliseconds) &* 1_000_000
+        var lastResult: ProbeResult = .unreachable
+        var nextAddress: UnsafeMutablePointer<addrinfo>? = firstAddress
+        while let address = nextAddress {
+            let now = DispatchTime.now().uptimeNanoseconds
+            guard now < deadline else { break }
+            let remainingMilliseconds = Int32(min(UInt64(Int32.max), max(1, (deadline - now) / 1_000_000)))
+            lastResult = connectOnce(address: address.pointee, timeoutMilliseconds: remainingMilliseconds)
+            if case .latency = lastResult { return lastResult }
+            nextAddress = address.pointee.ai_next
+        }
+        return lastResult
+    }
+
+    /// 对单个已解析出的地址做一次非阻塞 connect，返回耗时或失败原因。
+    private static func connectOnce(address: addrinfo, timeoutMilliseconds: Int32) -> ProbeResult {
+        let descriptor = socket(address.ai_family, address.ai_socktype, address.ai_protocol)
         guard descriptor >= 0 else { return .unreachable }
         defer { close(descriptor) }
 
@@ -96,7 +122,7 @@ public enum HostLatencyProbe {
         guard fcntl(descriptor, F_SETFL, flags) >= 0 else { return .unreachable }
 
         let start = DispatchTime.now()
-        if connect(descriptor, address.pointee.ai_addr, address.pointee.ai_addrlen) != 0 {
+        if connect(descriptor, address.ai_addr, address.ai_addrlen) != 0 {
             guard errno == EINPROGRESS else { return .unreachable }
             var descriptorSet = pollfd(fd: descriptor, events: Int16(POLLOUT), revents: 0)
             let ready = poll(&descriptorSet, 1, timeoutMilliseconds)

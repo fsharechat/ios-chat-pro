@@ -139,10 +139,13 @@ public final class AppEnvironment {
             token: credentials.token,
             clientIdentifier: deviceIdentifierProvider.currentIdentifier()
         )
-        // `IMClient.init` only throws if `config.imHosts` is malformed — a
-        // fixed, already-verified value — so silently treating that as
-        // "couldn't connect" rather than threading a dedicated error type
-        // through this method is an accepted simplification for Phase 1.
+        // `IMClient.init` only throws when its `hosts` string is empty, and
+        // `ServerNodeStore.currentHostSpec(nodes:)` cannot produce one: a
+        // non-empty node table always yields a non-empty spec, because
+        // `pinnedHost(nodes:)` validates the stored pin against that table and
+        // degrades a stale pin to the full joined list. So silently treating a
+        // throw as "couldn't connect" rather than threading a dedicated error
+        // type through this method is an accepted simplification for Phase 1.
         guard let client = try? IMClient(configuration: configuration, transportFactory: transportFactory) else { return false }
 
         let service = MessagingService(imClient: client, storage: storage)

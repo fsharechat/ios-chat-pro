@@ -222,6 +222,15 @@ public final class IMClient {
         userDisconnect = false
         reconnectAttempt = 0
         heartbeatToken?.cancel()
+        // 手动补一次断开通知：本方法走的是 `.connected → .connecting`，不经过
+        // `connectionStatus` 的 `.disconnected` 沿，`didSet` 里的 `onDisconnected`
+        // 因此不会触发；但在途请求（如远程历史拉取）绑定的是即将被 cancel 掉的
+        // 那条 socket 的 wireId，响应永远回不来了，必须让监听者立刻判失败，
+        // 而不是干等满各自的超时窗口。
+        //
+        // 不改成「先置 `.disconnected` 再 `startConnection()`」：那会让顶栏标题
+        // 闪一下「连接断开」，切节点期间显示「正在连接」才是对的。
+        onDisconnected?()
         startConnection()
     }
 

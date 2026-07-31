@@ -85,6 +85,16 @@ final class ServerInfoViewController: UIViewController {
     func refreshStatus(_ status: IMConnectionStatus) {
         guard infoCard.superview != nil else { return }
         infoCard.update(status: status, address: displayAddress(), port: port)
+        // 弹窗开着时后台重连成功：状态行已变「已连接」，但延迟行还停在
+        // 打开弹窗那一刻的占位 `——`，两行互相矛盾。这里补一次探测。
+        //
+        // `probeHandle == nil` 是「本轮还没探测过」的判据：只有
+        // `startInfoProbe()` 走占位分支（未连接）时才会留下 nil，探测一旦
+        // 发出 handle 就非 nil 并一直留到下次切状态。因此连上后只补探一次，
+        // `.connecting` 反复抖动也不会造成探测风暴。
+        if status == .connected, probeHandle == nil {
+            startInfoProbe()
+        }
     }
 
     // MARK: - 状态 1
@@ -119,7 +129,7 @@ final class ServerInfoViewController: UIViewController {
 
     // MARK: - 状态 2
 
-    func showPickerState() {
+    private func showPickerState() {
         let picker = pickerView ?? makePickerView()
         pickerView = picker
         // 复用的 picker 可能带着上一轮没确认的选中态和过期耗时，先归位。
