@@ -164,126 +164,153 @@ final class HostLatencyProbeTests: XCTestCase {
         XCTAssertEqual(Set(reported), ["127.0.0.1", "localhost"])
     }
 
-    /// 只监听 IPv4 `127.0.0.1` 的裸 socket listener，返回它绑定到的端口。
-    /// 与 `startLocalListener()` 的区别：那个用 `NWListener(on: .any)`，是双栈；
-    /// 这里刻意只占 IPv4，好让 `localhost` 的 IPv6 地址（`::1`）必然被拒。
-    private func startIPv4OnlyListener() throws -> (descriptor: Int32, port: UInt16) {
-        let descriptor = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)
-        guard descriptor >= 0 else { throw XCTSkip("socket() failed, errno=\(errno)") }
-
+    /// 构造一个指向 `127.0.0.1:port` 的 `ResolvedAddress`。
+    ///
+    /// 多地址遍历的三条不变量以前是靠「`localhost` 在本机恰好解析成 ::1 + 127.0.0.1」
+    /// 来触发的，换台机器解析顺序一变就整片 `XCTSkip`——覆盖率静默归零而不是报红。
+    /// 改成直接注入地址数组后，三条不变量与 DNS 环境彻底解耦。
+    private func loopbackAddress(port: UInt16) -> HostLatencyProbe.ResolvedAddress {
         var address = sockaddr_in()
         address.sin_family = sa_family_t(AF_INET)
-        address.sin_port = 0
+        address.sin_port = port.bigEndian
         address.sin_addr.s_addr = inet_addr("127.0.0.1")
-        var bindResult: Int32 = -1
-        withUnsafePointer(to: &address) { pointer in
-            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockaddrPointer in
-                bindResult = Darwin.bind(descriptor, sockaddrPointer, socklen_t(MemoryLayout<sockaddr_in>.size))
-            }
-        }
-        guard bindResult == 0, listen(descriptor, 8) == 0 else {
-            close(descriptor)
-            throw XCTSkip("bind()/listen() failed, errno=\(errno)")
-        }
-
-        var boundAddress = sockaddr_in()
-        var length = socklen_t(MemoryLayout<sockaddr_in>.size)
-        var nameResult: Int32 = -1
-        withUnsafeMutablePointer(to: &boundAddress) { pointer in
-            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockaddrPointer in
-                nameResult = getsockname(descriptor, sockaddrPointer, &length)
-            }
-        }
-        guard nameResult == 0 else {
-            close(descriptor)
-            throw XCTSkip("getsockname() failed, errno=\(errno)")
-        }
-        return (descriptor, UInt16(bigEndian: boundAddress.sin_port))
-    }
-
-    /// `getaddrinfo` 为 `host` 解析出的地址族序列，用来确认本机的解析顺序
-    /// 确实是「IPv6 在前」——否则这条用例根本走不到 `ai_next` 分支。
-    private func resolvedAddressFamilies(host: String, port: UInt16) -> [Int32] {
-        var hints = addrinfo(
-            ai_flags: 0,
-            ai_family: AF_UNSPEC,
-            ai_socktype: SOCK_STREAM,
-            ai_protocol: IPPROTO_TCP,
-            ai_addrlen: 0,
-            ai_canonname: nil,
-            ai_addr: nil,
-            ai_next: nil
+        var storage = sockaddr_storage()
+        memcpy(&storage, &address, MemoryLayout<sockaddr_in>.size)
+        return HostLatencyProbe.ResolvedAddress(
+            family: AF_INET,
+            socketType: SOCK_STREAM,
+            protocolNumber: IPPROTO_TCP,
+            storage: storage,
+            length: socklen_t(MemoryLayout<sockaddr_in>.size)
         )
-        var addressList: UnsafeMutablePointer<addrinfo>?
-        guard getaddrinfo(host, String(port), &hints, &addressList) == 0 else { return [] }
-        defer { freeaddrinfo(addressList) }
-        var families: [Int32] = []
-        var next = addressList
-        while let address = next {
-            families.append(address.pointee.ai_family)
-            next = address.pointee.ai_next
-        }
-        return families
     }
 
-    /// 多地址遍历：`localhost` 解析出 `::1` 和 `127.0.0.1` 两条，而 listener
-    /// 只占 IPv4，于是头节点 `::1` 必被拒。只试头节点的旧实现会报
-    /// `.unreachable`（App 明明连得上却显示不可达——设计文档的红线）；
-    /// 遍历 `ai_next` 后必须落到 `127.0.0.1` 上拿到耗时。
-    func test_probeAll_multipleResolvedAddresses_fallsThroughToTheReachableOne() throws {
-        let (descriptor, port) = try startIPv4OnlyListener()
-        defer { close(descriptor) }
+    /// 指向不可路由的 TEST-NET-1（RFC 5737），连接必然挂到超时。
+    private func unroutableAddress(port: UInt16) -> HostLatencyProbe.ResolvedAddress {
+        var address = sockaddr_in()
+        address.sin_family = sa_family_t(AF_INET)
+        address.sin_port = port.bigEndian
+        address.sin_addr.s_addr = inet_addr("192.0.2.1")
+        var storage = sockaddr_storage()
+        memcpy(&storage, &address, MemoryLayout<sockaddr_in>.size)
+        return HostLatencyProbe.ResolvedAddress(
+            family: AF_INET,
+            socketType: SOCK_STREAM,
+            protocolNumber: IPPROTO_TCP,
+            storage: storage,
+            length: socklen_t(MemoryLayout<sockaddr_in>.size)
+        )
+    }
 
-        let families = resolvedAddressFamilies(host: "localhost", port: port)
-        guard families.count >= 2, families.first == AF_INET6 else {
-            throw XCTSkip("本机 localhost 未解析成「IPv6 在前 + 多地址」(\(families))，无法构造该分支")
-        }
+    /// 头节点不通时必须继续试后面的地址。只试头节点的旧实现会报
+    /// `.unreachable`——App 明明连得上却显示不可达，正是设计文档划的红线。
+    func test_probeOnce_addresses_fallsThroughFirstFailureToTheReachableOne() throws {
+        let (listener, listeningPort) = try startLocalListener()
+        defer { listener.cancel() }
+        let closedPort = try reserveClosedPort()
 
-        let done = expectation(description: "probe finished")
-        var result: HostLatencyProbe.ProbeResult?
-        _ = HostLatencyProbe.probeAll(hosts: ["localhost"], port: port) { _, probeResult in
-            result = probeResult
-            done.fulfill()
-        }
-        wait(for: [done], timeout: 5)
+        let result = HostLatencyProbe.probeOnce(
+            addresses: [loopbackAddress(port: closedPort), loopbackAddress(port: listeningPort)],
+            timeoutMilliseconds: 2000
+        )
 
-        guard case .latency(let milliseconds)? = result else {
-            return XCTFail("expected .latency, got \(String(describing: result))")
+        guard case .latency(let milliseconds) = result else {
+            return XCTFail("expected .latency, got \(result)")
         }
         XCTAssertGreaterThanOrEqual(milliseconds, 0)
     }
 
-    /// 全部地址都不通时，返回的是**最后一次**的失败结果，而不是被中途某个
-    /// 地址的结果覆盖——`.timedOut` 与 `.unreachable` 的区分度要保住。
-    func test_probeAll_allAddressesFail_keepsTheLastFailureKind() throws {
-        let port = try reserveClosedPort()
+    /// 已经连通就不该再试后面的地址——否则「第一个通、第二个超时」会白等。
+    func test_probeOnce_addresses_stopsAtTheFirstReachableAddress() throws {
+        let (listener, listeningPort) = try startLocalListener()
+        defer { listener.cancel() }
 
-        let families = resolvedAddressFamilies(host: "localhost", port: port)
-        guard families.count >= 2 else {
-            throw XCTSkip("本机 localhost 只解析出 \(families.count) 个地址，无法构造该分支")
-        }
+        let start = Date()
+        let result = HostLatencyProbe.probeOnce(
+            addresses: [loopbackAddress(port: listeningPort), unroutableAddress(port: 6789)],
+            timeoutMilliseconds: 2000
+        )
+        let elapsed = Date().timeIntervalSince(start)
 
-        let done = expectation(description: "probe finished")
-        var result: HostLatencyProbe.ProbeResult?
-        _ = HostLatencyProbe.probeAll(hosts: ["localhost"], port: port) { _, probeResult in
-            result = probeResult
-            done.fulfill()
+        guard case .latency = result else {
+            return XCTFail("expected .latency, got \(result)")
         }
-        wait(for: [done], timeout: 5)
+        // 若没有提前 return，第二个地址会把这里拖到 2 秒。
+        XCTAssertLessThan(elapsed, 0.5)
+    }
+
+    /// 全部失败时返回**最后一次**的失败结果，而不是被中途某个地址覆盖。
+    ///
+    /// 这里刻意让最后一个地址走 `.timedOut`、前一个走 `.unreachable`：两者都
+    /// 不等于 `probeOnce` 内部 `lastResult` 的初值，所以「循环没跑」「返回值
+    /// 写死」都会让这条用例报红。
+    func test_probeOnce_addresses_keepsTheLastFailureKind() throws {
+        let closedPort = try reserveClosedPort()
+
+        let result = HostLatencyProbe.probeOnce(
+            addresses: [loopbackAddress(port: closedPort), unroutableAddress(port: 6789)],
+            timeoutMilliseconds: 1000
+        )
+
+        XCTAssertEqual(result, .timedOut)
+    }
+
+    /// 反过来：全部地址都被**快速拒绝**时，结果必须是 `.unreachable`。
+    ///
+    /// 两个地址都用无人占用的本地端口——它们各自被内核立刻 RST，不吃预算，
+    /// 所以循环能真正跑完两轮。`.unreachable` 不等于 `lastResult` 的初值
+    /// `.timedOut`，因此「循环一次没跑」会让这条报红。与上一条合起来，两个
+    /// 方向都锁死了。
+    ///
+    /// 注意不能写成 `[unroutable, closed]`：不可路由地址会吃满整个预算，
+    /// 循环随即因超预算 break，根本轮不到第二个地址——那是共享预算的正确
+    /// 行为，不是缺陷。
+    func test_probeOnce_addresses_allRefusedFastYieldsUnreachable() throws {
+        let firstClosedPort = try reserveClosedPort()
+        let secondClosedPort = try reserveClosedPort()
+
+        let result = HostLatencyProbe.probeOnce(
+            addresses: [loopbackAddress(port: firstClosedPort), loopbackAddress(port: secondClosedPort)],
+            timeoutMilliseconds: 800
+        )
 
         XCTAssertEqual(result, .unreachable)
     }
 
-    /// 遍历多地址后，`timeoutMilliseconds` 仍是**总**预算而不是每地址一份：
-    /// 这条守住「不得把 UI 卡成 地址数 × timeout」。超时地址只能用不可路由的
-    /// TEST-NET-1（单地址），所以这里验的是总预算这条不变量本身。
-    func test_probeOnce_unreachableHost_staysWithinTheTotalTimeoutBudget() {
+    /// `timeoutMilliseconds` 是**总**预算，不是每个地址一份。
+    /// 三个都会超时的地址、总预算 600ms —— 每地址一份的实现会跑满 1.8 秒。
+    func test_probeOnce_addresses_sharesOneTimeoutBudgetAcrossAllAddresses() {
+        let addresses = [
+            unroutableAddress(port: 6789),
+            unroutableAddress(port: 6790),
+            unroutableAddress(port: 6791),
+        ]
+
         let start = Date()
-        let result = HostLatencyProbe.probeOnce(host: "192.0.2.1", port: 6789, timeoutMilliseconds: 500)
+        let result = HostLatencyProbe.probeOnce(addresses: addresses, timeoutMilliseconds: 600)
         let elapsed = Date().timeIntervalSince(start)
 
         XCTAssertEqual(result, .timedOut)
-        XCTAssertLessThan(elapsed, 1.5)
+        // 总预算 0.6s，留足调度余量；每地址一份的实现在这里是 ~1.8s。
+        XCTAssertLessThan(elapsed, 1.2)
+    }
+
+    func test_probeOnce_emptyAddressList_reportsUnresolved() {
+        XCTAssertEqual(HostLatencyProbe.probeOnce(addresses: [], timeoutMilliseconds: 500), .unresolved)
+    }
+
+    /// `resolve` 对无法解析的域名返回 nil，`probeOnce(host:)` 据此报 `.unresolved`。
+    func test_resolve_unresolvableHostnameReturnsNil() {
+        XCTAssertNil(HostLatencyProbe.resolve(host: "no-such-host.invalid", port: 6789))
+    }
+
+    /// `resolve` 对 IPv4 字面量恰好给出一个可用地址，且字段被完整拷贝。
+    func test_resolve_ipv4LiteralYieldsOneUsableAddress() throws {
+        let addresses = try XCTUnwrap(HostLatencyProbe.resolve(host: "127.0.0.1", port: 6789))
+
+        XCTAssertEqual(addresses.count, 1)
+        XCTAssertEqual(addresses[0].family, AF_INET)
+        XCTAssertEqual(addresses[0].length, socklen_t(MemoryLayout<sockaddr_in>.size))
     }
 
     func test_probeAll_deliversCallbacksOnTheMainQueue() throws {

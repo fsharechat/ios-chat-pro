@@ -139,13 +139,11 @@ public final class AppEnvironment {
             token: credentials.token,
             clientIdentifier: deviceIdentifierProvider.currentIdentifier()
         )
-        // `IMClient.init` only throws when its `hosts` string is empty, and
-        // `ServerNodeStore.currentHostSpec(nodes:)` cannot produce one: a
-        // non-empty node table always yields a non-empty spec, because
-        // `pinnedHost(nodes:)` validates the stored pin against that table and
-        // degrades a stale pin to the full joined list. So silently treating a
-        // throw as "couldn't connect" rather than threading a dedicated error
-        // type through this method is an accepted simplification for Phase 1.
+        // `IMClient.init` 只在 host 串为空时抛错，而
+        // `ServerNodeStore.currentHostSpec(nodes:)` 造不出空串：节点表非空 ⇒
+        // 返回的 spec 必非空——`pinnedHost(nodes:)` 会拿节点表校验存下来的 pin，
+        // 失效的 pin 直接降级成全量拼接串。所以把 throw 静默当成「连不上」、
+        // 而不是给这个方法引一套专门的错误类型，是 Phase 1 认可的简化。
         guard let client = try? IMClient(configuration: configuration, transportFactory: transportFactory) else { return false }
 
         let service = MessagingService(imClient: client, storage: storage)

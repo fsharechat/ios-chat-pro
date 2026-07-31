@@ -67,8 +67,25 @@ public enum HostLatencyProbe {
         return handle
     }
 
-    /// 同步探测一个 host，阻塞调用线程，**不得在主队列调用**。
-    static func probeOnce(host: String, port: UInt16, timeoutMilliseconds: Int32) -> ProbeResult {
+    /// 一个已解析出的目标地址，值类型。
+    ///
+    /// 刻意把 `getaddrinfo` 的结果拷成值而不是传 `addrinfo` 指针：一来
+    /// `addrinfo.ai_addr` 指向的内存归 `freeaddrinfo` 管，值语义杜绝了释放后
+    /// 误用；二来遍历逻辑因此可以被单测注入确定的多地址组合——真实 DNS 解析
+    /// 出几个地址、谁在前，随机器配置而变，拿它做断言等于把测试押在环境上。
+    struct ResolvedAddress {
+        let family: Int32
+        let socketType: Int32
+        let protocolNumber: Int32
+        /// `sockaddr` 的字节拷贝。用 `sockaddr_storage` 而非 `[UInt8]` 是为了
+        /// 对齐——重绑定到 `sockaddr` 需要它，字节数组给不了这个保证。
+        let storage: sockaddr_storage
+        let length: socklen_t
+    }
+
+    /// 解析 host，返回全部候选地址（顺序即 `getaddrinfo` 给的顺序）。
+    /// 解析失败或没有任何地址时返回 nil。
+    static func resolve(host: String, port: UInt16) -> [ResolvedAddress]? {
         var hints = addrinfo(
             ai_flags: 0,
             ai_family: AF_UNSPEC,
@@ -80,37 +97,66 @@ public enum HostLatencyProbe {
             ai_next: nil
         )
         var addressList: UnsafeMutablePointer<addrinfo>?
-        guard getaddrinfo(host, String(port), &hints, &addressList) == 0,
-              let firstAddress = addressList else { return .unresolved }
+        guard getaddrinfo(host, String(port), &hints, &addressList) == 0 else { return nil }
         defer { freeaddrinfo(addressList) }
 
-        // 遍历 `ai_next` 链上的**全部**地址，而不是只试头节点：一个 host 配了
-        // 多条 A 记录、或同时有 A 与 AAAA 时，头节点不通不代表节点不可达——
-        // IM 自己走的 `NWConnection` 会自动 happy-eyeballs 到能通的那个地址，
-        // 只试头节点会让弹窗显示「不可达」而 App 其实连得好好的，正是设计
-        // 文档划的红线：错误答案比慢答案更糟。
-        //
-        // 超时语义：总预算仍是 `timeoutMilliseconds`，每个地址分到的是**剩余
-        // 时间**而不是各自一份完整超时，否则「3 个地址 × 2 秒」会把 UI 卡满
-        // 6 秒。代价是排在后面的地址可能只剩很短的窗口甚至没有——此时直接
-        // 沿用前一个地址的失败结果，保住 `.timedOut` / `.unreachable` 的区分度。
-        let deadline = DispatchTime.now().uptimeNanoseconds &+ UInt64(timeoutMilliseconds) &* 1_000_000
-        var lastResult: ProbeResult = .unreachable
-        var nextAddress: UnsafeMutablePointer<addrinfo>? = firstAddress
+        var addresses: [ResolvedAddress] = []
+        var nextAddress = addressList
         while let address = nextAddress {
+            if let socketAddress = address.pointee.ai_addr,
+               address.pointee.ai_addrlen > 0,
+               Int(address.pointee.ai_addrlen) <= MemoryLayout<sockaddr_storage>.size {
+                var storage = sockaddr_storage()
+                memcpy(&storage, socketAddress, Int(address.pointee.ai_addrlen))
+                addresses.append(ResolvedAddress(
+                    family: address.pointee.ai_family,
+                    socketType: address.pointee.ai_socktype,
+                    protocolNumber: address.pointee.ai_protocol,
+                    storage: storage,
+                    length: address.pointee.ai_addrlen
+                ))
+            }
+            nextAddress = address.pointee.ai_next
+        }
+        return addresses.isEmpty ? nil : addresses
+    }
+
+    /// 同步探测一个 host，阻塞调用线程，**不得在主队列调用**。
+    static func probeOnce(host: String, port: UInt16, timeoutMilliseconds: Int32) -> ProbeResult {
+        guard let addresses = resolve(host: host, port: port) else { return .unresolved }
+        return probeOnce(addresses: addresses, timeoutMilliseconds: timeoutMilliseconds)
+    }
+
+    /// 依次尝试 `addresses`，任一连通即返回其耗时；全部失败时返回**最后一次**
+    /// 的失败结果。阻塞调用线程，**不得在主队列调用**。
+    ///
+    /// 为什么要遍历而不是只试头节点：一个 host 配了多条 A 记录、或同时有 A 与
+    /// AAAA 时，头节点不通不代表节点不可达——IM 自己走的 `NWConnection` 会
+    /// happy-eyeballs 到能通的那个地址，只试头节点会让弹窗显示「不可达」而 App
+    /// 其实连得好好的，正是设计文档划的红线：错误答案比慢答案更糟。
+    ///
+    /// 超时语义：总预算就是 `timeoutMilliseconds`，每个地址分到的是**剩余
+    /// 时间**而不是各自一份完整超时，否则「3 个地址 × 2 秒」会把 UI 卡满 6 秒。
+    /// 代价是排在后面的地址可能只剩很短的窗口甚至轮不上——此时沿用前一个地址
+    /// 的失败结果，保住 `.timedOut` / `.unreachable` 的区分度。
+    static func probeOnce(addresses: [ResolvedAddress], timeoutMilliseconds: Int32) -> ProbeResult {
+        guard !addresses.isEmpty else { return .unresolved }
+        let budgetMilliseconds = UInt64(max(0, timeoutMilliseconds))
+        let deadline = DispatchTime.now().uptimeNanoseconds &+ budgetMilliseconds &* 1_000_000
+        var lastResult: ProbeResult = .timedOut
+        for address in addresses {
             let now = DispatchTime.now().uptimeNanoseconds
             guard now < deadline else { break }
             let remainingMilliseconds = Int32(min(UInt64(Int32.max), max(1, (deadline - now) / 1_000_000)))
-            lastResult = connectOnce(address: address.pointee, timeoutMilliseconds: remainingMilliseconds)
+            lastResult = connectOnce(address: address, timeoutMilliseconds: remainingMilliseconds)
             if case .latency = lastResult { return lastResult }
-            nextAddress = address.pointee.ai_next
         }
         return lastResult
     }
 
     /// 对单个已解析出的地址做一次非阻塞 connect，返回耗时或失败原因。
-    private static func connectOnce(address: addrinfo, timeoutMilliseconds: Int32) -> ProbeResult {
-        let descriptor = socket(address.ai_family, address.ai_socktype, address.ai_protocol)
+    private static func connectOnce(address: ResolvedAddress, timeoutMilliseconds: Int32) -> ProbeResult {
+        let descriptor = socket(address.family, address.socketType, address.protocolNumber)
         guard descriptor >= 0 else { return .unreachable }
         defer { close(descriptor) }
 
@@ -121,8 +167,14 @@ public enum HostLatencyProbe {
         flags |= O_NONBLOCK
         guard fcntl(descriptor, F_SETFL, flags) >= 0 else { return .unreachable }
 
+        var storage = address.storage
         let start = DispatchTime.now()
-        if connect(descriptor, address.ai_addr, address.ai_addrlen) != 0 {
+        let connectResult = withUnsafePointer(to: &storage) { pointer in
+            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockaddrPointer in
+                connect(descriptor, sockaddrPointer, address.length)
+            }
+        }
+        if connectResult != 0 {
             guard errno == EINPROGRESS else { return .unreachable }
             var descriptorSet = pollfd(fd: descriptor, events: Int16(POLLOUT), revents: 0)
             let ready = poll(&descriptorSet, 1, timeoutMilliseconds)

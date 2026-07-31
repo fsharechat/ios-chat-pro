@@ -19,8 +19,12 @@ bash Scripts/generate-xcodeproj.sh
 ### 编译 App
 
 ```bash
-xcodebuild -project ios-chat-pro.xcodeproj -scheme App -destination 'platform=iOS Simulator,name=iPhone 16' build
+xcodebuild -project ios-chat-pro.xcodeproj -scheme App -destination 'platform=iOS Simulator,name=iPhone 15' build
 ```
+
+本机只装了 iOS 17.2 runtime（最高到 iPhone 15）。写一个不存在的机型（如 `iPhone 16`）
+不会报错，`xcodebuild` 会静默回退去构建真机 SDK（产物落在 `Debug-iphoneos`），
+看着「编译通过」但根本没验证模拟器切片。改机型前先 `xcrun simctl list devices available` 确认。
 
 ### 运行 SPM 单元测试
 

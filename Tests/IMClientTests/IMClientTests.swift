@@ -522,10 +522,18 @@ final class IMClientTests: XCTestCase {
         XCTAssertEqual(client.connectionStatus, .connected)
         XCTAssertEqual(disconnectedCount, 0)
 
+        // 从这里开始录状态序列。只断言「末态是 .connecting」挡不住被禁止的
+        // 那种写法——先把状态置 .disconnected 再 startConnection()，末态同样是
+        // .connecting、disconnectedCount 同样是 1，两条断言全过，但顶栏会闪一下
+        // 「飞享IM(连接断开)」。必须看整条序列里有没有出现 .disconnected。
+        var statusSequence: [IMConnectionStatus] = []
+        client.onConnectionStatusChange = { statusSequence.append($0) }
+
         try client.switchHosts("pinned-host")
 
         XCTAssertEqual(disconnectedCount, 1)
-        // 顶栏不能闪「连接断开」：状态直接进 `.connecting`。
+        XCTAssertEqual(statusSequence, [.connecting])
+        XCTAssertFalse(statusSequence.contains(.disconnected))
         XCTAssertEqual(client.connectionStatus, .connecting)
     }
 
