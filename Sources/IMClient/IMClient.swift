@@ -169,6 +169,11 @@ public final class IMClient {
     /// through a pull" from a genuinely received one.
     public var userId: String { configuration.userId }
 
+    /// This device's identifier, needed by `IMCall.CallManager` to stamp
+    /// outgoing 406 `callTaken` signals so a device can recognize (and
+    /// ignore) its own echo — mirrors `userId` above.
+    public var clientIdentifier: String { configuration.clientIdentifier }
+
     public func connect() {
         userDisconnect = false
         startConnection()

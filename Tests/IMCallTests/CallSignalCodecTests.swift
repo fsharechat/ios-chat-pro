@@ -147,4 +147,51 @@ final class CallSignalCodecTests: XCTestCase {
             RemoteIceCandidate(sdpMLineIndex: 1, sdpMid: "video", candidate: "candidate:2"),
         ]))
     }
+
+    func testEncodeCallTakenProducesType406WithReasonAndDevice() {
+        let (wireType, callId, data) = CallSignalCodec.encode(
+            .callTaken(callId: "call-abc", reason: .rejected, deviceId: "device-1"))
+
+        XCTAssertEqual(wireType, 406)
+        XCTAssertEqual(callId, "call-abc")
+        let json = try! JSONSerialization.jsonObject(with: data!) as! [String: String]
+        XCTAssertEqual(json["r"], "rejected")
+        XCTAssertEqual(json["d"], "device-1")
+    }
+
+    func testDecodeCallTakenReadsReasonAndDevice() {
+        var content = Im_MessageContent()
+        content.type = 406
+        content.content = "call-abc"
+        content.data = Data(#"{"r":"rejected","d":"device-1"}"#.utf8)
+        var message = Im_Message()
+        message.content = content
+
+        XCTAssertEqual(CallSignalCodec.decode(message),
+                       .callTaken(callId: "call-abc", reason: .rejected, deviceId: "device-1"))
+    }
+
+    func testDecodeCallTakenFallsBackToAnsweredOnMissingReason() {
+        var content = Im_MessageContent()
+        content.type = 406
+        content.content = "call-abc"
+        content.data = Data(#"{"d":"device-1"}"#.utf8)
+        var message = Im_Message()
+        message.content = content
+
+        XCTAssertEqual(CallSignalCodec.decode(message),
+                       .callTaken(callId: "call-abc", reason: .answered, deviceId: "device-1"))
+    }
+
+    func testDecodeCallTakenFallsBackToAnsweredOnBrokenPayload() {
+        var content = Im_MessageContent()
+        content.type = 406
+        content.content = "call-abc"
+        content.data = Data("not json".utf8)
+        var message = Im_Message()
+        message.content = content
+
+        XCTAssertEqual(CallSignalCodec.decode(message),
+                       .callTaken(callId: "call-abc", reason: .answered, deviceId: ""))
+    }
 }

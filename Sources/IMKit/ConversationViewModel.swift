@@ -737,10 +737,14 @@ public final class ConversationViewModel {
     /// side, "未接听" from the callee's side. Status 0/1 rows are only ever
     /// momentarily on screen mid-call (this device's own `CallManager`
     /// updates them to status 2 the instant the call ends) and don't need
-    /// distinct wording.
+    /// distinct wording. Status 3 (对齐 Android `VoipMessageViewHolder`) is
+    /// `CallManager.endSession`'s `.acceptedElsewhere` outcome — this device
+    /// was still ringing when the account's other device answered, so it's
+    /// wrong to show "未接听"(它其实被接听了,只是接在别处)。
     private func renderCallRecordText(isOutgoing: Bool, audioOnly: Bool, status: Int, connectTime: Int64, endTime: Int64) -> String {
         let icon = audioOnly ? "📞" : "📹"
         let kind = audioOnly ? "语音通话" : "视频通话"
+        if status == 3 { return "\(icon) 已在其他设备接听" }
         guard status == 2 else { return "\(icon) \(kind)" }
         guard connectTime > 0 else { return isOutgoing ? "\(icon) 已取消" : "\(icon) 未接听" }
         let durationSeconds = Int(max(0, (endTime - connectTime) / 1000))

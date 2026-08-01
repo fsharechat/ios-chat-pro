@@ -17,6 +17,9 @@ public enum CallEndReason: Equatable {
     /// 自己账号的另一台设备接听了这通来电 —— 本端静默收场,不发 Bye
     /// (对齐 Android CallEndReason.AcceptByOtherClient)。
     case acceptedElsewhere
+    /// 自己账号的另一台设备拒接了这通来电 —— 本端静默收场,不发 Bye
+    /// (对齐 Android CallEndReason.RejectByOtherClient)。
+    case rejectedElsewhere
 }
 
 /// Plain data for the call currently in progress — `CallManager` is the

@@ -178,7 +178,7 @@ public final class AppEnvironment {
         // 会让所有来电都被当成"过期"而永不弹窗(见 IMClient.serverTimeDeltaMillis
         // 的文档)。与上面 `myUserId` 一致地强捕获 `client`(局部 let,同一份
         // 引用已存在 `imClient` 里,不构成新的引用环)。
-        callManager = CallManager(messagingService: service, storage: storage, mediaEngine: webRTC, myUserId: { client.userId }, nowMillis: {
+        callManager = CallManager(messagingService: service, storage: storage, mediaEngine: webRTC, myUserId: { client.userId }, myDeviceId: { client.clientIdentifier }, nowMillis: {
             Int64(Date().timeIntervalSince1970 * 1000) + client.serverTimeDeltaMillis
         })
         client.connect()

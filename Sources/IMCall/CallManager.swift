@@ -50,6 +50,7 @@ public final class CallManager {
     private let mediaEngine: MediaEngine
     private let scheduler: Scheduler
     private let myUserId: () -> String
+    private let myDeviceId: () -> String
     private let nowMillis: () -> Int64
 
     private var session: CallSession?
@@ -62,6 +63,7 @@ public final class CallManager {
         mediaEngine: MediaEngine,
         scheduler: Scheduler = DispatchQueueScheduler(),
         myUserId: @escaping () -> String,
+        myDeviceId: @escaping () -> String,
         nowMillis: @escaping () -> Int64 = { Int64(Date().timeIntervalSince1970 * 1000) }
     ) {
         self.messagingService = messagingService
@@ -69,6 +71,7 @@ public final class CallManager {
         self.mediaEngine = mediaEngine
         self.scheduler = scheduler
         self.myUserId = myUserId
+        self.myDeviceId = myDeviceId
         self.nowMillis = nowMillis
 
         mediaEngine.onConnected = { [weak self] in self?.handleMediaConnected() }
@@ -107,10 +110,12 @@ public final class CallManager {
     public func answer() throws {
         guard state == .incoming, let session else { return }
         answerTimeoutToken?.cancel()
-        // Android answerCall 的发送顺序:AnswerT(405,透传给自己其他端)
-        // 先行,Answer(401,发给对方)随后。
+        // Android answerCall 的发送顺序:AnswerT(405,透传给对端)先行,
+        // Answer(401,通知对端接听)随后;406 才是通知自己其他设备的多端同步信令。
         try sendSignal(.answerT(callId: session.callId, audioOnly: session.audioOnly), to: session.peerUid)
         try sendSignal(.answer(callId: session.callId, audioOnly: session.audioOnly), to: session.peerUid)
+        try sendSignal(.callTaken(callId: session.callId, reason: .answered, deviceId: myDeviceId()),
+                       to: session.peerUid)
         state = .connecting
         startConnectingTimeoutTimer()
 
@@ -129,6 +134,12 @@ public final class CallManager {
 
     private func hangUp(reason: CallEndReason) throws {
         guard let session else { return }
+        // 只有「本端用户主动拒接」才广播 rejected:state == .incoming 把它与
+        // 通话中挂断区分开,通话中挂断时其他端并不在响铃。
+        if state == .incoming, reason == .localHangup {
+            try sendSignal(.callTaken(callId: session.callId, reason: .rejected, deviceId: myDeviceId()),
+                           to: session.peerUid)
+        }
         try sendSignal(.bye(callId: session.callId), to: session.peerUid)
         endSession(reason: reason)
     }
@@ -151,7 +162,7 @@ public final class CallManager {
         mediaEngine.setAudioOnly(audioOnly)
     }
 
-    // MARK: - 来电信令分发(401-405 via MessagingService.onCallSignal)
+    // MARK: - 来电信令分发(401-406 via MessagingService.onCallSignal)
 
     private func handleIncomingSignal(_ wireMessage: Im_Message) {
         print("[DEBUG-CALL] recv signal type=\(wireMessage.content.type) from=\(wireMessage.fromUser) state=\(state)")
@@ -164,6 +175,10 @@ public final class CallManager {
         if sender == myUserId() {
             if case .answer(let callId, _) = signal, state == .incoming, callId == session.callId {
                 endSession(reason: .acceptedElsewhere)
+            }
+            if case .callTaken(let callId, let reason, _) = signal,
+               state == .incoming, callId == session.callId {
+                endSession(reason: reason == .rejected ? .rejectedElsewhere : .acceptedElsewhere)
             }
             return
         }
@@ -226,13 +241,19 @@ public final class CallManager {
             guard newAudioOnly || !session.audioOnly else { return }
             audioOnly = newAudioOnly
             mediaEngine.setAudioOnly(newAudioOnly)
+
+        case .callTaken:
+            // 406 只会由服务端投递给发送者自己的其他设备，对端不可能收到；
+            // 真正的处理在上面 `sender == myUserId()` 分支里（Task 9 接线）。
+            break
         }
     }
 
     private func signalCallId(_ signal: IncomingCallSignal) -> String {
         switch signal {
         case .answer(let callId, _), .bye(let callId), .sdpOffer(let callId, _), .sdpAnswer(let callId, _),
-             .iceCandidate(let callId, _, _, _), .removeCandidates(let callId, _), .modify(let callId, _):
+             .iceCandidate(let callId, _, _, _), .removeCandidates(let callId, _), .modify(let callId, _),
+             .callTaken(let callId, _, _):
             return callId
         }
     }
@@ -317,7 +338,9 @@ public final class CallManager {
         print("[DEBUG-CALL] endSession reason=\(reason) state=\(state)")
         answerTimeoutToken?.cancel()
         connectingTimeoutToken?.cancel()
-        updateCallBubble(status: 2, endTime: nowMillis())
+        // 在别的设备上接听了 —— 记录写 3(已在其他设备接听)而不是 2
+        //(对方未接听)。其他端拒接沿用 2,语义上确实没人接。
+        updateCallBubble(status: reason == .acceptedElsewhere ? 3 : 2, endTime: nowMillis())
         mediaEngine.close()
         session = nil
         state = .idle

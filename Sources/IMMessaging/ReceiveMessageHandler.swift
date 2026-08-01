@@ -14,7 +14,7 @@ import GRDB
 /// **Threading contract:** like the rest of this codebase, this has no
 /// internal locking and must be called from a single consistent queue.
 public final class ReceiveMessageHandler: MessageHandler {
-    /// 同一批 pulled message 里,通话相关事件(400 落库 / 401-405 透传)必须
+    /// 同一批 pulled message 里,通话相关事件(400 落库 / 401-406 透传)必须
     /// 按 wire 到达的原始顺序派发,而不是先发完所有 CallStart 再发完所有
     /// Signal —— 否则同批 `[Bye(call-1), CallStart(call-2)]` 会被错误地
     /// 颠倒成"先收到 CallStart(call-2)",这时本机可能仍以为在跟 call-1
@@ -27,7 +27,7 @@ public final class ReceiveMessageHandler: MessageHandler {
 
     private let storage: IMStorage
     private let myUserId: () -> String
-    /// 已转发过的 401-405 信令 messageUid(去重用,见 persist 内注释)。
+    /// 已转发过的 401-406 信令 messageUid(去重用,见 persist 内注释)。
     /// FIFO 上限 256 —— 一通视频通话全部信令实测 ~30 条,绰绰有余。
     private var seenCallSignalUids: Set<Int64> = []
     private var seenCallSignalUidOrder: [Int64] = []
@@ -48,8 +48,8 @@ public final class ReceiveMessageHandler: MessageHandler {
     /// `MessageStore.updateContent` calls without a second lookup.
     public var onCallStartMessage: ((StoredMessage) -> Void)?
 
-    /// Fired for every 401/402/403/404 (Answer/Bye/Signal/Modify) message —
-    /// these are intentionally **never persisted** (see this type's
+    /// Fired for every 401/402/403/404/405/406 (Answer/Bye/Signal/Modify/
+    /// AnswerT/CallTaken) message — these are intentionally **never persisted** (see this type's
     /// `persist(_:)` doc comment below), so this is the only way `IMCall`
     /// ever sees them. Carries the raw wire `Im_Message` rather than a
     /// decoded type, because decoding these 4 signal shapes is `IMCall`'s
@@ -139,7 +139,7 @@ public final class ReceiveMessageHandler: MessageHandler {
         }
     }
 
-    /// Wire types 401-405 (Answer/Bye/Signal/Modify/AnswerT) are
+    /// Wire types 401-406 (Answer/Bye/Signal/Modify/AnswerT/CallTaken) are
     /// intentionally never persisted to `storage.messages` — on Android
     /// these are `PersistFlag.No_Persist`/`.Transparent`, and at the volume
     /// ICE candidates/SDP exchanges happen during call setup, writing each
@@ -158,7 +158,7 @@ public final class ReceiveMessageHandler: MessageHandler {
             return // already have it via server uid — pull windows can overlap
         }
 
-        if [401, 402, 403, 404, 405].contains(wireMessage.content.type) {
+        if [401, 402, 403, 404, 405, 406].contains(wireMessage.content.type) {
             // pull 窗口重叠会把同一条信令重复投递:持久化消息靠上面的 DB
             // messageUid 查询挡掉了,信令不落库,必须在这里用内存集合去重。
             // 重复的 offer 会让 Plan B 对端(Android)误判重协商并发出第二个

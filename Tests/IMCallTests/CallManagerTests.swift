@@ -51,6 +51,7 @@ final class CallManagerTests: XCTestCase {
             mediaEngine: mediaEngine,
             scheduler: scheduler,
             myUserId: { myUserId },
+            myDeviceId: { "test-device" },
             nowMillis: { [unowned self] in self.now }
         )
     }
@@ -359,6 +360,86 @@ final class CallManagerTests: XCTestCase {
         XCTAssertEqual(manager.state, .idle)
         XCTAssertEqual(endReason, .acceptedElsewhere)
         XCTAssertEqual(try sentWireMessages().count, countBefore) // 没发 Bye
+    }
+
+    func testAnswerAlsoSendsCallTakenAnswered() throws {
+        try deliverCallStart(callId: "call-abc", audioOnly: false, from: "them")
+
+        try manager.answer()
+
+        let messages = try sentWireMessages()
+        XCTAssertTrue(messages.contains { $0.content.type == 406 })
+    }
+
+    func testCallTakenFromOwnOtherDeviceEndsIncomingSession() throws {
+        try deliverCallStart(callId: "call-abc", audioOnly: false, from: "them")
+        var endReason: CallEndReason?
+        manager.onCallEnded = { endReason = $0 }
+
+        try deliverSignal(.callTaken(callId: "call-abc", reason: .answered, deviceId: "other-device"), from: "me")
+
+        XCTAssertEqual(manager.state, .idle)
+        XCTAssertEqual(endReason, .acceptedElsewhere)
+    }
+
+    func testCallTakenRejectedFromOwnOtherDeviceEndsWithRejectedElsewhere() throws {
+        try deliverCallStart(callId: "call-abc", audioOnly: false, from: "them")
+        var endReason: CallEndReason?
+        manager.onCallEnded = { endReason = $0 }
+
+        try deliverSignal(.callTaken(callId: "call-abc", reason: .rejected, deviceId: "other-device"), from: "me")
+
+        XCTAssertEqual(endReason, .rejectedElsewhere)
+    }
+
+    func testCallTakenDoesNotSendBye() throws {
+        try deliverCallStart(callId: "call-abc", audioOnly: false, from: "them")
+
+        try deliverSignal(.callTaken(callId: "call-abc", reason: .answered, deviceId: "other-device"), from: "me")
+
+        let messages = try sentWireMessages()
+        XCTAssertFalse(messages.contains { $0.content.type == 402 })
+    }
+
+    /// 通话记录 status:在别的设备接听写 3,而不是"对方未接听"的 2。
+    func testCallTakenAnsweredUpdatesBubbleToStatus3() throws {
+        try deliverCallStart(callId: "call-abc", audioOnly: false, from: "them")
+
+        try deliverSignal(.callTaken(callId: "call-abc", reason: .answered, deviceId: "other-device"), from: "me")
+
+        let bubble = try storage.messages.messages(conversationType: .single, target: "them").first
+        if case .callRecord(_, _, _, let status, _, _) = bubble?.content {
+            XCTAssertEqual(status, 3)
+        } else {
+            XCTFail("通话气泡应仍是 callRecord")
+        }
+    }
+
+    /// 回归(见 hint 二):通话中正常挂断(reason == .localHangup 但
+    /// state == .connected,不是 .incoming)不应该广播 406 —— 其他端此刻
+    /// 并不在响铃,广播只会制造无意义噪音。
+    func testHangUpWhileConnectedDoesNotSendCallTaken() throws {
+        try manager.startCall(to: "them", audioOnly: false)
+        try deliverSignal(.answer(callId: callIdFromLastCallStart(), audioOnly: false), from: "them")
+        mediaEngine.simulateConnected()
+
+        try manager.hangUp()
+
+        let messages = try sentWireMessages()
+        XCTAssertFalse(messages.contains { $0.content.type == 406 })
+    }
+
+    /// 响铃中用户主动拒接要广播 406(reason=rejected),这样其他端才能
+    /// 静默收掉来电页。
+    func testRejectWhileIncomingSendsCallTakenRejected() throws {
+        try deliverCallStart(callId: "call-abc", audioOnly: false, from: "them")
+
+        try manager.reject()
+
+        let messages = try sentWireMessages()
+        XCTAssertTrue(messages.contains {
+            $0.content.type == 406 && CallSignalCodec.decode($0) == .callTaken(callId: "call-abc", reason: .rejected, deviceId: "test-device")
+        })
     }
 
     func test_signalForUnrelatedCallId_isRejectedWithBye() throws {

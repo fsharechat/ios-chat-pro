@@ -700,6 +700,21 @@ final class ConversationViewModelTests: XCTestCase {
         XCTAssertEqual(row.text, "📞 语音通话")
     }
 
+    /// Status 3 == `CallManager.endSession`'s `.acceptedElsewhere` outcome
+    /// (对齐 Android `VoipMessageViewHolder`)——本端还在响铃时账号的另一
+    /// 台设备接听了,不能显示"未接听"。
+    func test_callRecordRow_acceptedOnOtherDevice_showsAcceptedElsewhereText() throws {
+        try storage.messages.insert(StoredMessage(
+            localMessageId: 1, conversationType: .single, target: "them", from: "them",
+            content: .callRecord(callId: "call-1", targetId: "me", audioOnly: false, status: 3, connectTime: 0, endTime: 0),
+            timestamp: 1_000, status: .read, direction: .receive
+        ))
+        waitForFirstNonEmptyRows()
+
+        guard case .message(let row)? = viewModel.rows.first else { return XCTFail("expected a message row") }
+        XCTAssertEqual(row.text, "📹 已在其他设备接听")
+    }
+
     func testMakeRow_location_setsLocationCoordinatesAndTitle() throws {
         let thumbnail = Data([0xAA])
         try storage.messages.insert(StoredMessage(

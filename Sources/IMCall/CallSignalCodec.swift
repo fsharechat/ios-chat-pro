@@ -15,6 +15,12 @@ public struct RemoteIceCandidate: Equatable {
     }
 }
 
+/// 406 多端同步信令的处理方式。原始值即线上 JSON 的 `r` 字段。
+public enum CallTakenReason: String, Equatable {
+    case answered
+    case rejected
+}
+
 /// Decoded shape of an incoming 401/402/403/404 wire message — see the
 /// Phase 3 design doc §2's field-mapping table. `searchableContent`=callId,
 /// `data`=either an ASCII "0"/"1" (Answer/Modify's audioOnly flag) or a JSON
@@ -28,6 +34,8 @@ public enum IncomingCallSignal: Equatable {
     case iceCandidate(callId: String, sdpMLineIndex: Int32, sdpMid: String, candidate: String)
     case modify(callId: String, audioOnly: Bool)
     case removeCandidates(callId: String, candidates: [RemoteIceCandidate])
+    /// 406 —— 自己账号的另一台设备接听/拒接了这通来电。
+    case callTaken(callId: String, reason: CallTakenReason, deviceId: String)
 }
 
 /// What `CallManager` wants to send — `CallSignalCodec.encode` turns this
@@ -49,6 +57,8 @@ public enum OutgoingCallSignal: Equatable {
     /// 这条 wire message(`CallManagerTests.deliverSignal`);`CallManager` 本身
     /// 尚不主动发送这一信令。
     case removeCandidates(callId: String, candidates: [RemoteIceCandidate])
+    /// 406 —— 通知自己账号的其他设备本端已处理这通来电；对端收不到。
+    case callTaken(callId: String, reason: CallTakenReason, deviceId: String)
 }
 
 public enum CallSignalCodec {
@@ -78,6 +88,12 @@ public enum CallSignalCodec {
             return .bye(callId: callId)
         case 403:
             return decodeSignal(callId: callId, data: data)
+        case 406:
+            let payload = try? JSONDecoder().decode(CallTakenWirePayload.self, from: data)
+            // r 缺失/不认识一律回退 answered —— 406 只在接听与拒接时发送，两者都要求
+            // 本端关闭来电界面，默认 answered 保证核心行为不因 payload 异常失效。
+            let reason = payload.flatMap { CallTakenReason(rawValue: $0.r ?? "") } ?? .answered
+            return .callTaken(callId: callId, reason: reason, deviceId: payload?.d ?? "")
         case 404:
             return .modify(callId: callId, audioOnly: audioOnlyFlag(from: data))
         default:
@@ -107,6 +123,9 @@ public enum CallSignalCodec {
                 candidates: candidates.map { CandidateEntry(label: $0.sdpMLineIndex, id: $0.sdpMid, candidate: $0.candidate) }
             )
             return (403, callId, try? JSONEncoder().encode(payload))
+        case .callTaken(let callId, let reason, let deviceId):
+            return (406, callId, try? JSONEncoder().encode(
+                CallTakenWirePayload(r: reason.rawValue, d: deviceId)))
         }
     }
 
@@ -119,6 +138,7 @@ public enum CallSignalCodec {
     private struct CandidateWireSignal: Codable { let type: String; let label: Int32; let id: String; let candidate: String }
     private struct RemoveCandidatesWireSignal: Codable { let type: String; let candidates: [CandidateEntry] }
     private struct CandidateEntry: Codable { let label: Int32; let id: String; let candidate: String }
+    private struct CallTakenWirePayload: Codable { let r: String?; let d: String? }
 
     private static func decodeSignal(callId: String, data: Data) -> IncomingCallSignal? {
         guard let peek = try? JSONDecoder().decode(SignalTypePeek.self, from: data) else { return nil }
