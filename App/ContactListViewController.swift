@@ -41,6 +41,12 @@ final class ContactListViewController: UIViewController {
     /// Set by `SceneDelegate` — pushes `FavGroupListViewController`.
     var onGroupEntryTapped: (() -> Void)?
 
+    /// tab 横移期间为真：右侧 A-Z 索引条不随内容滚动、贴着屏幕右缘，
+    /// 页面横移时会糊在两页交界处，所以转场期间把它藏起来。
+    private var isSectionIndexHidden = false {
+        didSet { applySectionIndexVisibility() }
+    }
+
     init(viewModel: ContactListViewModel) {
         self.viewModel = viewModel
         super.init(nibName: nil, bundle: nil)
@@ -100,7 +106,7 @@ final class ContactListViewController: UIViewController {
         tableView.delegate = self
         tableView.backgroundColor = Theme.backgroundPrimary
         tableView.separatorColor = Theme.backgroundTertiary
-        tableView.sectionIndexColor = Theme.accent
+        applySectionIndexVisibility()
         tableView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(tableView)
         NSLayoutConstraint.activate([
@@ -136,6 +142,18 @@ final class ContactListViewController: UIViewController {
             snapshot.appendItems(section.rows, toSection: section.letter)
         }
         dataSource.apply(snapshot, animatingDifferences: true)
+    }
+}
+
+extension ContactListViewController: TabSwipeDecorationHiding {
+    func setTabSwipeDecorationHidden(_ hidden: Bool) {
+        isSectionIndexHidden = hidden
+    }
+
+    /// 走颜色而不是 `sectionIndexTitles` 返回 nil：后者会真的移除索引条，
+    /// 引起 cell 内容区宽度变化和一次重排，切回来时看得见闪跳。
+    private func applySectionIndexVisibility() {
+        tableView.sectionIndexColor = isSectionIndexHidden ? .clear : Theme.accent
     }
 }
 

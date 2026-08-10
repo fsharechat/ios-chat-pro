@@ -1,6 +1,13 @@
 // App/MainTabBarController.swift
 import UIKit
 
+/// tab 横移转场期间需要临时收起「悬浮在列表之上」装饰的根页面。
+/// 目前只有联系人页的 A-Z 索引条：它贴在屏幕右缘、不随内容滚动，
+/// 页面横移时会正好糊在两页交界处，看着像脏点。
+protocol TabSwipeDecorationHiding: AnyObject {
+    func setTabSwipeDecorationHidden(_ hidden: Bool)
+}
+
 /// 主 TabBarController：在系统默认点按切换之外，额外支持左右滑动在
 /// 消息/联系人/我的三个 tab 间切换，滑动过程跟手（对齐 Android 版本的
 /// ViewPager 手感）——两个页面一进一出地跟着手指同步位移，松手时按
@@ -130,9 +137,13 @@ final class MainTabBarController: UITabBarController {
             self.interaction = nil
             // 滑过三分之一屏，或者快速甩动（方向与拖动一致）即判定为完成切换。
             let velocity = gesture.velocity(in: view).x * dragDirection
-            if progress(for: translation, width: width) > 1.0 / 3 || velocity > 500 {
+            let progress = progress(for: translation, width: width)
+            if progress > 1.0 / 3 || velocity > 500 {
+                interaction.completionSpeed = completionSpeed(remaining: 1 - progress, velocity: velocity, width: width)
                 interaction.finish()
             } else {
+                // 回弹时剩余的是已滑出的那段，手指速度取反向分量。
+                interaction.completionSpeed = completionSpeed(remaining: progress, velocity: -velocity, width: width)
                 interaction.cancel()
             }
 
@@ -148,8 +159,10 @@ final class MainTabBarController: UITabBarController {
         guard let viewControllers, viewControllers.indices.contains(toIndex) else { return false }
         dragDirection = direction
         let interaction = UIPercentDrivenInteractiveTransition()
-        // 交互转场必须线性推进，否则百分比和实际位移对不上、跟手会发飘。
-        interaction.completionCurve = .linear
+        // 跟手阶段的线性推进由 animator 的 `.curveLinear` 保证（否则百分比和
+        // 实际位移对不上、跟手会发飘）；`completionCurve` 只作用于松手之后的
+        // 收尾段，用减速曲线更接近「甩到位」的手感。
+        interaction.completionCurve = .easeOut
         self.interaction = interaction
         selectedIndex = toIndex
         return true
@@ -159,6 +172,26 @@ final class MainTabBarController: UITabBarController {
     /// 反方向切换（那需要换一个目标页，交给下一次手势处理）。
     private func progress(for translation: CGFloat, width: CGFloat) -> CGFloat {
         min(1, max(0, translation * dragDirection / width))
+    }
+
+    /// 松手后那段收尾动画的播放倍速。
+    ///
+    /// 默认 1 倍是把「剩余进度 × 基准时长」匀速走完：手指飞快甩出去、只滑了
+    /// 一小截就松手时，剩下的一大截仍按原速慢慢挪，观感就是「松手后拖泥带水」。
+    /// 这里按松手瞬间的手指速度折算出这段本该花的时间，夹到 0.08...0.16 秒之间
+    /// ——只加速不减速（倍速下限为 1），既不拖沓也不会快到闪现。
+    private func completionSpeed(remaining: CGFloat, velocity: CGFloat, width: CGFloat) -> CGFloat {
+        let defaultDuration = max(remaining, 0.01) * CGFloat(TabSlideAnimator.duration)
+        let byFingerSpeed = velocity > 0 ? remaining * width / velocity : .greatestFiniteMagnitude
+        let target = min(max(byFingerSpeed, 0.08), 0.16)
+        return max(1, defaultDuration / target)
+    }
+
+    /// 横移转场期间收起各根页面悬浮在列表上的装饰，转场结束（完成或取消）再放回。
+    private func setTabSwipeDecorationHidden(_ hidden: Bool) {
+        for nav in viewControllers?.compactMap({ $0 as? UINavigationController }) ?? [] {
+            (nav.viewControllers.first as? TabSwipeDecorationHiding)?.setTabSwipeDecorationHidden(hidden)
+        }
     }
 }
 
@@ -174,7 +207,10 @@ extension MainTabBarController: UITabBarControllerDelegate {
               let to = viewControllers.firstIndex(of: toVC) else { return nil }
         // 目标在右边就让新页从右侧进、旧页向左出，点按切 tab 时同样走这套
         // 动画，跟滑动手感保持一致。
-        return TabSlideAnimator(direction: to > from ? -1 : 1)
+        setTabSwipeDecorationHidden(true)
+        return TabSlideAnimator(direction: to > from ? -1 : 1) { [weak self] in
+            self?.setTabSwipeDecorationHidden(false)
+        }
     }
 
     func tabBarController(
@@ -233,14 +269,21 @@ extension MainTabBarController: UIGestureRecognizerDelegate {
 /// tab 之间的横向推移动画：两个页面一进一出，同步位移。
 /// `direction` 为 -1 表示新页从右侧进入（切到后一个 tab），+1 为从左侧进入。
 private final class TabSlideAnimator: NSObject, UIViewControllerAnimatedTransitioning {
-    private let direction: CGFloat
+    /// 整屏横移的基准时长；跟手松手后的收尾在此基础上按剩余进度和手指速度折算
+    /// （见 `MainTabBarController.completionSpeed(remaining:velocity:width:)`）。
+    static let duration: TimeInterval = 0.22
 
-    init(direction: CGFloat) {
+    private let direction: CGFloat
+    /// 转场收尾（完成或取消都会走到）后的回调。
+    private let onTransitionEnd: () -> Void
+
+    init(direction: CGFloat, onTransitionEnd: @escaping () -> Void) {
         self.direction = direction
+        self.onTransitionEnd = onTransitionEnd
     }
 
     func transitionDuration(using transitionContext: UIViewControllerContextTransitioning?) -> TimeInterval {
-        0.25
+        Self.duration
     }
 
     func animateTransition(using context: UIViewControllerContextTransitioning) {
@@ -248,6 +291,7 @@ private final class TabSlideAnimator: NSObject, UIViewControllerAnimatedTransiti
               let toVC = context.viewController(forKey: .to),
               let toView = context.view(forKey: .to) else {
             context.completeTransition(false)
+            onTransitionEnd()
             return
         }
         let container = context.containerView
@@ -266,6 +310,7 @@ private final class TabSlideAnimator: NSObject, UIViewControllerAnimatedTransiti
             fromView.transform = .identity
             toView.transform = .identity
             context.completeTransition(!context.transitionWasCancelled)
+            self.onTransitionEnd()
         }
     }
 }
