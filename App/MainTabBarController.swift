@@ -1,11 +1,43 @@
 // App/MainTabBarController.swift
 import UIKit
 
-/// tab 横移转场期间需要临时收起「悬浮在列表之上」装饰的根页面。
-/// 目前只有联系人页的 A-Z 索引条：它贴在屏幕右缘、不随内容滚动，
-/// 页面横移时会正好糊在两页交界处，看着像脏点。
-protocol TabSwipeDecorationHiding: AnyObject {
-    func setTabSwipeDecorationHidden(_ hidden: Bool)
+/// 需要感知「正在横滑切 tab」的根页面。两个回调的生命周期不同，别合并：
+///
+/// - `setTabSwipeActive`：手势识别 → **转场动画结束**（完成或取消）。用于收起
+///   横移途中会碍眼的悬浮装饰，装饰必须等页面停稳了才能放回来。
+/// - `setTabSwipeTouchSuspended`：手势识别 → **手指抬起**。用于掐掉列表 cell
+///   的按下态。手指一抬就该复位——没有触摸就不会再有高亮，而且手势的结束
+///   回调一定会到达，不像转场回调那样依赖动画链路。
+protocol TabSwipeAdapting: AnyObject {
+    func setTabSwipeActive(_ active: Bool)
+    func setTabSwipeTouchSuspended(_ suspended: Bool)
+}
+
+extension TabSwipeAdapting {
+    /// 没有悬浮装饰的页面（如消息列表）不必实现。
+    func setTabSwipeActive(_ active: Bool) {}
+}
+
+extension UITableView {
+    /// 横滑期间挂起 cell 的高亮与选中。
+    ///
+    /// 光靠手势的 `cancelsTouchesInView` 不够：列表的滚动手势被横滑手势判失败
+    /// 的那一刻，`UIScrollView` 会把 `delaysContentTouches` 攒下来的触摸立刻
+    /// 下发给 cell，于是按下态先闪出来、再被撤销。手指按住停顿超过 0.15 秒再
+    /// 横滑时更明显——那时延迟触摸已经超时下发，cell 早就亮着了。
+    ///
+    /// 所以两头都要堵：`allowsSelection = false` 挡住后面还会来的高亮（为 `false`
+    /// 时 `shouldHighlightRowAt` 根本不会被问），再把此刻已经亮着的 cell 抹掉。
+    /// 抹的时候不筛 `isHighlighted`——`selectedBackgroundView` 那条路走的是
+    /// `isSelected`，筛掉就漏了。
+    func setSelectionSuspendedForTabSwipe(_ suspended: Bool) {
+        allowsSelection = !suspended
+        guard suspended else { return }
+        for cell in visibleCells {
+            cell.setHighlighted(false, animated: false)
+            cell.setSelected(false, animated: false)
+        }
+    }
 }
 
 /// 主 TabBarController：在系统默认点按切换之外，额外支持左右滑动在
@@ -66,9 +98,18 @@ final class MainTabBarController: UITabBarController {
         setupHeaderBar()
         let pan = UIPanGestureRecognizer(target: self, action: #selector(handlePan(_:)))
         pan.delegate = self
-        pan.cancelsTouchesInView = false
+        // 识别成功后必须把触摸从底下的视图上撤销（默认行为），否则横滑时
+        // 列表 cell 会一路保持按下高亮、松手还可能真的走一次选中：列表的
+        // 滚动手势被我们强制判失败了（见下面的失败依赖），UITableView 那套
+        // 「一拖动就取消高亮」的逻辑跟着一起失效，触摸原样传到了 cell 上。
+        // 横滑要先过 `gestureRecognizerShouldBegin` 的横向判定才会识别，
+        // 所以普通点按不受影响。
         view.addGestureRecognizer(pan)
+        swipePan = pan
     }
+
+    /// 供 `beginSuppressingListTouches` 的兜底复位查状态。
+    private weak var swipePan: UIPanGestureRecognizer?
 
     private func setupHeaderBar() {
         headerBar.onPlusTapped = { [weak self] in self?.onPlusTapped?() }
@@ -120,6 +161,10 @@ final class MainTabBarController: UITabBarController {
         switch gesture.state {
         case .began:
             dragRejected = false
+            // 手势一识别就掐掉列表的按下态：此刻列表的滚动手势刚被判失败，
+            // 攒下的触摸正要下发给 cell。
+            setTabSwipeTouchSuspended(true)
+            setTabSwipeActive(true)
 
         case .changed:
             if interaction == nil {
@@ -133,7 +178,15 @@ final class MainTabBarController: UITabBarController {
 
         case .ended, .cancelled, .failed:
             dragRejected = false
-            guard let interaction else { return }
+            // 手指已经抬起，列表不会再收到触摸，按下态的抑制到此为止——这一步
+            // 不能推给转场收尾回调，那条路依赖动画链路，断了列表就永久点不动。
+            setTabSwipeTouchSuspended(false)
+            guard let interaction else {
+                // 没建立转场（已在首/尾 tab，或手指没动过），没有转场收尾回调
+                // 能帮忙复位，装饰这里立刻还原。
+                setTabSwipeActive(false)
+                return
+            }
             self.interaction = nil
             // 滑过三分之一屏，或者快速甩动（方向与拖动一致）即判定为完成切换。
             let velocity = gesture.velocity(in: view).x * dragDirection
@@ -187,10 +240,20 @@ final class MainTabBarController: UITabBarController {
         return max(1, defaultDuration / target)
     }
 
-    /// 横移转场期间收起各根页面悬浮在列表上的装饰，转场结束（完成或取消）再放回。
-    private func setTabSwipeDecorationHidden(_ hidden: Bool) {
+    /// 把「正在横滑」的状态广播给三个 tab 的根页面。手势识别时置真，转场结束
+    /// （完成或取消）复位；重复置同一个值是幂等的。
+    private func setTabSwipeActive(_ active: Bool) {
+        forEachRootPage { $0.setTabSwipeActive(active) }
+    }
+
+    /// 广播「手指还按在屏幕上横滑」，手指抬起即复位。
+    private func setTabSwipeTouchSuspended(_ suspended: Bool) {
+        forEachRootPage { $0.setTabSwipeTouchSuspended(suspended) }
+    }
+
+    private func forEachRootPage(_ body: (TabSwipeAdapting) -> Void) {
         for nav in viewControllers?.compactMap({ $0 as? UINavigationController }) ?? [] {
-            (nav.viewControllers.first as? TabSwipeDecorationHiding)?.setTabSwipeDecorationHidden(hidden)
+            if let page = nav.viewControllers.first as? TabSwipeAdapting { body(page) }
         }
     }
 }
@@ -204,12 +267,17 @@ extension MainTabBarController: UITabBarControllerDelegate {
         guard !suppressesTransitionAnimation,
               let viewControllers,
               let from = viewControllers.firstIndex(of: fromVC),
-              let to = viewControllers.firstIndex(of: toVC) else { return nil }
+              let to = viewControllers.firstIndex(of: toVC) else {
+            // 不走自定义动画就没有收尾回调，手势路径已经置真的状态在这里复位。
+            setTabSwipeActive(false)
+            return nil
+        }
         // 目标在右边就让新页从右侧进、旧页向左出，点按切 tab 时同样走这套
         // 动画，跟滑动手感保持一致。
-        setTabSwipeDecorationHidden(true)
+        // 点按切 tab 不经过手势，这里补一次置真（横滑时已经是真了，幂等）。
+        setTabSwipeActive(true)
         return TabSlideAnimator(direction: to > from ? -1 : 1) { [weak self] in
-            self?.setTabSwipeDecorationHidden(false)
+            self?.setTabSwipeActive(false)
         }
     }
 
@@ -254,6 +322,16 @@ extension MainTabBarController: UIGestureRecognizerDelegate {
     }
 
     func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        guard shouldBeginSwipe(gestureRecognizer) else { return false }
+        // 抑制必须抢在这里，不能等 `.began` 的 action：本方法返回 true 之后，
+        // 手势状态立刻变成 `.began`，列表的滚动手势随即被判失败，`UIScrollView`
+        // 当场把攒下的触摸下发给 cell。等到 action 里再关，高亮那一帧已经渲染
+        // 出去了，只能看见它闪一下再被抹掉。
+        beginSuppressingListTouches()
+        return true
+    }
+
+    private func shouldBeginSwipe(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
         // 转场收尾动画期间不接受新手势，避免两次切换叠加。
         guard transitionCoordinator == nil, presentedViewController == nil else { return false }
         // 竖向为主的拖动留给列表滚动，否则滚列表时会误触发转场。
@@ -263,6 +341,18 @@ extension MainTabBarController: UIGestureRecognizerDelegate {
         }
         guard let nav = selectedViewController as? UINavigationController else { return true }
         return nav.viewControllers.count == 1
+    }
+
+    private func beginSuppressingListTouches() {
+        setTabSwipeTouchSuspended(true)
+        // 这里放行不等于手势一定会识别（可能被别的手势挡掉），那种情况下
+        // `.ended` 永远不会到达。下一轮 runloop 时手势该进 `.began` 了，
+        // 没进就说明黄了，补一次复位，免得列表停在点不动的状态。
+        DispatchQueue.main.async { [weak self] in
+            guard let self, let pan = self.swipePan else { return }
+            guard pan.state != .began, pan.state != .changed else { return }
+            self.setTabSwipeTouchSuspended(false)
+        }
     }
 }
 

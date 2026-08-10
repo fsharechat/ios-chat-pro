@@ -88,6 +88,12 @@ final class ConversationListViewController: UIViewController {
     }
 }
 
+extension ConversationListViewController: TabSwipeAdapting {
+    func setTabSwipeTouchSuspended(_ suspended: Bool) {
+        tableView.setSelectionSuspendedForTabSwipe(suspended)
+    }
+}
+
 extension ConversationListViewController: UITableViewDelegate {
     func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         tableView.deselectRow(at: indexPath, animated: true)

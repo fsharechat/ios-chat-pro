@@ -145,9 +145,13 @@ final class ContactListViewController: UIViewController {
     }
 }
 
-extension ContactListViewController: TabSwipeDecorationHiding {
-    func setTabSwipeDecorationHidden(_ hidden: Bool) {
-        isSectionIndexHidden = hidden
+extension ContactListViewController: TabSwipeAdapting {
+    func setTabSwipeActive(_ active: Bool) {
+        isSectionIndexHidden = active
+    }
+
+    func setTabSwipeTouchSuspended(_ suspended: Bool) {
+        tableView.setSelectionSuspendedForTabSwipe(suspended)
     }
 
     /// 走颜色而不是 `sectionIndexTitles` 返回 nil：后者会真的移除索引条，
