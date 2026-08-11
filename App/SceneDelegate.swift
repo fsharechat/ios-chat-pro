@@ -171,7 +171,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             }
             meViewController?.navigationController?.pushViewController(settingsViewController, animated: true)
         }
-        return UINavigationController(rootViewController: meViewController)
+        return AppNavigationController(rootViewController: meViewController)
     }
 
     /// Tears down the current session and switches back to the login
@@ -300,7 +300,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             }
             listViewController?.navigationController?.pushViewController(scanViewController, animated: true)
         }
-        return UINavigationController(rootViewController: listViewController)
+        return AppNavigationController(rootViewController: listViewController)
     }
 
     /// Routes a scanned QR payload the same way Android's
@@ -430,7 +430,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
                 )
                 let addVC = AddGroupMemberViewController(viewModel: addVM)
                 addVC.onMembersAdded = { [weak addVC] in addVC?.dismiss(animated: true) }
-                groupInfoViewController?.present(UINavigationController(rootViewController: addVC), animated: true)
+                groupInfoViewController?.present(AppNavigationController(rootViewController: addVC), animated: true)
             }
 
             // 移除成员（跳转到 AddGroupMemberViewController 的移除模式，暂用同一 VC）
@@ -663,7 +663,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             }
             listViewController?.navigationController?.pushViewController(newFriendsViewController, animated: true)
         }
-        return UINavigationController(rootViewController: listViewController)
+        return AppNavigationController(rootViewController: listViewController)
     }
 
     private func makeLoginViewController() -> UIViewController {

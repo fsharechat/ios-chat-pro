@@ -1,6 +1,9 @@
 name: ios-chat-pro
 options:
   bundleIdPrefix: cn.comsince
+  # 工程开发语言设为简体中文：`DEVELOPMENT_LANGUAGE` 会展开成 zh-Hans，
+  # Info.plist 的 CFBundleDevelopmentRegion 才不会是 en。
+  developmentLanguage: zh-Hans
   deploymentTarget:
     iOS: "15.0"
 packages:
@@ -42,6 +45,12 @@ targets:
         NSPhotoLibraryAddUsageDescription: "保存图片或视频到相册"
         CFBundleDisplayName: "飞享IM"
         CFBundleName: "飞享IM"
+        # 声明 App 只支持简体中文。没有这一项时 bundle 的 preferredLocalizations
+        # 会退化成 en，UIKit 自带文案就全是英文——返回键 fallback 显示 "Back"、
+        # `UIBarButtonItem(barButtonSystemItem: .cancel)` 显示 "Cancel"、系统弹窗
+        # 与相册/长按菜单同理。这里声明后系统 framework 自身的中文本地化才会生效。
+        CFBundleLocalizations:
+          - zh-Hans
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: cn.comsince.fschat

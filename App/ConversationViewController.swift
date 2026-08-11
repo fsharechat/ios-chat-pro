@@ -549,7 +549,7 @@ final class ConversationViewController: UIViewController {
             picker.onPicked = { [weak self] lat, lng, title, thumbnail in
                 self?.viewModel.sendLocation(lat: lat, lng: lng, title: title, thumbnail: thumbnail)
             }
-            let nav = UINavigationController(rootViewController: picker)
+            let nav = AppNavigationController(rootViewController: picker)
             nav.modalPresentationStyle = .fullScreen
             self.present(nav, animated: true)
         }
@@ -578,7 +578,7 @@ final class ConversationViewController: UIViewController {
             self?.dismiss(animated: true)
         }
         picker.onCancelled = { [weak self] in self?.inputBar.removeTrailingMentionTrigger() }
-        present(UINavigationController(rootViewController: picker), animated: true)
+        present(AppNavigationController(rootViewController: picker), animated: true)
     }
 
     /// 长按对方头像插入 @（对齐 Android）：仅群聊、仅接收方向生效 ——

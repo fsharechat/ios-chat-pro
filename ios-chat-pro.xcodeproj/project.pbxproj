@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		029D819BBD6C2F36F5711085 /* NavigationRowCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55BBBC6ED72EBA9DF8E8E1BA /* NavigationRowCell.swift */; };
+		053F46124BBD245980566AC3 /* AppNavigationController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6EDC3D98B09747EAECE1237 /* AppNavigationController.swift */; };
 		067CE7DC8127C1F90F45E735 /* UserInfoViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B035D72A76A3F36AA69CEBE /* UserInfoViewController.swift */; };
 		08504DA6B3F3A100FA1C2484 /* SearchUserViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 690D108BAFD2ED791E23C0A9 /* SearchUserViewController.swift */; };
 		10F0F91A0119D922D2F5C61A /* IMCall in Frameworks */ = {isa = PBXBuildFile; productRef = 9238D717B4E81FE77D740748 /* IMCall */; };
@@ -165,6 +166,7 @@
 		E3FE0167E8E8C013706DF83B /* ConversationListViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationListViewController.swift; sourceTree = "<group>"; };
 		E4F8B269AD818644389D362C /* FriendRequestCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FriendRequestCell.swift; sourceTree = "<group>"; };
 		E696B814AB99A34483A11EA8 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
+		E6EDC3D98B09747EAECE1237 /* AppNavigationController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppNavigationController.swift; sourceTree = "<group>"; };
 		EB3814EE6D598EF1B0A74571 /* LocationPreviewViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationPreviewViewController.swift; sourceTree = "<group>"; };
 		F80C53C3D4D0F23E0F18D84E /* MarkdownCodeBlockRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownCodeBlockRenderer.swift; sourceTree = "<group>"; };
 		F83C1F61EA97D38D86CE7324 /* MarkdownRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownRenderer.swift; sourceTree = "<group>"; };
@@ -224,6 +226,7 @@
 				929AC72577A219C38775E51D /* AddGroupMemberViewController.swift */,
 				93FA326C9B762DCAB590F502 /* AppDelegate.swift */,
 				DC9EF02E062FD6C49FC6F8D9 /* AppHeaderBar.swift */,
+				E6EDC3D98B09747EAECE1237 /* AppNavigationController.swift */,
 				B32527AED5E034C0D3BC2B74 /* Assets.xcassets */,
 				5ACDCE0BC8F9E8EF7A77D603 /* AvatarImageView.swift */,
 				5E20A628F05F52DE37B82DB6 /* CallPermissions.swift */,
@@ -354,11 +357,11 @@
 				};
 			};
 			buildConfigurationList = 150CD20C87A40C357F599316 /* Build configuration list for PBXProject "ios-chat-pro" */;
-			developmentRegion = en;
+			developmentRegion = "zh-Hans";
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				Base,
-				en,
+				"zh-Hans",
 			);
 			mainGroup = 3612026BF799781C1CCCCF20;
 			minimizedProjectReferenceProxies = 1;
@@ -398,6 +401,7 @@
 				92EE14C2D330B858ECE87B6C /* AddGroupMemberViewController.swift in Sources */,
 				AC4CF93C08183929C472085A /* AppDelegate.swift in Sources */,
 				A75FCD387555CBC8F03D73FE /* AppHeaderBar.swift in Sources */,
+				053F46124BBD245980566AC3 /* AppNavigationController.swift in Sources */,
 				2B03B7D44659C520AEFC917E /* AvatarImageView.swift in Sources */,
 				9E5BFA10E82C0ECB6BF1FD1A /* CallPermissions.swift in Sources */,
 				72DF9C8D9144BD29B958A810 /* CallRingtonePlayer.swift in Sources */,

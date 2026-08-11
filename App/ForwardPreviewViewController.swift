@@ -18,6 +18,18 @@ final class ForwardPreviewViewController: UIViewController {
         self.targetRow = targetRow
         self.sourceMessage = sourceMessage
         super.init(nibName: nil, bundle: nil)
+        configureAsHalfSheet()
+    }
+
+    /// 半屏卡片：内容只有「发送给 + 预览 + 留言 + 按钮」，占满全屏后下半部分
+    /// 全是空白，「取消/发送」还被顶到屏幕最底端，单手够不着。默认停在 medium
+    /// 档，留言要写长时用户可以上拉到 large（键盘弹出时系统也会自动升档）。
+    private func configureAsHalfSheet() {
+        modalPresentationStyle = .pageSheet
+        guard let sheet = sheetPresentationController else { return }
+        sheet.detents = [.medium(), .large()]
+        sheet.prefersGrabberVisible = true
+        sheet.preferredCornerRadius = 16
     }
 
     @available(*, unavailable)
@@ -99,7 +111,8 @@ final class ForwardPreviewViewController: UIViewController {
         view.addSubview(buttonStack)
 
         NSLayoutConstraint.activate([
-            headerStack.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 20),
+            // 半屏 sheet 顶部没有 safe area inset，20 会和 grabber 贴太近。
+            headerStack.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 28),
             headerStack.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
             headerStack.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
 
