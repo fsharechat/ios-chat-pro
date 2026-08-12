@@ -9,10 +9,12 @@ public final class SingleConversationInfoViewModel {
 
     private let storage: IMStorage
     public let userId: String
+    private let userSettingWriting: UserSettingWriting?
 
-    public init(userId: String, storage: IMStorage) {
+    public init(userId: String, storage: IMStorage, userSettingWriting: UserSettingWriting? = nil) {
         self.userId = userId
         self.storage = storage
+        self.userSettingWriting = userSettingWriting
         if let conv = try? storage.conversations.conversation(conversationType: .single, target: userId) {
             isTop = conv.isTop
             isMuted = conv.isMuted
@@ -26,11 +28,19 @@ public final class SingleConversationInfoViewModel {
     public func setTop(_ value: Bool) {
         isTop = value
         try? storage.conversations.setTop(value, conversationType: .single, target: userId)
+        userSettingWriting?.updateUserSetting(
+            scope: UserSettingKeys.Scope.conversationTop,
+            key: UserSettingKeys.conversationKey(conversationType: .single, line: 0, target: userId),
+            value: value ? "1" : "0")
     }
 
     public func setMuted(_ value: Bool) {
         isMuted = value
         try? storage.conversations.setMuted(value, conversationType: .single, target: userId)
+        userSettingWriting?.updateUserSetting(
+            scope: UserSettingKeys.Scope.conversationSilent,
+            key: UserSettingKeys.conversationKey(conversationType: .single, line: 0, target: userId),
+            value: value ? "1" : "0")
     }
 
     public func clearMessages(completion: @escaping (Result<Void, Error>) -> Void) {

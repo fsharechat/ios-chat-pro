@@ -42,6 +42,7 @@ public final class AppEnvironment {
     public private(set) var messagingService: MessagingService?
     public private(set) var contactSyncService: ContactSyncService?
     public private(set) var groupSyncService: GroupSyncService?
+    public private(set) var userSettingSyncService: UserSettingSyncService?
     public private(set) var mediaUploadService: MediaUploadService?
     public private(set) var callManager: CallManager?
     /// Exposed separately from `callManager` because `CallViewController`
@@ -150,11 +151,20 @@ public final class AppEnvironment {
         let connectAckHandler = ConnectAckHandler()
         let contactSync = ContactSyncService(imClient: client, storage: storage)
         let groupSync = GroupSyncService(imClient: client, storage: storage)
+        let userSettingSync = UserSettingSyncService(imClient: client, storage: storage)
+        userSettingSync.onSavedGroupsResolved = { [weak groupSync] groupIds in
+            for groupId in groupIds { groupSync?.refreshGroup(targetId: groupId) }
+        }
         service.onGroupNotificationMessage = { [weak groupSync] groupId in groupSync?.refreshGroup(targetId: groupId) }
         service.onIncomingMessageAlert = { [weak self] isMuted, isActiveConversation, isGroupNotification in
             self?.onIncomingMessageAlert?(isMuted, isActiveConversation, isGroupNotification)
         }
-        connectAckHandler.onSyncState = { [weak service, weak contactSync, userId = credentials.userId] _ in
+        connectAckHandler.onSyncState = { [weak service, weak contactSync, weak userSettingSync, storage, userId = credentials.userId] state in
+            // 服务端有设置且比本地新才拉。settingHead 为 0 表示服务端确实没有任何设置。
+            let localSettingHead = (try? storage.syncState.get().settingHead) ?? 0
+            if state.settingHead > localSettingHead {
+                userSettingSync?.syncUserSettings()
+            }
             service?.pullMessagesSinceLastSync()
             contactSync?.syncFriendList()
             contactSync?.syncFriendRequests()
@@ -169,6 +179,7 @@ public final class AppEnvironment {
         messagingService = service
         contactSyncService = contactSync
         groupSyncService = groupSync
+        userSettingSyncService = userSettingSync
         mediaUploadService = MediaUploadService(imClient: client)
         let webRTC = WebRTCClient(iceServers: config.iceServers.map { IceServer(urlString: $0.urlString, username: $0.username, credential: $0.credential) })
         webRTCClient = webRTC
@@ -191,6 +202,7 @@ public final class AppEnvironment {
         messagingService = nil
         contactSyncService = nil
         groupSyncService = nil
+        userSettingSyncService = nil
         mediaUploadService = nil
         callManager = nil
         webRTCClient = nil

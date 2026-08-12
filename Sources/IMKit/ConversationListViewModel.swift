@@ -14,13 +14,15 @@ public final class ConversationListViewModel {
     private let contactSync: ContactInfoFetching?
     private let groupSync: GroupSyncing?
     private let currentUserId: String
+    private let userSettingWriting: UserSettingWriting?
     private var cancellable: AnyCancellable?
 
-    public init(storage: IMStorage, contactSync: ContactInfoFetching?, groupSync: GroupSyncing? = nil, currentUserId: String = "") {
+    public init(storage: IMStorage, contactSync: ContactInfoFetching?, groupSync: GroupSyncing? = nil, currentUserId: String = "", userSettingWriting: UserSettingWriting? = nil) {
         self.storage = storage
         self.contactSync = contactSync
         self.groupSync = groupSync
         self.currentUserId = currentUserId
+        self.userSettingWriting = userSettingWriting
 
         // A row's displayName/avatarURL is derived from `UserStore`/
         // `GroupStore`, not just `StoredConversation` — and that profile
@@ -141,6 +143,10 @@ public final class ConversationListViewModel {
 
     public func setTop(_ isTop: Bool, for row: ConversationRow) throws {
         try storage.conversations.setTop(isTop, conversationType: row.conversationType, target: row.target, line: row.line)
+        userSettingWriting?.updateUserSetting(
+            scope: UserSettingKeys.Scope.conversationTop,
+            key: UserSettingKeys.conversationKey(conversationType: row.conversationType, line: row.line, target: row.target),
+            value: isTop ? "1" : "0")
     }
 
     public func clearConversation(_ row: ConversationRow) throws {

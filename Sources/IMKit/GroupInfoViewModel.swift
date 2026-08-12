@@ -49,6 +49,7 @@ public final class GroupInfoViewModel {
     private let storage: IMStorage
     private let contactSync: ContactInfoFetching?
     private let currentUserId: String
+    private let userSettingWriting: UserSettingWriting?
     private var groupCancellable: AnyCancellable?
     private var membersCancellable: AnyCancellable?
     /// uids already asked for over `UPUI` — see `ConversationViewModel`'s
@@ -56,13 +57,14 @@ public final class GroupInfoViewModel {
     /// to stop re-requesting.
     private var requestedProfileUids: Set<String> = []
 
-    public init(groupId: String, groupActing: GroupActing?, groupSyncing: GroupSyncing?, storage: IMStorage, contactSync: ContactInfoFetching? = nil, currentUserId: String) {
+    public init(groupId: String, groupActing: GroupActing?, groupSyncing: GroupSyncing?, storage: IMStorage, contactSync: ContactInfoFetching? = nil, currentUserId: String, userSettingWriting: UserSettingWriting? = nil) {
         self.groupId = groupId
         self.groupActing = groupActing
         self.groupSyncing = groupSyncing
         self.storage = storage
         self.contactSync = contactSync
         self.currentUserId = currentUserId
+        self.userSettingWriting = userSettingWriting
 
         // Load initial conversation settings (isTop, isMuted) from stored conversation
         if let conversation = try? storage.conversations.conversation(conversationType: .group, target: groupId) {
@@ -223,16 +225,28 @@ public final class GroupInfoViewModel {
     public func setTop(_ value: Bool) {
         isTop = value
         try? storage.conversations.setTop(value, conversationType: .group, target: groupId)
+        userSettingWriting?.updateUserSetting(
+            scope: UserSettingKeys.Scope.conversationTop,
+            key: UserSettingKeys.conversationKey(conversationType: .group, line: 0, target: groupId),
+            value: value ? "1" : "0")
     }
 
     public func setMuted(_ value: Bool) {
         isMuted = value
         try? storage.conversations.setMuted(value, conversationType: .group, target: groupId)
+        userSettingWriting?.updateUserSetting(
+            scope: UserSettingKeys.Scope.conversationSilent,
+            key: UserSettingKeys.conversationKey(conversationType: .group, line: 0, target: groupId),
+            value: value ? "1" : "0")
     }
 
     public func setFav(_ value: Bool) {
         isFav = value
         try? storage.groups.setFav(value, groupId: groupId)
+        userSettingWriting?.updateUserSetting(
+            scope: UserSettingKeys.Scope.favoriteGroup,
+            key: groupId,
+            value: value ? "1" : "0")
     }
 
     // MARK: - Message Operations
