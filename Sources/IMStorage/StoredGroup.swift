@@ -1,9 +1,11 @@
 import GRDB
 
-/// One row per group the local user is a member of. Discovered passively
-/// (no "list my groups" wire API exists) — created/updated by `IMGroups`'s
-/// `GroupInfoSyncHandler` whenever a `.gpgi` response or a group
-/// notification message arrives for this `groupId`.
+/// One row per group the local user is a member of. Discovered passively —
+/// created/updated by `IMGroups`'s `GroupInfoSyncHandler` whenever a `.gpgi`
+/// response or a group notification message arrives for this `groupId`.
+/// `isFav` is the exception: it's synced from the server via scope 6 (see
+/// `UserSettingSyncService`), with `userSetting` as the source of truth and
+/// this column its projection.
 public struct StoredGroup: Codable, Equatable, FetchableRecord, PersistableRecord {
     public static let databaseTableName = "groupInfo"
 
