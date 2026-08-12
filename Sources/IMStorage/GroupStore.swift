@@ -20,7 +20,12 @@ public final class GroupStore {
     }
 
     public func group(groupId: String) throws -> StoredGroup? {
-        try dbQueue.read { db in try StoredGroup.fetchOne(db, key: groupId) }
+        try dbQueue.read { db in try self.group(groupId: groupId, db: db) }
+    }
+
+    /// 与上面相同，跑在调用方管理的事务里。
+    public func group(groupId: String, db: Database) throws -> StoredGroup? {
+        try StoredGroup.fetchOne(db, key: groupId)
     }
 
     /// All groups, re-fired on any insert/update to the `group` table —
@@ -71,12 +76,15 @@ public final class GroupStore {
     }
 
     public func setFav(_ isFav: Bool, groupId: String) throws {
-        try dbQueue.write { db in
-            try db.execute(
-                sql: "UPDATE groupInfo SET isFav = ? WHERE groupId = ?",
-                arguments: [isFav, groupId]
-            )
-        }
+        try dbQueue.write { db in try self.setFav(isFav, groupId: groupId, db: db) }
+    }
+
+    /// 与上面相同，跑在调用方管理的事务里。
+    public func setFav(_ isFav: Bool, groupId: String, db: Database) throws {
+        try db.execute(
+            sql: "UPDATE groupInfo SET isFav = ? WHERE groupId = ?",
+            arguments: [isFav, groupId]
+        )
     }
 
     /// Resets every group's `isFav` flag — used by `IMStorage.clearSessionData()`

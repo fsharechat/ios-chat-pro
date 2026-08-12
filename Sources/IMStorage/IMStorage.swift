@@ -1,6 +1,6 @@
 import GRDB
 
-/// Single entry point: construct one `IMStorage`, get all six stores
+/// Single entry point: construct one `IMStorage`, get all seven stores
 /// sharing the same underlying SQLite connection.
 ///
 /// Otherwise intentionally does not expose the underlying
@@ -17,6 +17,7 @@ public final class IMStorage {
     public let syncState: SyncStateStore
     public let friendRequests: FriendRequestStore
     public let groups: GroupStore
+    public let userSettings: UserSettingStore
 
     /// Test-only escape hatch for asserting on raw table contents. Not for
     /// production use — production code always goes through one of the
@@ -45,11 +46,16 @@ public final class IMStorage {
     /// same device. `users`/`groups` themselves are left untouched — the next
     /// login's normal sync flow overwrites their name/portrait/member fields
     /// as conversations reference them again. `isFav` is the one exception:
-    /// unlike every other `groupInfo` column it is purely local (never
-    /// resynced from the server — there is no "list my groups" wire API, see
-    /// `StoredGroup`'s doc comment), so leaving it set would leak the
-    /// previous account's favorited groups into `FavGroupListViewController`
-    /// after switching accounts on the same device. Without the `syncState`
+    /// unlike every other `groupInfo` column it is now synced from the server
+    /// via scope 6 (see `UserSettingSyncService`), so it must still be wiped
+    /// on logout — and this time that means clearing both the projected
+    /// `groupInfo.isFav` column *and* the `userSetting` table it's projected
+    /// from. Wiping only the projected column while leaving `userSetting`
+    /// intact would leak the previous account's favorited groups right back:
+    /// the next login's UG sync reads its resume cursor from `syncState`, not
+    /// from `userSetting`, so a stale `userSetting` row for a key the new
+    /// sync never touches again would keep re-projecting the old account's
+    /// setting into `FavGroupListViewController`. Without the `syncState`
     /// reset, logging into a different account on the same device would
     /// resume incremental sync from the previous account's cursors, silently
     /// dropping messages.
@@ -59,6 +65,7 @@ public final class IMStorage {
             try StoredConversation.deleteAll(db)
             try StoredFriendRequest.deleteAll(db)
             try groups.clearAllFav(db: db)
+            try userSettings.deleteAll(db: db)
             try StoredSyncState(msgHead: 0, friendHead: 0, friendRequestHead: 0, settingHead: 0).save(db)
         }
     }
@@ -73,6 +80,7 @@ public final class IMStorage {
         syncState = SyncStateStore(dbQueue: database.dbQueue)
         friendRequests = FriendRequestStore(dbQueue: database.dbQueue)
         groups = GroupStore(dbQueue: database.dbQueue)
+        userSettings = UserSettingStore(dbQueue: database.dbQueue)
     }
 
     public static func open(atPath path: String) throws -> IMStorage {

@@ -171,6 +171,15 @@ public final class IMDatabase {
             // migration) appear in the badge count.
             try db.execute(sql: "UPDATE friendRequest SET toReadStatus = 1")
         }
+        migrator.registerMigration("v9_addUserSettingTable") { db in
+            try db.create(table: "userSetting") { t in
+                t.column("scope", .integer).notNull()
+                t.column("key", .text).notNull()
+                t.column("value", .text).notNull()
+                t.column("updateDt", .integer).notNull().defaults(to: 0)
+                t.primaryKey(["scope", "key"])
+            }
+        }
         return migrator
     }
 }

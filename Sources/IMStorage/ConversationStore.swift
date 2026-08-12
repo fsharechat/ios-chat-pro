@@ -117,11 +117,17 @@ public final class ConversationStore {
 
     public func setTop(_ isTop: Bool, conversationType: ConversationType, target: String, line: Int = 0) throws {
         try dbQueue.write { db in
-            try db.execute(
-                sql: "UPDATE conversation SET isTop = ? WHERE conversationType = ? AND target = ? AND line = ?",
-                arguments: [isTop, conversationType.rawValue, target, line]
-            )
+            try self.setTop(isTop, conversationType: conversationType, target: target, line: line, db: db)
         }
+    }
+
+    /// 与上面相同，跑在调用方管理的事务里 —— 见 `UserSettingSyncHandler`，
+    /// 它要把设置写入与派生列投影合并成一次事务。
+    public func setTop(_ isTop: Bool, conversationType: ConversationType, target: String, line: Int = 0, db: Database) throws {
+        try db.execute(
+            sql: "UPDATE conversation SET isTop = ? WHERE conversationType = ? AND target = ? AND line = ?",
+            arguments: [isTop, conversationType.rawValue, target, line]
+        )
     }
 
     public func setDraft(_ draft: String?, conversationType: ConversationType, target: String, line: Int = 0) throws {
@@ -135,11 +141,16 @@ public final class ConversationStore {
 
     public func setMuted(_ isMuted: Bool, conversationType: ConversationType, target: String, line: Int = 0) throws {
         try dbQueue.write { db in
-            try db.execute(
-                sql: "UPDATE conversation SET isMuted = ? WHERE conversationType = ? AND target = ? AND line = ?",
-                arguments: [isMuted, conversationType.rawValue, target, line]
-            )
+            try self.setMuted(isMuted, conversationType: conversationType, target: target, line: line, db: db)
         }
+    }
+
+    /// 与上面相同，跑在调用方管理的事务里。
+    public func setMuted(_ isMuted: Bool, conversationType: ConversationType, target: String, line: Int = 0, db: Database) throws {
+        try db.execute(
+            sql: "UPDATE conversation SET isMuted = ? WHERE conversationType = ? AND target = ? AND line = ?",
+            arguments: [isMuted, conversationType.rawValue, target, line]
+        )
     }
 
     public func deleteConversation(conversationType: ConversationType, target: String, line: Int = 0) throws {
