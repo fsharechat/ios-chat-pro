@@ -44,4 +44,10 @@ public enum SubSignal: UInt8 {
     case mrr = 38
     case mdr = 39
     case sai = 40
+    // 用户设置同步：ug 拉取、up 上报、un 服务端通知。
+    // 只允许在末尾追加，rawValue 与服务端 push-common / push-nio-sdk、
+    // android push-sdk 三份 Java 副本对齐
+    case ug = 41
+    case up = 42
+    case un = 43
 }
