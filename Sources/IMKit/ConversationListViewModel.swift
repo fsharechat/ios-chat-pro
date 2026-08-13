@@ -149,6 +149,14 @@ public final class ConversationListViewModel {
             value: isTop ? "1" : "0")
     }
 
+    public func setMuted(_ isMuted: Bool, for row: ConversationRow) throws {
+        try storage.conversations.setMuted(isMuted, conversationType: row.conversationType, target: row.target, line: row.line)
+        userSettingWriting?.updateUserSetting(
+            scope: UserSettingKeys.Scope.conversationSilent,
+            key: UserSettingKeys.conversationKey(conversationType: row.conversationType, line: row.line, target: row.target),
+            value: isMuted ? "1" : "0")
+    }
+
     public func clearConversation(_ row: ConversationRow) throws {
         try storage.messages.clearMessages(conversationType: row.conversationType, target: row.target, line: row.line)
         try storage.conversations.resetLastMessage(conversationType: row.conversationType, target: row.target, line: row.line)

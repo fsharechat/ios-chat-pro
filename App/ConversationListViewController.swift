@@ -124,6 +124,14 @@ private extension ConversationListViewController {
                     self?.showStorageError(error)
                 }
             },
+            .init(symbolName: row.isMuted ? "bell" : "bell.slash",
+                  title: row.isMuted ? "取消免打扰" : "消息免打扰") { [weak self] in
+                do {
+                    try self?.viewModel.setMuted(!row.isMuted, for: row)
+                } catch {
+                    self?.showStorageError(error)
+                }
+            },
             .init(symbolName: "trash", title: "清空会话", isDestructive: true) { [weak self] in
                 self?.confirmDestructive(title: "清空会话") {
                     try self?.viewModel.clearConversation(row)

@@ -67,7 +67,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     private func makeMainTabBarController() -> UIViewController {
         let tabBarController = MainTabBarController()
 
-        let conversationListViewModel = ConversationListViewModel(storage: environment.storage, contactSync: environment.contactSyncService, groupSync: environment.groupSyncService, currentUserId: environment.imClient?.userId ?? "")
+        let conversationListViewModel = ConversationListViewModel(storage: environment.storage, contactSync: environment.contactSyncService, groupSync: environment.groupSyncService, currentUserId: environment.imClient?.userId ?? "", userSettingWriting: environment.userSettingSyncService)
         let conversationListNav = makeConversationListNavigationController(viewModel: conversationListViewModel)
         conversationListNav.tabBarItem = UITabBarItem(title: "消息", image: UIImage(systemName: "message"), selectedImage: UIImage(systemName: "message.fill"))
         conversationListNav.tabBarItem.tag = 0
@@ -228,7 +228,8 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
                     storage: self.environment.storage,
                     contactSync: self.environment.contactSyncService,
                     groupSync: self.environment.groupSyncService,
-                    currentUserId: self.environment.imClient?.userId ?? ""
+                    currentUserId: self.environment.imClient?.userId ?? "",
+                    userSettingWriting: self.environment.userSettingSyncService
                 )
             }
             listViewController?.navigationController?.pushViewController(conversationViewController, animated: true)
@@ -276,7 +277,8 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
                         storage: self.environment.storage,
                         contactSync: self.environment.contactSyncService,
                         groupSync: self.environment.groupSyncService,
-                        currentUserId: self.environment.imClient?.userId ?? ""
+                        currentUserId: self.environment.imClient?.userId ?? "",
+                        userSettingWriting: self.environment.userSettingSyncService
                     )
                 }
                 listViewController?.navigationController?.popToRootViewController(animated: false)
@@ -348,7 +350,8 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
                 groupSyncing: environment.groupSyncService,
                 storage: environment.storage,
                 contactSync: environment.contactSyncService,
-                currentUserId: environment.imClient?.userId ?? ""
+                currentUserId: environment.imClient?.userId ?? "",
+                userSettingWriting: environment.userSettingSyncService
             )
             let groupInfoViewController = GroupInfoViewController(viewModel: groupInfoViewModel)
             groupInfoViewController.presentsAsPreview = true
@@ -415,7 +418,8 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
                 groupSyncing: self.environment.groupSyncService,
                 storage: self.environment.storage,
                 contactSync: self.environment.contactSyncService,
-                currentUserId: self.environment.imClient?.userId ?? ""
+                currentUserId: self.environment.imClient?.userId ?? "",
+                userSettingWriting: self.environment.userSettingSyncService
             )
             let groupInfoViewController = GroupInfoViewController(viewModel: groupInfoViewModel)
 
@@ -523,7 +527,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     private func wireContactInfoNavigation(on conversationVC: ConversationViewController, userId: String) {
         conversationVC.onContactInfoTapped = { [weak self, weak conversationVC] in
             guard let self else { return }
-            let vm = SingleConversationInfoViewModel(userId: userId, storage: self.environment.storage)
+            let vm = SingleConversationInfoViewModel(userId: userId, storage: self.environment.storage, userSettingWriting: self.environment.userSettingSyncService)
             let infoVC = SingleConversationInfoViewController(viewModel: vm)
 
             infoVC.onAvatarTapped = { [weak self, weak infoVC] in
