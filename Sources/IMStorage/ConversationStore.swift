@@ -80,7 +80,23 @@ public final class ConversationStore {
             .filter(Column("line") == line)
             .fetchOne(db)
 
-        var conversation = existing ?? StoredConversation(conversationType: conversationType, target: target, line: line)
+        var conversation: StoredConversation
+        if let existing = existing {
+            conversation = existing
+        } else {
+            // 首次为这个会话建行——没有旧行可沿用 isTop/isMuted，改从 userSetting
+            // 播种。冷启动时 UG 应答常常先于这条消息落库到达(AppEnvironment 在
+            // pullMessagesSinceLastSync() 之前就发 UG)，那时投影是空操作，全靠
+            // 这里补上，否则重装后置顶/免打扰会永久丢失。
+            let key = UserSettingKeys.conversationKey(conversationType: conversationType, line: line, target: target)
+            let isTop = try StoredUserSetting
+                .filter(Column("scope") == UserSettingKeys.Scope.conversationTop && Column("key") == key)
+                .fetchOne(db)?.value == "1"
+            let isMuted = try StoredUserSetting
+                .filter(Column("scope") == UserSettingKeys.Scope.conversationSilent && Column("key") == key)
+                .fetchOne(db)?.value == "1"
+            conversation = StoredConversation(conversationType: conversationType, target: target, line: line, isTop: isTop, isMuted: isMuted)
+        }
         conversation.lastMessageUid = messageUid
         conversation.timestamp = timestamp
         if incrementUnread {

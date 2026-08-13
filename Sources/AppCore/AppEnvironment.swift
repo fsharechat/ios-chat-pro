@@ -162,7 +162,7 @@ public final class AppEnvironment {
         connectAckHandler.onSyncState = { [weak service, weak contactSync, weak userSettingSync, storage, userId = credentials.userId] state in
             // 服务端有设置且比本地新才拉。settingHead 为 0 表示服务端确实没有任何设置。
             let localSettingHead = (try? storage.syncState.get().settingHead) ?? 0
-            if state.settingHead > localSettingHead {
+            if AppEnvironment.shouldPullUserSettings(serverSettingHead: state.settingHead, localSettingHead: localSettingHead) {
                 userSettingSync?.syncUserSettings()
             }
             service?.pullMessagesSinceLastSync()
@@ -212,6 +212,15 @@ public final class AppEnvironment {
         // because logout must still proceed (disconnect/clear credentials
         // already happened above) even if this fails, e.g. disk full.
         try? storage.clearSessionData()
+    }
+
+    /// 决定 `connectIfPossible()` 收到 `CONNECT_ACK` 后是否要发 UG 拉用户设置。
+    /// 服务端有设置且比本地新才拉；`serverSettingHead == 0` 且本地也是 0
+    /// 表示服务端确实没有任何设置，不算「比本地新」。抽成独立函数是因为这是
+    /// 整个恢复路径唯一的开关——写反或改成 `>=`/`!=` 会让 UG 静默永不发出，
+    /// 而调用点原来嵌在一个大闭包里测不到。
+    public static func shouldPullUserSettings(serverSettingHead: Int64, localSettingHead: Int64) -> Bool {
+        serverSettingHead > localSettingHead
     }
 
     /// The on-disk path for `IMStorage`'s SQLite file: `<Application

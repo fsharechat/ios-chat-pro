@@ -143,6 +143,55 @@ final class UserSettingSyncServiceTests: XCTestCase {
         )
     }
 
+    // MARK: - 3b. 重装后真实时序:UG 先到、行后建(两个 Critical 修复的回归测试)
+    //
+    // 上面第 1/2 组测试都是先插行、再 apply UG —— 这是简单方向，也是两个
+    // Critical 漏网的原因。真实的重装时序反过来:UG 应答在 `.gpgi`/消息拉取
+    // 之前到达，此时对应的群行/会话行还不存在。
+
+    /// 对应 GroupStore.upsertGroup 的 else 分支:UG 落在空库上之后，`.gpgi`
+    /// 应答才把群行建出来 —— 这条建行必须从 userSetting 播种 isFav，
+    /// 而不是让 StoredGroup 默认的 isFav = false 把已保存状态覆盖掉。
+    func test_groupCreatedAfterUG_seedsIsFavFromUserSetting() throws {
+        try simulateUGResponse([ugEntry(6, "groupX", "1", 100)])
+        XCTAssertNil(try storage.groups.group(groupId: "groupX"), "此时本地还没有群行，符合重装场景")
+
+        // 模拟 GroupSyncService.refreshGroup 收到 .gpgi 应答后建行 ——
+        // GroupInfoSyncHandler 不会传 isFav:，所以入参默认 isFav = false。
+        try storage.groups.upsertGroup(StoredGroup(
+            groupId: "groupX", name: "GroupX", portrait: nil, owner: nil,
+            groupType: .normal, memberCount: 3, updateDt: 0, memberUpdateDt: 0
+        ))
+
+        let group = try XCTUnwrap(storage.groups.group(groupId: "groupX"))
+        XCTAssertTrue(group.isFav, "群行在 UG 之后才建出来，也必须还原出已保存状态")
+    }
+
+    /// 对应 ConversationStore.recordIncomingMessage 的建行分支:UG 落在空库上
+    /// 之后，消息拉取才把会话行建出来 —— 这条建行必须从 userSetting 播种
+    /// isTop/isMuted，而不是让 StoredConversation 默认的 false 覆盖掉。
+    func test_conversationCreatedAfterUG_seedsIsTopAndIsMutedFromUserSetting() throws {
+        try simulateUGResponse([
+            ugEntry(3, "1-0-groupY", "1", 100),
+            ugEntry(1, "1-0-groupY", "1", 100)
+        ])
+        XCTAssertNil(
+            try storage.conversations.conversation(conversationType: .group, target: "groupY"),
+            "此时本地还没有会话行，符合重装场景"
+        )
+
+        // 模拟 pullMessagesSinceLastSync() 之后收到该会话的第一条消息,
+        // 走 recordIncomingMessage 建行。
+        try storage.conversations.recordIncomingMessage(
+            conversationType: .group, target: "groupY", line: 0,
+            messageUid: 1, timestamp: 1_000, incrementUnread: true
+        )
+
+        let conversation = try XCTUnwrap(storage.conversations.conversation(conversationType: .group, target: "groupY"))
+        XCTAssertTrue(conversation.isTop, "会话行在 UG 之后才建出来，也必须还原出已保存的置顶状态")
+        XCTAssertTrue(conversation.isMuted, "会话行在 UG 之后才建出来，也必须还原出已保存的免打扰状态")
+    }
+
     // MARK: - 4. syncUserSettings() 发包
 
     func test_syncUserSettings_sendsUGRequestWithLocalSettingHeadAsVersion() throws {

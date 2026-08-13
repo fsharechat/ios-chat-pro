@@ -14,6 +14,15 @@ public final class GroupStore {
             var updated = group
             if let existing = try StoredGroup.fetchOne(db, key: group.groupId) {
                 updated.isFav = existing.isFav
+            } else {
+                // 首次为这个 groupId 建行(例如 .gpgi 应答先于/晚于 UG 到达都可能触发)——
+                // 群行不存在时没有旧值可沿用，改从 userSetting 播种，否则重装后 UG
+                // 投影的 isFav 会被这里悄悄用 false 盖掉（源头是入参 group.isFav
+                // 默认 false，见 GroupInfoSyncHandler 不传 isFav:）。
+                updated.isFav = try StoredUserSetting
+                    .filter(Column("scope") == UserSettingKeys.Scope.favoriteGroup
+                            && Column("key") == group.groupId)
+                    .fetchOne(db)?.value == "1"
             }
             try updated.save(db)
         }

@@ -269,4 +269,25 @@ final class AppEnvironmentTests: XCTestCase {
         XCTAssertTrue(hosts.isEmpty)
         XCTAssertNil(environment.connectedHost)
     }
+
+    // MARK: - shouldPullUserSettings
+
+    // `connectIfPossible()` 里 `state.settingHead > localSettingHead` 这一行
+    // 决定了整条用户设置恢复路径是否会跑——写反、改成 `>=`/`!=` 都会让 UG
+    // 静默永不发出。抽成 `AppEnvironment.shouldPullUserSettings` 后单测覆盖。
+    func test_shouldPullUserSettings_serverGreaterThanLocal_returnsTrue() {
+        XCTAssertTrue(AppEnvironment.shouldPullUserSettings(serverSettingHead: 200, localSettingHead: 100))
+    }
+
+    func test_shouldPullUserSettings_serverEqualToLocal_returnsFalse() {
+        XCTAssertFalse(AppEnvironment.shouldPullUserSettings(serverSettingHead: 100, localSettingHead: 100))
+    }
+
+    func test_shouldPullUserSettings_serverLessThanLocal_returnsFalse() {
+        XCTAssertFalse(AppEnvironment.shouldPullUserSettings(serverSettingHead: 50, localSettingHead: 100))
+    }
+
+    func test_shouldPullUserSettings_bothZero_returnsFalse() {
+        XCTAssertFalse(AppEnvironment.shouldPullUserSettings(serverSettingHead: 0, localSettingHead: 0))
+    }
 }
