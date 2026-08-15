@@ -654,10 +654,19 @@ final class ConversationViewController: UIViewController {
     /// Scales the image to at most 200px on its longest side, then iteratively
     /// lowers JPEG quality until the output is under 60 KB — staying safely
     /// inside the server's BLOB column limit of 64 KB.
+    ///
+    /// `format.scale = 1` is load-bearing: `UIImage.size` is in points, and a
+    /// renderer left at its default screen scale would emit `maxDimension * 3`
+    /// pixels on an @3x device. That made thumbnails 600px wide instead of
+    /// 200px — small enough in bytes, but 1MB+ once a receiving client decodes
+    /// them, which is over Android's binder transaction limit and broke
+    /// forwarding there. Pixel size must not depend on the sender's screen.
     private static func makeThumbnailData(_ image: UIImage, maxDimension: CGFloat = 200, sizeLimit: Int = 60 * 1024) -> Data? {
         let scale = min(maxDimension / image.size.width, maxDimension / image.size.height, 1)
         let newSize = CGSize(width: image.size.width * scale, height: image.size.height * scale)
-        let renderer = UIGraphicsImageRenderer(size: newSize)
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = 1
+        let renderer = UIGraphicsImageRenderer(size: newSize, format: format)
         let scaled = renderer.image { _ in image.draw(in: CGRect(origin: .zero, size: newSize)) }
 
         var quality: CGFloat = 0.7
