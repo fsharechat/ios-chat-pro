@@ -168,7 +168,7 @@ func test_fileRoundtrip() {
 - [ ] **Step 7: 运行测试，确认通过**
 
 ```bash
-cd /Users/liaojinlong/Share/GitWorkplace/github/fshare/ios-chat-pro
+cd ios-chat-pro   # 仓库根目录
 swift test --filter IMStorageTests
 ```
 
@@ -236,7 +236,7 @@ case 5:
 - [ ] **Step 4: 检查 `wire.content` 字段名是否在 `Im_MessageContent` proto 中存在（如字段名不同需调整）**
 
 ```bash
-grep -r "content\|searchableContent\|remoteMediaURL" /Users/liaojinlong/Share/GitWorkplace/github/fshare/ios-chat-pro/Sources/IMProto/ | head -20
+grep -r "content\|searchableContent\|remoteMediaURL" Sources/IMProto/ | head -20
 ```
 
 - [ ] **Step 5: 写单元测试**

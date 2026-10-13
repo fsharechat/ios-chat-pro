@@ -53,7 +53,7 @@ bash Scripts/generate-proto.sh
 
 ### 真机部署（命令行兜底，不依赖 Xcode UI）
 
-测试机：于任飞的iPhone，iPhone 14 Pro，UDID `00008120-001945391147401E`，bundleID `cn.comsince.fschat`。本机 2017 Intel MacBook Pro（macOS 13.7 到顶）+ Xcode 15.2。
+测试机：iPhone 14 Pro，UDID `00008120-001945391147401E`，bundleID `cn.comsince.fschat`。本机 2017 Intel MacBook Pro（macOS 13.7 到顶）+ Xcode 15.2。
 
 ```bash
 # 1. 检查设备状态

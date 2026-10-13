@@ -48,6 +48,8 @@ bash Scripts/generate-xcodeproj.sh
 
 首次运行会自动下载 XcodeGen 工具到 `.tools/`，无需 Homebrew。
 
+> **签名配置：** `project.yml` 中的 `DEVELOPMENT_TEAM`（`S9PWD6X38T`）是原作者的 Apple 开发者 Team ID。真机运行前请改成你自己的 Team ID，并把 `PRODUCT_BUNDLE_IDENTIFIER`（`cn.comsince.fschat`）改成你自己的 Bundle ID，然后重新执行上面的生成脚本。也可以在 Xcode 的 **Signing & Capabilities** 中直接修改，但重新生成工程后会被覆盖。
+
 ### 3. 用 Xcode 打开并运行
 
 ```bash

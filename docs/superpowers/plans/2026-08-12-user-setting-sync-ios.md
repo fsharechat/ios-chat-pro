@@ -14,7 +14,7 @@
 
 ## Global Constraints
 
-- **仓库路径**：`/Users/liaojinlong/Share/GitWorkplace/github/fshare/ios-chat-pro`。`chat-server-pro`、`android-chat-pro` 是**另外的独立 git 工作区**，本计划不改它们，也不能把它们的文件放进本仓库的提交。
+- **仓库路径**：`ios-chat-pro/`（仓库根目录，与 `chat-server-pro`、`android-chat-pro` 同级）。`chat-server-pro`、`android-chat-pro` 是**另外的独立 git 工作区**，本计划不改它们，也不能把它们的文件放进本仓库的提交。
 - **单元测试用 `swift test`**（见仓库 `CLAUDE.md`）：全部 `swift test`，按模块 `swift test --filter IMStorageTests`，单例 `swift test --filter IMStorageTests/UserSettingStoreTests/testXxx`。
 - **App 构建用 xcodebuild**：`xcodebuild -project ios-chat-pro.xcodeproj -scheme App -destination 'platform=iOS Simulator,name=iPhone 15' build`。注意 CLAUDE.md 的警告：destination 写错不会报错，`xcodebuild` 会静默回退去构建真机 SDK。
 - **新增 Swift 文件后不需要改 `project.yml`**：XcodeGen 按目录通配收集源文件；但**新增 target/module 需要改**，本计划刻意不新增 module。
@@ -1121,7 +1121,7 @@ swift test
 xcodebuild -project ios-chat-pro.xcodeproj -scheme App -destination 'generic/platform=iOS' -allowProvisioningUpdates build
 ```
 
-测试机：于任飞的 iPhone（iPhone 14 Pro），UDID `00008120-001945391147401E`，bundleID `cn.comsince.fschat`。本机是 2017 Intel MacBook Pro（macOS 13.7）+ Xcode 15.2，按 `CLAUDE.md` 的说明用 Xcode 或 `devicectl` 安装。
+测试机：iPhone 14 Pro，UDID `00008120-001945391147401E`，bundleID `cn.comsince.fschat`。本机是 2017 Intel MacBook Pro（macOS 13.7）+ Xcode 15.2，按 `CLAUDE.md` 的说明用 Xcode 或 `devicectl` 安装。
 
 - [ ] **Step 4: 真机验证清单**
 
