@@ -29,6 +29,8 @@ public final class ConversationViewModel {
     private let fileUploading: FileUploading?
     private let videoUploading: VideoUploading?
     private let remoteHistory: RemoteHistoryFetching?
+    /// 语音转文字引擎，由 `SceneDelegate` 注入；为 nil 时会话页不显示转文字入口
+    public let transcripts: TranscriptEngine?
     private let activeTracking: ActiveConversationTracking?
     private let streaming: StreamingAiObserving?
     /// Set once the server confirms there's nothing older than what's
@@ -89,9 +91,11 @@ public final class ConversationViewModel {
         conversationType: ConversationType = .single,
         line: Int = 0,
         pageSize: Int = 30,
-        currentUserId: String
+        currentUserId: String,
+        transcripts: TranscriptEngine? = nil
     ) {
         self.storage = storage
+        self.transcripts = transcripts
         self.messageSending = messageSending
         self.contactSync = contactSync
         self.imageUploading = imageUploading
@@ -447,6 +451,12 @@ public final class ConversationViewModel {
                 conversationType: conversationType, target: target, line: line, db: db
             )
         }
+    }
+
+    /// 他人语音置为已播放（播放或点「转文字」时调用），GRDB 观察会刷新气泡
+    public func markPlayed(row: StoredMessageRow) {
+        guard !row.isOutgoing, row.status != .played else { return }
+        try? storage.messages.markPlayed(id: row.storageId)
     }
 
     /// Forwards a message to a different conversation, then sends an optional

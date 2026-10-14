@@ -759,4 +759,45 @@ final class ReceiveMessageHandlerTests: XCTestCase {
 
         XCTAssertNotNil(try storage.conversations.conversation(conversationType: .group, target: "g1"))
     }
+
+    private func makeVoiceWireMessage(uid: Int64, from: String) -> Im_Message {
+        var message = makeWireMessage(uid: uid, from: from, target: from == "me" ? "them" : "me")
+        message.content = MessageContentCodec.encode(.voice(remoteURL: "http://x/\(uid).amr", localPath: nil, duration: 3))
+        return message
+    }
+
+    func test_receive_firesIncomingVoiceOnlyWhenNotSuppressed() throws {
+        var fired: [Int64] = []
+        handler.onIncomingVoiceMessage = { uid, _ in fired.append(uid) }
+
+        handler.suppressUnreadIncrement = true
+        handler.handle(frame: try makePullResultFrame(messages: [makeVoiceWireMessage(uid: 1, from: "them")], head: 1))
+        XCTAssertEqual(fired, [])
+
+        handler.handle(frame: try makePullResultFrame(messages: [makeVoiceWireMessage(uid: 2, from: "them")], head: 2))
+        XCTAssertEqual(fired, [2])
+    }
+
+    func test_receive_doesNotFireForTextOrOwnVoice() throws {
+        var fired: [Int64] = []
+        handler.onIncomingVoiceMessage = { uid, _ in fired.append(uid) }
+
+        handler.handle(frame: try makePullResultFrame(messages: [
+            makeWireMessage(uid: 3, from: "them", target: "me"),
+            makeVoiceWireMessage(uid: 4, from: "me"),
+        ], head: 4))
+
+        XCTAssertEqual(fired, [])
+    }
+
+    func test_receive_suppressedPullStoresIncomingVoiceAsPlayed() throws {
+        handler.suppressUnreadIncrement = true
+        handler.handle(frame: try makePullResultFrame(messages: [makeVoiceWireMessage(uid: 21, from: "them")], head: 21))
+        XCTAssertEqual(try storage.messages.message(uid: 21)?.status, .played)
+    }
+
+    func test_receive_realtimeIncomingVoiceStaysUnread() throws {
+        handler.handle(frame: try makePullResultFrame(messages: [makeVoiceWireMessage(uid: 22, from: "them")], head: 22))
+        XCTAssertEqual(try storage.messages.message(uid: 22)?.status, .unread)
+    }
 }

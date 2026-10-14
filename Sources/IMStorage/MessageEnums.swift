@@ -16,16 +16,18 @@ public enum MessageDirection: Int, Codable, Equatable {
 }
 
 /// Subset of `cn.wildfirechat.message.core.MessageStatus` needed for Phase 1
-/// (text/image, no mentions, no voice playback). Raw values kept identical
-/// to the Android subset in case a later phase needs the rest
-/// (`Mentioned=3, AllMentioned=4, Played=7`) — adding them later is a
-/// purely additive enum change, not a migration.
+/// (text/image, no mentions). Raw values kept identical to the Android subset
+/// in case a later phase needs the rest (`Mentioned=3, AllMentioned=4`) —
+/// adding them later is a purely additive enum change, not a migration.
+/// `played` was added with the voice-to-text feature.
 public enum MessageStatus: Int, Codable, Equatable, Hashable {
     case sending = 0
     case sent = 1
     case sendFailure = 2
     case unread = 5
     case read = 6
+    /// 他人语音已播放（或用户点了「转文字」）。值与 Android `MessageStatus.Played` 一致
+    case played = 7
 }
 
 /// Subset of `cn.wildfirechat.message.core.MessageContentType` needed for

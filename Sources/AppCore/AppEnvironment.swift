@@ -35,6 +35,9 @@ public final class AppEnvironment {
     /// 退出重登会重建 MessagingService，这个中继跨重建存活，
     /// `connectIfPossible()` 每次都会把新 service 的回调接到它上面。
     public var onIncomingMessageAlert: ((_ isMuted: Bool, _ isActiveConversation: Bool, _ isGroupNotification: Bool) -> Void)?
+    /// 新收到的他人语音（不含首次登录全量拉取）。`SceneDelegate` 据此做自动转文字。
+    /// 与 `onIncomingMessageAlert` 同样挂在 environment 上，跨登出 / 重登保持。
+    public var onIncomingVoiceMessage: ((_ messageUid: Int64, _ serverTimestamp: Int64, _ serverDeltaMillis: Int64) -> Void)?
     /// 当前连接状态；未登录（imClient 为 nil）视为断开。UI 首次绑定时读它
     /// 拿初始值——`connectIfPossible()` 里 `connect()` 先于 UI 构建执行，
     /// 最初的 `.connecting` 事件发出时中继还没被赋值。
@@ -158,6 +161,9 @@ public final class AppEnvironment {
         service.onGroupNotificationMessage = { [weak groupSync] groupId in groupSync?.refreshGroup(targetId: groupId) }
         service.onIncomingMessageAlert = { [weak self] isMuted, isActiveConversation, isGroupNotification in
             self?.onIncomingMessageAlert?(isMuted, isActiveConversation, isGroupNotification)
+        }
+        service.onIncomingVoiceMessage = { [weak self, weak client] uid, serverTimestamp in
+            self?.onIncomingVoiceMessage?(uid, serverTimestamp, client?.serverTimeDeltaMillis ?? 0)
         }
         connectAckHandler.onSyncState = { [weak service, weak contactSync, weak userSettingSync, storage, userId = credentials.userId] state in
             // 服务端有设置且比本地新才拉。settingHead 为 0 表示服务端确实没有任何设置。

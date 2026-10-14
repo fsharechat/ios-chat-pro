@@ -10,6 +10,11 @@ import IMClient
 final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     var window: UIWindow?
     private var environment: AppEnvironment!
+    private lazy var transcriptEngine = TranscriptEngine(
+        fetcher: { [weak self] in self?.environment.messagingService },
+        persistence: UserDefaultsTranscriptPersistence(),
+        schedule: { delay, block in DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: block) }
+    )
     private var cancellables = Set<AnyCancellable>()
     private var presentedCallViewController: CallViewController?
     /// environment.callManager 为 nil(未登录)时 no-op,登录成功回调里会再
@@ -41,6 +46,11 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         environment = AppEnvironment(storage: storage)
         environment.onIncomingMessageAlert = { [weak self] isMuted, isActiveConversation, isGroupNotification in
             self?.messageAlertPlayer.handle(isMuted: isMuted, isActiveConversation: isActiveConversation, isGroupNotification: isGroupNotification)
+        }
+        environment.onIncomingVoiceMessage = { [weak self] uid, serverTimestamp, delta in
+            let now = Int64(Date().timeIntervalSince1970 * 1000)
+            guard VoiceTranscriptRules.isRealtime(serverTimestamp: serverTimestamp, serverDelta: delta, now: now) else { return }
+            self?.transcriptEngine.enqueueAuto(uid)
         }
 
         Theme.applyGlobalBarAppearance()
@@ -166,6 +176,10 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
                 guard let self else { return }
                 settingsViewController?.navigationController?.pushViewController(AboutViewController(config: self.environment.config), animated: true)
             }
+            settingsViewController.autoTranscribe = (
+                get: { [weak self] in self?.transcriptEngine.isAutoTranscribe ?? false },
+                set: { [weak self] isOn in self?.transcriptEngine.isAutoTranscribe = isOn }
+            )
             settingsViewController.onLogoutConfirmed = { [weak self] in
                 self?.performLogout()
             }
@@ -212,7 +226,8 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
                 target: row.target,
                 conversationType: row.conversationType,
                 line: row.line,
-                currentUserId: self.environment.imClient?.userId ?? ""
+                currentUserId: self.environment.imClient?.userId ?? "",
+                transcripts: self.transcriptEngine
             )
             let conversationViewController = ConversationViewController(row: row, viewModel: conversationViewModel)
             self.wireGroupInfoNavigation(on: conversationViewController, groupId: row.target)
@@ -261,7 +276,8 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
                     streaming: self.environment.messagingService,
                     target: groupId,
                     conversationType: .group,
-                    currentUserId: self.environment.imClient?.userId ?? ""
+                    currentUserId: self.environment.imClient?.userId ?? "",
+                    transcripts: self.transcriptEngine
                 )
                 let conversationRow = ConversationRow(
                     conversationType: .group, target: groupId, line: 0,
@@ -463,7 +479,8 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
                         streaming: self.environment.messagingService,
                         target: uid,
                         conversationType: .single,
-                        currentUserId: self.environment.imClient?.userId ?? ""
+                        currentUserId: self.environment.imClient?.userId ?? "",
+                        transcripts: self.transcriptEngine
                     )
                     let user = try? self.environment.storage.users.user(uid: uid)
                     let conversationRow = ConversationRow(
@@ -583,7 +600,8 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
                     streaming: self.environment.messagingService,
                     target: row.uid,
                     conversationType: .single,
-                    currentUserId: self.environment.imClient?.userId ?? ""
+                    currentUserId: self.environment.imClient?.userId ?? "",
+                    transcripts: self.transcriptEngine
                 )
                 let conversationRow = ConversationRow(
                     conversationType: .single,
@@ -630,7 +648,8 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
                     target: groupId,
                     conversationType: .group,
                     line: 0,
-                    currentUserId: self.environment.imClient?.userId ?? ""
+                    currentUserId: self.environment.imClient?.userId ?? "",
+                    transcripts: self.transcriptEngine
                 )
                 let group = try? self.environment.storage.groups.group(groupId: groupId)
                 let conversationRow = ConversationRow(

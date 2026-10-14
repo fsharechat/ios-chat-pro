@@ -101,6 +101,15 @@ final class RemoteHistoryLoadTests: XCTestCase {
         XCTAssertEqual(try storage.messages.message(uid: 9)?.content, .text("older-9"))
     }
 
+    func test_loadRemoteMessages_incomingVoice_isStoredAsPlayed() throws {
+        service.loadRemoteMessages(conversationType: .single, target: "them", line: 0, beforeUid: 10, count: 20) { _ in }
+        let sentFrame = try decodeOnlySentFrame()
+        var voice = makeHistoryWireMessage(uid: 9, from: "them", text: "", timestamp: 900)
+        voice.content = MessageContentCodec.encode(.voice(remoteURL: "http://x/9.amr", localPath: nil, duration: 3))
+        try simulateLRMAck(messageId: sentFrame.header.messageId, messages: [voice])
+        XCTAssertEqual(try storage.messages.message(uid: 9)?.status, .played)
+    }
+
     func test_loadRemoteMessages_persistedHistory_doesNotTouchConversationOrSyncHead() throws {
         service.loadRemoteMessages(conversationType: .single, target: "them", line: 0, beforeUid: 10, count: 20) { _ in }
         let sentFrame = try decodeOnlySentFrame()

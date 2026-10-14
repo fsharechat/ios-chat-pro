@@ -24,4 +24,9 @@ final class SubSignalOrdinalTest: XCTestCase {
         XCTAssertEqual(SubSignal(rawValue: 42), .up)
         XCTAssertEqual(SubSignal(rawValue: 43), .un)
     }
+
+    func testSpeechToTextSignalIsAppendedAfterUserSetting() {
+        XCTAssertEqual(SubSignal.asr.rawValue, 44)
+        XCTAssertEqual(SubSignal(rawValue: 44), .asr)
+    }
 }

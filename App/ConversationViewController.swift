@@ -198,8 +198,19 @@ final class ConversationViewController: UIViewController {
             switch row {
             case .message(let message) where message.text?.hasPrefix("[语音]") == true:
                 let cell = tableView.dequeueReusableCell(withIdentifier: VoiceMessageCell.reuseIdentifier, for: indexPath) as! VoiceMessageCell
-                cell.configure(with: message)
-                cell.onTapped = { [weak self, weak cell] in self?.playVoice(urlString: message.imageRemoteURL, cell: cell) }
+                let engine = self?.viewModel.transcripts
+                let entry = engine?.entry(for: message.messageUid)
+                let showPill = engine.map {
+                    VoiceTranscriptRules.showPill(isIncoming: !message.isOutgoing, isPlayed: message.status == .played,
+                                                  messageUid: message.messageUid, entry: entry, auto: $0.isAutoTranscribe)
+                } ?? false
+                cell.configure(with: message, transcript: entry, showPill: showPill)
+                cell.onTapped = { [weak self, weak cell] in
+                    self?.viewModel.markPlayed(row: message)
+                    self?.playVoice(urlString: message.imageRemoteURL, cell: cell)
+                }
+                cell.onTranscribeTapped = { [weak self] in self?.transcribe(message) }
+                cell.onTranscriptRetryTapped = { [weak self] in self?.viewModel.transcripts?.request(message.messageUid) }
                 cell.onRetryTapped = { [weak self] in self?.viewModel.retry(row: row) }
                 cell.onAvatarLongPressed = { [weak self] in self?.insertMentionFromAvatar(message) }
                 return cell
@@ -318,10 +329,32 @@ final class ConversationViewController: UIViewController {
         }
     }
 
+    /// 点「转文字」视为已读：消红点
+    private func transcribe(_ message: StoredMessageRow) {
+        viewModel.markPlayed(row: message)
+        viewModel.transcripts?.request(message.messageUid)
+    }
+
+    /// 转文字结果变化时只重配对应气泡（ChatMessageRow 本身未变，diffable 不会自动刷新）
+    private func reconfigureVoiceRow(messageUid: Int64) {
+        var snapshot = dataSource.snapshot()
+        let targets = snapshot.itemIdentifiers.filter {
+            if case .message(let m) = $0 { return m.messageUid == messageUid }
+            return false
+        }
+        guard !targets.isEmpty else { return }
+        snapshot.reconfigureItems(targets)
+        dataSource.apply(snapshot, animatingDifferences: false)
+    }
+
     private func bindViewModel() {
         viewModel.$rows
             .receive(on: DispatchQueue.main)
             .sink { [weak self] rows in self?.applySnapshot(rows: rows) }
+            .store(in: &cancellables)
+        viewModel.transcripts?.changes
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] uid in self?.reconfigureVoiceRow(messageUid: uid) }
             .store(in: &cancellables)
     }
 
@@ -811,6 +844,20 @@ final class ConversationViewController: UIViewController {
 
     private func buildMenuItems(for message: StoredMessageRow) -> [PlusMenuView.Item] {
         var items: [PlusMenuView.Item] = []
+
+        // 转文字 / 隐藏文字 — 语音消息
+        if message.voiceDuration != nil, let engine = viewModel.transcripts {
+            let entry = engine.entry(for: message.messageUid)
+            if VoiceTranscriptRules.showTranscribeMenu(messageUid: message.messageUid, entry: entry) {
+                items.append(.init(symbolName: "text.bubble", title: "转文字") { [weak self] in
+                    self?.transcribe(message)
+                })
+            } else if VoiceTranscriptRules.showHideMenu(messageUid: message.messageUid, entry: entry) {
+                items.append(.init(symbolName: "eye.slash", title: "隐藏文字") {
+                    engine.hide(message.messageUid)
+                })
+            }
+        }
 
         // Copy — text-only (excludes voice/file prefixes, location, video)
         if let text = message.text,

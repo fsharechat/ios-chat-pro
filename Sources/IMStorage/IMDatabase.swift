@@ -18,7 +18,7 @@ public final class IMDatabase {
         try IMDatabase(dbQueue: DatabaseQueue())
     }
 
-    private static var migrator: DatabaseMigrator {
+    static var migrator: DatabaseMigrator {
         var migrator = DatabaseMigrator()
         migrator.registerMigration("v1_createSchema") { db in
             try db.create(table: "message") { t in
@@ -179,6 +179,11 @@ public final class IMDatabase {
                 t.column("updateDt", .integer).notNull().defaults(to: 0)
                 t.primaryKey(["scope", "key"])
             }
+        }
+        migrator.registerMigration("v10_markExistingVoiceAsPlayed") { db in
+            // 「已播放」上线前收到的他人语音都是 unread，升级后会全部显示红点和「转文字」按钮。
+            // 与 v8 同理，一次性置为已播放，只有迁移之后新收到的语音才显示红点。
+            try db.execute(sql: "UPDATE message SET status = 7 WHERE direction = 1 AND contentType = 2")
         }
         return migrator
     }

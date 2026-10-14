@@ -69,6 +69,9 @@ public final class ReceiveMessageHandler: MessageHandler {
     /// vibrate+sound alert.
     public var onIncomingMessageAlert: ((_ isMuted: Bool, _ isActiveConversation: Bool, _ isGroupNotification: Bool) -> Void)?
 
+    /// 新收到的他人语音（不含首次登录全量拉取），写库事务结束后按条派发。
+    public var onIncomingVoiceMessage: ((_ messageUid: Int64, _ serverTimestamp: Int64) -> Void)?
+
     /// Set to `true` before an initial-sync pull (localHead == 0) so that
     /// historical messages don't generate unread badges on first login.
     /// Automatically reset to `false` after the first batch is processed.
@@ -105,10 +108,11 @@ public final class ReceiveMessageHandler: MessageHandler {
         var groupNotificationTargets: Set<String> = []
         var callEvents: [CallEvent] = []
         var alertCandidates: [(isMuted: Bool, isActiveConversation: Bool, isGroupNotification: Bool)] = []
+        var incomingVoices: [(uid: Int64, timestamp: Int64)] = []
         let t0 = ProcessInfo.processInfo.systemUptime
         try? storage.write { db in
             for wireMessage in result.message {
-                persist(wireMessage, db: db, suppressUnread: shouldSuppressUnread, groupNotificationTargets: &groupNotificationTargets, callEvents: &callEvents, alertCandidates: &alertCandidates)
+                persist(wireMessage, db: db, suppressUnread: shouldSuppressUnread, groupNotificationTargets: &groupNotificationTargets, callEvents: &callEvents, alertCandidates: &alertCandidates, incomingVoices: &incomingVoices)
             }
             advanceSyncHead(to: result.head, db: db)
         }
@@ -126,6 +130,9 @@ public final class ReceiveMessageHandler: MessageHandler {
         }
         for candidate in alertCandidates {
             onIncomingMessageAlert?(candidate.isMuted, candidate.isActiveConversation, candidate.isGroupNotification)
+        }
+        for voice in incomingVoices {
+            onIncomingVoiceMessage?(voice.uid, voice.timestamp)
         }
         // 单循环按原始 wire 顺序派发 —— 见 CallEvent 的注释,不能拆成两个
         // "先 callStart 全部、再 signal 全部"的循环。
@@ -152,7 +159,7 @@ public final class ReceiveMessageHandler: MessageHandler {
     /// resulting `StoredMessage` is appended to `callEvents` as `.callStart`.
     /// Both are appended to the **same** array, in wire order, so a mixed
     /// batch replays in the order it arrived (see `CallEvent`'s doc comment).
-    private func persist(_ wireMessage: Im_Message, db: Database, suppressUnread: Bool, groupNotificationTargets: inout Set<String>, callEvents: inout [CallEvent], alertCandidates: inout [(isMuted: Bool, isActiveConversation: Bool, isGroupNotification: Bool)]) {
+    private func persist(_ wireMessage: Im_Message, db: Database, suppressUnread: Bool, groupNotificationTargets: inout Set<String>, callEvents: inout [CallEvent], alertCandidates: inout [(isMuted: Bool, isActiveConversation: Bool, isGroupNotification: Bool)], incomingVoices: inout [(uid: Int64, timestamp: Int64)]) {
         guard wireMessage.messageID != 0 else { return }
         if (try? storage.messages.message(uid: wireMessage.messageID, db: db)) != nil {
             return // already have it via server uid — pull windows can overlap
@@ -221,6 +228,11 @@ public final class ReceiveMessageHandler: MessageHandler {
         let isMentioned = conversationType == .group && direction == .receive
             && (mentionedType == 2 || (mentionedType == 1 && mentionedTargets.contains(myUserId())))
 
+        // Pulled/catch-up voice is history, not fresh: mark it played so it
+        // doesn't show the unplayed red dot (real-time voice stays .unread).
+        var incomingStatus: MessageStatus = .unread
+        if suppressUnread, direction == .receive, case .voice = content { incomingStatus = .played }
+
         do {
             // Server-generated messages (group notifications, etc.) have
             // localMessageID == 0 because the client never assigned one.
@@ -239,7 +251,7 @@ public final class ReceiveMessageHandler: MessageHandler {
                 from: wireMessage.fromUser,
                 content: content,
                 timestamp: wireMessage.serverTimestamp,
-                status: direction == .send ? .sent : .unread,
+                status: direction == .send ? .sent : incomingStatus,
                 direction: direction,
                 mentionedType: mentionedType,
                 mentionedTargets: mentionedTargets
@@ -268,6 +280,9 @@ public final class ReceiveMessageHandler: MessageHandler {
                     isGroupNotification = false
                 }
                 alertCandidates.append((isMuted: isMuted, isActiveConversation: isActiveConversation, isGroupNotification: isGroupNotification))
+            }
+            if direction == .receive, !suppressUnread, case .voice = content {
+                incomingVoices.append((uid: wireMessage.messageID, timestamp: wireMessage.serverTimestamp))
             }
             if case .groupNotification(let notificationType, _, let memberUids, _) = content {
                 groupNotificationTargets.insert(target)

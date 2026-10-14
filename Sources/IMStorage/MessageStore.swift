@@ -184,6 +184,18 @@ public final class MessageStore {
         )
     }
 
+    /// 他人语音置为已播放（播放或点「转文字」时调用）。自己发的消息不受影响。
+    public func markPlayed(id: Int64) throws {
+        try dbQueue.write { db in try self.markPlayed(id: id, db: db) }
+    }
+
+    public func markPlayed(id: Int64, db: Database) throws {
+        try db.execute(
+            sql: "UPDATE message SET status = ? WHERE id = ? AND direction = ?",
+            arguments: [MessageStatus.played.rawValue, id, MessageDirection.receive.rawValue]
+        )
+    }
+
     /// Scoped to `direction = .send`; see `updateStatus` above for why, and
     /// for the no-op-on-not-found behavior.
     public func updateMessageUid(localMessageId: Int64, messageUid: Int64) throws {

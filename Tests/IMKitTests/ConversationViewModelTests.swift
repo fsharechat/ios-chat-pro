@@ -955,4 +955,19 @@ final class ConversationViewModelTests: XCTestCase {
         groupViewModel.reprocessMessages()
         XCTAssertTrue(nicknameStates().allSatisfy { $0 == "Alice" }, "重新打开开关 + reprocess 后全部行应恢复昵称")
     }
+
+    func test_markPlayed_setsIncomingVoiceToPlayed() throws {
+        let inserted = try storage.messages.insert(StoredMessage(
+            localMessageId: 1, messageUid: 900, conversationType: .single, target: "them", from: "them",
+            content: .voice(remoteURL: "http://x/a.amr", localPath: nil, duration: 3),
+            timestamp: 1_000, status: .unread, direction: .receive
+        ))
+        let row = StoredMessageRow(storageId: inserted.id!, localMessageId: 1, messageUid: 900, isOutgoing: false,
+                                   status: .unread, timestamp: 1_000, text: "[语音]", imageThumbnail: nil,
+                                   imageRemoteURL: "http://x/a.amr", voiceDuration: 3)
+
+        viewModel.markPlayed(row: row)
+
+        XCTAssertEqual(try storage.messages.message(uid: 900)?.status, .played)
+    }
 }

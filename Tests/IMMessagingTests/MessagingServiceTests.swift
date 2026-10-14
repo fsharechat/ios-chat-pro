@@ -512,4 +512,45 @@ final class MessagingServiceTests: XCTestCase {
         service.clearActiveStream()
         XCTAssertNil(service.activeStream)
     }
+
+    func test_speechToText_sendsPublishAsrWithUid() throws {
+        service.speechToText(messageUid: 777) { _ in }
+
+        let frame = try decodeOnlySentFrame()
+        XCTAssertEqual(frame.header.signal, .publish)
+        XCTAssertEqual(frame.header.subSignal, .asr)
+        XCTAssertEqual(try Im_SpeechToTextRequest(serializedBytes: frame.body).messageUid, 777)
+    }
+
+    func test_speechToText_ackDeliversText() throws {
+        var captured: String??
+        service.speechToText(messageUid: 777) { captured = .some($0) }
+        let sent = try decodeOnlySentFrame()
+        var result = Im_SpeechToTextResult()
+        result.text = "hi"
+        let ack = FrameEncoder.encode(signal: .pubAck, subSignal: .asr, messageId: sent.header.messageId, body: Data([0x00]) + (try result.serializedData()))
+
+        fakeTransport.simulateReceivedData(ack)
+
+        XCTAssertEqual(captured, .some("hi"))
+    }
+
+    func test_speechToText_errorAckDeliversNil() throws {
+        var captured: String??
+        service.speechToText(messageUid: 777) { captured = .some($0) }
+        let sent = try decodeOnlySentFrame()
+
+        fakeTransport.simulateReceivedData(FrameEncoder.encode(signal: .pubAck, subSignal: .asr, messageId: sent.header.messageId, body: Data([0xF8])))
+
+        XCTAssertEqual(captured, .some(nil))
+    }
+
+    func test_speechToText_disconnectFailsPending() throws {
+        var captured: String??
+        service.speechToText(messageUid: 777) { captured = .some($0) }
+
+        imClient.onDisconnected?()
+
+        XCTAssertEqual(captured, .some(nil))
+    }
 }

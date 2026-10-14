@@ -434,3 +434,12 @@ message NotifyMessageReport
 	required int64 head = 2;
 }
 
+message SpeechToTextRequest
+{
+	required int64 message_uid = 1;
+}
+
+message SpeechToTextResult
+{
+	required string text = 1;
+}

@@ -4,6 +4,7 @@ import UIKit
 final class SettingsViewController: UIViewController {
     private enum Row: Int, CaseIterable {
         case theme
+        case autoTranscribe
         case about
         case logout
     }
@@ -20,6 +21,9 @@ final class SettingsViewController: UIViewController {
     /// "退出登录" alert below, never on the bare tap.
     var onLogoutConfirmed: (() -> Void)?
 
+    /// Set by `SceneDelegate` — 读写转文字引擎的自动转文字开关
+    var autoTranscribe: (get: () -> Bool, set: (Bool) -> Void)?
+
     init() {
         super.init(nibName: nil, bundle: nil)
         title = "设置"
@@ -33,6 +37,7 @@ final class SettingsViewController: UIViewController {
         view.backgroundColor = Theme.backgroundPrimary
         tableView.dataSource = self
         tableView.delegate = self
+        tableView.register(ToggleSwitchCell.self, forCellReuseIdentifier: "toggle")
         tableView.backgroundColor = Theme.backgroundSecondary
         tableView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(tableView)
@@ -60,12 +65,20 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate {
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int { Row.allCases.count }
 
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+        if Row(rawValue: indexPath.row) == .autoTranscribe {
+            let toggle = tableView.dequeueReusableCell(withIdentifier: "toggle", for: indexPath) as! ToggleSwitchCell
+            toggle.configure(title: "自动转文字", isOn: autoTranscribe?.get() ?? false)
+            toggle.onToggle = { [weak self] isOn in self?.autoTranscribe?.set(isOn) }
+            toggle.backgroundColor = Theme.backgroundTertiary
+            return toggle
+        }
         let cell = tableView.dequeueReusableCell(withIdentifier: "cell") ?? UITableViewCell(style: .default, reuseIdentifier: "cell")
         switch Row(rawValue: indexPath.row)! {
         case .theme:
             cell.textLabel?.text = "主题"
             cell.textLabel?.textColor = Theme.textPrimary
             cell.accessoryType = .disclosureIndicator
+        case .autoTranscribe: break
         case .about:
             cell.textLabel?.text = "关于"
             cell.textLabel?.textColor = Theme.textPrimary
@@ -83,6 +96,7 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate {
         tableView.deselectRow(at: indexPath, animated: true)
         switch Row(rawValue: indexPath.row)! {
         case .theme: onThemeTapped?()
+        case .autoTranscribe: break
         case .about: onAboutTapped?()
         case .logout: logoutTapped()
         }

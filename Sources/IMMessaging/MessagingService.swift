@@ -26,6 +26,8 @@ public final class MessagingService {
     private let streamingAiHandler: StreamingAiHandler
     private let scheduler: Scheduler
     private var pendingRecalls: [UInt16: (Bool) -> Void] = [:]
+    private let speechToTextAckHandler: SpeechToTextAckHandler
+    private var pendingSpeechToText: [UInt16: (String?) -> Void] = [:]
 
     /// 远程历史请求的**空闲**超时：从"最后一次观察到该响应有新字节到达"
     /// 起算，而不是从请求发出起算。一页 30 条历史在慢链路上实测能到
@@ -136,6 +138,8 @@ public final class MessagingService {
         // recallAckHandler must be assigned before the first [weak self] closure
         // below — Swift phase-1 init requires every stored property to be set
         // before `self` is captured anywhere (even weakly).
+        let speechHandler = SpeechToTextAckHandler()
+        speechToTextAckHandler = speechHandler
         let recallAckHandlerInstance = RecallAckHandler()
         recallAckHandler = recallAckHandlerInstance
         let remoteAckHandlerInstance = RemoteMessageAckHandler()
@@ -151,6 +155,10 @@ public final class MessagingService {
             self?.pendingRecalls.removeValue(forKey: wireId)?(success)
         }
         imClient.register(recallAckHandlerInstance)
+        speechHandler.onResult = { [weak self] wireId, text in
+            self?.pendingSpeechToText.removeValue(forKey: wireId)?(text)
+        }
+        imClient.register(speechHandler)
         remoteAckHandlerInstance.onResult = { [weak self] wireId, messages in
             self?.handleRemoteMessagesResult(wireId: wireId, messages: messages)
         }
@@ -164,6 +172,7 @@ public final class MessagingService {
         }
         imClient.onDisconnected = { [weak self] in
             self?.failAllPendingRemoteLoads()
+            self?.failAllPendingSpeechToText()
         }
     }
 
@@ -331,6 +340,27 @@ public final class MessagingService {
             }
             completion(true)
         }
+    }
+
+    /// 语音转文字。completion 成功为文本（可能为空串），失败为 nil。
+    public func speechToText(messageUid: Int64, completion: @escaping (String?) -> Void) {
+        var request = Im_SpeechToTextRequest()
+        request.messageUid = messageUid
+        guard let body = try? request.serializedData() else { completion(nil); return }
+        let wireId = imClient.sendFrame(signal: .publish, subSignal: .asr, body: body)
+        pendingSpeechToText[wireId] = completion
+    }
+
+    private func failAllPendingSpeechToText() {
+        let pending = pendingSpeechToText
+        pendingSpeechToText.removeAll()
+        for completion in pending.values { completion(nil) }
+    }
+
+    /// 转发 `ReceiveMessageHandler.onIncomingVoiceMessage`，供自动转文字使用。
+    public var onIncomingVoiceMessage: ((_ messageUid: Int64, _ serverTimestamp: Int64) -> Void)? {
+        get { receiveMessageHandler.onIncomingVoiceMessage }
+        set { receiveMessageHandler.onIncomingVoiceMessage = newValue }
     }
 
     /// Re-sends an already-stored message that previously failed (`status
@@ -503,6 +533,9 @@ public final class MessagingService {
             target = wireMessage.conversation.target
         }
 
+        var receivedStatus: MessageStatus = .read
+        if case .voice = content { receivedStatus = .played }
+
         do {
             // History rows never reconcile with an in-flight local echo (any
             // message this device sent is already stored and deduped by uid
@@ -519,7 +552,7 @@ public final class MessagingService {
                 from: wireMessage.fromUser,
                 content: content,
                 timestamp: wireMessage.serverTimestamp,
-                status: direction == .send ? .sent : .read,
+                status: direction == .send ? .sent : receivedStatus,
                 direction: direction,
                 mentionedType: Int(wireMessage.content.mentionedType),
                 mentionedTargets: wireMessage.content.mentionedTarget

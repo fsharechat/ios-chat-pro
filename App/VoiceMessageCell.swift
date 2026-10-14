@@ -8,6 +8,13 @@ final class VoiceMessageCell: UITableViewCell {
     var onRetryTapped: (() -> Void)?
     /// 群聊里长按对方头像 → 会话页在输入框插入 @；自己发的消息不绑定。
     var onAvatarLongPressed: (() -> Void)?
+    var onTranscribeTapped: (() -> Void)?
+    var onTranscriptRetryTapped: (() -> Void)?
+
+    private let unplayedDot = UIView()
+    private let transcribePill = UIButton(type: .system)
+    private let transcriptLabel = PaddingLabel()
+    private let bubbleRow = UIStackView()
 
     private let bubbleView = UIView()
     private let iconView = UIImageView()
@@ -39,6 +46,8 @@ final class VoiceMessageCell: UITableViewCell {
         onTapped = nil
         onRetryTapped = nil
         onAvatarLongPressed = nil
+        onTranscribeTapped = nil
+        onTranscriptRetryTapped = nil
         statusIndicator.apply(.none)
     }
 
@@ -78,7 +87,39 @@ final class VoiceMessageCell: UITableViewCell {
         bubbleColumn.axis = .vertical
         bubbleColumn.spacing = 2
         bubbleColumn.addArrangedSubview(senderNameLabel)
-        bubbleColumn.addArrangedSubview(bubbleView)
+        unplayedDot.backgroundColor = .systemRed
+        unplayedDot.layer.cornerRadius = 4
+        unplayedDot.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            unplayedDot.widthAnchor.constraint(equalToConstant: 8),
+            unplayedDot.heightAnchor.constraint(equalToConstant: 8),
+        ])
+
+        transcribePill.setTitle("转文字", for: .normal)
+        transcribePill.titleLabel?.font = .systemFont(ofSize: 12)
+        transcribePill.setTitleColor(Theme.textSecondary, for: .normal)
+        transcribePill.backgroundColor = Theme.backgroundTertiary
+        transcribePill.layer.cornerRadius = 12
+        transcribePill.contentEdgeInsets = UIEdgeInsets(top: 3, left: 10, bottom: 3, right: 10)
+        transcribePill.addTarget(self, action: #selector(pillTapped), for: .touchUpInside)
+
+        bubbleRow.axis = .horizontal
+        bubbleRow.spacing = 8
+        bubbleRow.alignment = .center
+        bubbleRow.addArrangedSubview(bubbleView)
+        bubbleRow.addArrangedSubview(unplayedDot)
+        bubbleRow.addArrangedSubview(transcribePill)
+
+        transcriptLabel.numberOfLines = 0
+        transcriptLabel.font = .systemFont(ofSize: 14)
+        transcriptLabel.backgroundColor = Theme.backgroundTertiary
+        transcriptLabel.layer.cornerRadius = 8
+        transcriptLabel.layer.masksToBounds = true
+        transcriptLabel.isUserInteractionEnabled = true
+        transcriptLabel.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(transcriptTapped)))
+
+        bubbleColumn.addArrangedSubview(bubbleRow)
+        bubbleColumn.addArrangedSubview(transcriptLabel)
 
         rowStack.axis = .horizontal
         // 头像与气泡顶部对齐(微信风格),同 TextMessageCell。
@@ -131,7 +172,42 @@ final class VoiceMessageCell: UITableViewCell {
         }
     }
 
-    func configure(with row: StoredMessageRow) {
+    @objc private func pillTapped() { onTranscribeTapped?() }
+
+    private var transcriptIsError = false
+    @objc private func transcriptTapped() {
+        if transcriptIsError { onTranscriptRetryTapped?() }
+    }
+
+    private func applyTranscript(isOutgoing: Bool, showDot: Bool, showPill: Bool, entry: TranscriptEngine.Entry?) {
+        // 他人语音：气泡在左，红点/按钮在右；自己发的语音不显示红点/按钮
+        unplayedDot.isHidden = isOutgoing || !showDot
+        transcribePill.isHidden = isOutgoing || !showPill
+        transcriptIsError = false
+        switch VoiceTranscriptRules.block(entry) {
+        case .none:
+            transcriptLabel.isHidden = true
+        case .loading:
+            transcriptLabel.isHidden = false
+            transcriptLabel.text = "转文字中…"
+            transcriptLabel.textColor = Theme.textSecondary
+        case .error:
+            transcriptLabel.isHidden = false
+            transcriptLabel.text = "转文字失败，点击重试"
+            transcriptLabel.textColor = .systemRed
+            transcriptIsError = true
+        case .empty:
+            transcriptLabel.isHidden = false
+            transcriptLabel.text = "未识别到文字"
+            transcriptLabel.textColor = Theme.textSecondary
+        case .text:
+            transcriptLabel.isHidden = false
+            transcriptLabel.text = entry?.text
+            transcriptLabel.textColor = Theme.textPrimary
+        }
+    }
+
+    func configure(with row: StoredMessageRow, transcript: TranscriptEngine.Entry? = nil, showPill: Bool = false) {
         let status: MessageStatusIndicatorView.Status
         if row.isOutgoing, row.status == .sending {
             status = .sending
@@ -144,6 +220,7 @@ final class VoiceMessageCell: UITableViewCell {
             isOutgoing: row.isOutgoing, duration: row.voiceDuration ?? 0, status: status,
             avatarURL: row.senderAvatarURL, senderDisplayName: row.senderDisplayName
         )
+        applyTranscript(isOutgoing: row.isOutgoing, showDot: !row.isOutgoing && row.status != .played, showPill: showPill, entry: transcript)
     }
 
     /// 上传中/上传失败的占位行（尚未落库），与 pending 图片/视频同一生命周期。
@@ -153,6 +230,7 @@ final class VoiceMessageCell: UITableViewCell {
             status: pending.state == .uploading ? .sending : .failed,
             avatarURL: nil, senderDisplayName: nil
         )
+        applyTranscript(isOutgoing: true, showDot: false, showPill: false, entry: nil)
     }
 
     private func applyBubble(isOutgoing: Bool, duration: Int, status: MessageStatusIndicatorView.Status, avatarURL: String?, senderDisplayName: String?) {
@@ -193,5 +271,19 @@ final class VoiceMessageCell: UITableViewCell {
             rowStack.addArrangedSubview(spacer)
             avatarView.setAvatar(urlString: avatarURL, displayName: senderDisplayName ?? "")
         }
+    }
+}
+
+/// 带内边距的 UILabel，用于转文字文字块
+final class PaddingLabel: UILabel {
+    var insets = UIEdgeInsets(top: 8, left: 12, bottom: 8, right: 12)
+
+    override func drawText(in rect: CGRect) {
+        super.drawText(in: rect.inset(by: insets))
+    }
+
+    override func textRect(forBounds bounds: CGRect, limitedToNumberOfLines numberOfLines: Int) -> CGRect {
+        let rect = super.textRect(forBounds: bounds.inset(by: insets), limitedToNumberOfLines: numberOfLines)
+        return rect.inset(by: UIEdgeInsets(top: -insets.top, left: -insets.left, bottom: -insets.bottom, right: -insets.right))
     }
 }

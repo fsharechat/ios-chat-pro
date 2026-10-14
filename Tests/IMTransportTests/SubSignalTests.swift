@@ -47,6 +47,6 @@ final class SubSignalTests: XCTestCase {
     }
 
     func test_outOfRangeRawValueIsNil() {
-        XCTAssertNil(SubSignal(rawValue: 44))
+        XCTAssertNil(SubSignal(rawValue: 45))
     }
 }

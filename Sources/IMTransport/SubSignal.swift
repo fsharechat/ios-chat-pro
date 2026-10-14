@@ -50,4 +50,6 @@ public enum SubSignal: UInt8 {
     case ug = 41
     case up = 42
     case un = 43
+    // 语音转文字：带 messageUid 请求，PUB_ACK 返回 SpeechToTextResult。只允许在末尾追加
+    case asr = 44
 }
