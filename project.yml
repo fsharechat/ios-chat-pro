@@ -43,6 +43,9 @@ targets:
         NSMicrophoneUsageDescription: "语音/视频通话需要使用麦克风"
         NSLocationWhenInUseUsageDescription: "需要获取您的位置以发送位置消息"
         NSPhotoLibraryAddUsageDescription: "保存图片或视频到相册"
+        # 版本号与 Android 客户端命名规则一致：versionName / versionCode（如 2.0.17 / 20017）
+        CFBundleShortVersionString: "2.0.17"
+        CFBundleVersion: "20017"
         CFBundleDisplayName: "飞享IM"
         CFBundleName: "飞享IM"
         # 声明 App 只支持简体中文。没有这一项时 bundle 的 preferredLocalizations

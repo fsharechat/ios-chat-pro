@@ -6,7 +6,7 @@ final class TextMessageCell: UITableViewCell {
     static let reuseIdentifier = "TextMessageCell"
 
     private let bubbleView = UIView()
-    private let messageTextLabel = UILabel()
+    private let messageTextLabel = TextKitLabel()
     private let statusIndicator = MessageStatusIndicatorView()
     private let senderNameLabel = UILabel()
     private let senderAvatarImageView = AvatarImageView(loader: AvatarLoader.shared)
@@ -22,6 +22,17 @@ final class TextMessageCell: UITableViewCell {
     /// 消息里的链接被点击。`messageTextLabel` 是 UILabel，`.link` 属性本身不会
     /// 触发跳转（只有 UITextView 会拦截），需要自己命中测试后转发出去。
     var onLinkTapped: ((URL) -> Void)?
+    /// 选字状态下拖动手柄开始 / 结束，会话页据此隐藏 / 重新定位菜单。
+    var onSelectionDragBegan: (() -> Void)?
+    var onSelectionDragEnded: (() -> Void)?
+    /// 选区被 cell 自己清掉（复用、重新 configure）时回调，会话页据此关菜单。
+    var onSelectionCleared: (() -> Void)?
+    private lazy var textSelection: TextSelectionController = {
+        let controller = TextSelectionController(label: messageTextLabel, handleHost: contentView)
+        controller.onDragBegan = { [weak self] in self?.onSelectionDragBegan?() }
+        controller.onDragEnded = { [weak self] in self?.onSelectionDragEnded?() }
+        return controller
+    }()
     /// Kept so a light/dark switch can re-render: markdown attributes (and
     /// the table bitmap especially) bake in colors resolved at configure
     /// time — dynamic colors can't adapt inside a drawn image.
@@ -39,6 +50,10 @@ final class TextMessageCell: UITableViewCell {
 
     override func prepareForReuse() {
         super.prepareForReuse()
+        clearSelection()
+        onSelectionDragBegan = nil
+        onSelectionDragEnded = nil
+        onSelectionCleared = nil
         onRetryTapped = nil
         onExpandTapped = nil
         onAvatarLongPressed = nil
@@ -153,6 +168,8 @@ final class TextMessageCell: UITableViewCell {
     private var lastDisplayMode: TextDisplayMode = .folded
 
     func configure(with row: StoredMessageRow, displayMode: TextDisplayMode = .folded) {
+        // 文字/排版可能变了，旧选区的字符位置不再可信。
+        clearSelection()
         lastConfiguredRow = row
         lastDisplayMode = displayMode
         let isOutgoing = row.isOutgoing
@@ -240,6 +257,52 @@ final class TextMessageCell: UITableViewCell {
         configure(with: row, displayMode: lastDisplayMode)
     }
 
+    // MARK: - 选字
+
+    /// 全选气泡文字并显示手柄；返回 false 表示没有可选的文字。
+    @discardableResult
+    func beginSelection() -> Bool {
+        layoutIfNeeded()
+        let isOutgoing = lastConfiguredRow?.isOutgoing ?? false
+        let highlight = (isOutgoing ? Theme.textSelectionOnAccent : Theme.textSelection).resolvedColor(with: traitCollection)
+        guard textSelection.selectAll(highlightColor: highlight, handleColor: Theme.textSelectionHandle) else { return false }
+        // 手柄会探出 cell 底部，提到最前面，邻居 cell 才不会盖住它、抢走触摸。
+        superview?.bringSubviewToFront(self)
+        return true
+    }
+
+    func clearSelection() {
+        guard textSelection.isActive else { return }
+        textSelection.clear()
+        onSelectionCleared?()
+    }
+
+    /// 部分选中时返回选中的显示文字；全选时返回 nil，由调用方复制消息原文
+    /// （保留 Markdown 源文，且折叠态下也是全文）。
+    var partiallySelectedText: String? {
+        guard textSelection.isActive, !textSelection.isFullySelected else { return nil }
+        return textSelection.selectedText
+    }
+
+    func selectionBounds(in view: UIView) -> CGRect? {
+        textSelection.selectionBounds(in: view)
+    }
+
+    func selectionHandleContains(windowPoint: CGPoint) -> Bool {
+        textSelection.handle(at: contentView.convert(windowPoint, from: nil)) != nil
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        textSelection.layoutDidChange()
+    }
+
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        // 手柄的触摸区会超出 cell 边界，默认的 hitTest 会在边界外直接放弃。
+        if let handle = textSelection.handle(at: convert(point, to: contentView)) { return handle }
+        return super.hitTest(point, with: event)
+    }
+
     @objc private func expandTapped() { onExpandTapped?() }
     @objc private func avatarLongPressed(_ recognizer: UILongPressGestureRecognizer) {
         guard recognizer.state == .began else { return }
@@ -255,24 +318,16 @@ final class TextMessageCell: UITableViewCell {
     /// behavior) — lay the attributed text out through TextKit ourselves to
     /// find which `.link` run, if any, sits under the tap point.
     private func link(at point: CGPoint) -> URL? {
-        guard let attributedText = messageTextLabel.attributedText, attributedText.length > 0 else { return nil }
-        let textStorage = NSTextStorage(attributedString: attributedText)
-        let layoutManager = NSLayoutManager()
-        textStorage.addLayoutManager(layoutManager)
-        let textContainer = NSTextContainer(size: messageTextLabel.bounds.size)
-        textContainer.lineFragmentPadding = 0
-        textContainer.lineBreakMode = messageTextLabel.lineBreakMode
-        textContainer.maximumNumberOfLines = messageTextLabel.numberOfLines
-        layoutManager.addTextContainer(textContainer)
-
-        let glyphIndex = layoutManager.glyphIndex(for: point, in: textContainer)
-        guard glyphIndex < layoutManager.numberOfGlyphs else { return nil }
+        // 与选字共用同一套排版（含补字体），命中位置和屏幕显示一致。
+        guard let layout = LabelTextLayout(label: messageTextLabel), layout.length > 0 else { return nil }
+        let glyphIndex = layout.layoutManager.glyphIndex(for: point, in: layout.textContainer)
+        guard glyphIndex < layout.layoutManager.numberOfGlyphs else { return nil }
         // Reject taps that land in the trailing whitespace of a short line
         // rather than on an actual glyph.
-        let glyphRect = layoutManager.boundingRect(forGlyphRange: NSRange(location: glyphIndex, length: 1), in: textContainer)
+        let glyphRect = layout.layoutManager.boundingRect(forGlyphRange: NSRange(location: glyphIndex, length: 1), in: layout.textContainer)
         guard glyphRect.contains(point) else { return nil }
 
-        let charIndex = layoutManager.characterIndexForGlyph(at: glyphIndex)
-        return textStorage.attribute(MarkdownRenderer.bubbleLinkAttributeKey, at: charIndex, effectiveRange: nil) as? URL
+        let charIndex = layout.layoutManager.characterIndexForGlyph(at: glyphIndex)
+        return layout.textStorage.attribute(MarkdownRenderer.bubbleLinkAttributeKey, at: charIndex, effectiveRange: nil) as? URL
     }
 }

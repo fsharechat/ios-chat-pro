@@ -23,26 +23,41 @@ final class PlusMenuView: UIView {
 
     private let card = UIView()
     private var items: [Item] = []
+    private var isDismissing = false
+    private var isCardHidden = false
+
+    /// 菜单以任何方式关闭（点选项、点空白、`dismiss()`）后回调；点选项时在选项处理之后。
+    var onDismiss: (() -> Void)?
+    /// 返回 true 的触摸点（窗口坐标）不被遮罩拦截，落到下面的视图上——
+    /// 选字状态下列表区域要能照常滑动、拖选区手柄。
+    var touchPassthrough: ((CGPoint) -> Bool)?
 
     private static let cardWidth: CGFloat = 160
     private static let rowHeight: CGFloat = 52
     private static let margin: CGFloat = 8
 
-    static func show(in hostView: UIView, items: [Item]) {
+    @discardableResult
+    static func show(in hostView: UIView, items: [Item]) -> PlusMenuView {
         let frame = CGRect(
             x: hostView.bounds.width - cardWidth - margin,
             y: hostView.safeAreaInsets.top + 6,
             width: cardWidth,
             height: rowHeight * CGFloat(items.count)
         )
-        show(in: hostView, items: items, cardFrame: frame, animationAnchor: CGPoint(x: 1, y: 0))
+        return show(in: hostView, items: items, cardFrame: frame, animationAnchor: CGPoint(x: 1, y: 0))
     }
 
     /// Pops the card near `anchorRect` (in `hostView` coordinates): below it when
     /// there is room, otherwise above, horizontally centered on it and clamped
     /// to the host bounds.
-    static func show(in hostView: UIView, anchorRect: CGRect, items: [Item]) {
-        let height = rowHeight * CGFloat(items.count)
+    @discardableResult
+    static func show(in hostView: UIView, anchorRect: CGRect, items: [Item]) -> PlusMenuView {
+        let (frame, anchor) = cardPlacement(in: hostView, anchorRect: anchorRect, itemCount: items.count)
+        return show(in: hostView, items: items, cardFrame: frame, animationAnchor: anchor)
+    }
+
+    private static func cardPlacement(in hostView: UIView, anchorRect: CGRect, itemCount: Int) -> (frame: CGRect, anchor: CGPoint) {
+        let height = rowHeight * CGFloat(itemCount)
         let x = min(max(anchorRect.midX - cardWidth / 2, margin), hostView.bounds.width - cardWidth - margin)
 
         let maxY = hostView.bounds.height - hostView.safeAreaInsets.bottom - margin
@@ -53,16 +68,39 @@ final class PlusMenuView: UIView {
 
         let frame = CGRect(x: x, y: y, width: cardWidth, height: height)
         let anchorX = min(max((anchorRect.midX - frame.minX) / cardWidth, 0), 1)
-        let anchor = CGPoint(x: anchorX, y: showsBelow ? 0 : 1)
-        show(in: hostView, items: items, cardFrame: frame, animationAnchor: anchor)
+        return (frame, CGPoint(x: anchorX, y: showsBelow ? 0 : 1))
     }
 
-    private static func show(in hostView: UIView, items: [Item], cardFrame: CGRect, animationAnchor: CGPoint) {
+    private static func show(in hostView: UIView, items: [Item], cardFrame: CGRect, animationAnchor: CGPoint) -> PlusMenuView {
         let menu = PlusMenuView(frame: hostView.bounds)
         menu.items = items
         menu.buildCard(frame: cardFrame)
         hostView.addSubview(menu)
         menu.animateIn(anchor: animationAnchor)
+        return menu
+    }
+
+    func dismiss() {
+        animateOut()
+    }
+
+    /// 拖选区手柄或滑动列表时先藏起卡片，停下后按新选区重新定位再显示。
+    func setCardHidden(_ hidden: Bool) {
+        isCardHidden = hidden
+        UIView.animate(withDuration: 0.12) { self.card.alpha = hidden ? 0 : 1 }
+    }
+
+    func reposition(anchorRect: CGRect) {
+        guard let hostView = superview else { return }
+        let (frame, anchor) = Self.cardPlacement(in: hostView, anchorRect: anchorRect, itemCount: items.count)
+        card.layer.anchorPoint = anchor
+        card.frame = frame
+    }
+
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        let onCard = !isCardHidden && card.frame.contains(point)
+        if !onCard, let touchPassthrough, touchPassthrough(convert(point, to: nil)) { return nil }
+        return super.hitTest(point, with: event)
     }
 
     private func buildCard(frame cardFrame: CGRect) {
@@ -149,12 +187,15 @@ final class PlusMenuView: UIView {
     }
 
     private func animateOut(completion: (() -> Void)? = nil) {
+        guard !isDismissing else { return }
+        isDismissing = true
         UIView.animate(withDuration: 0.15, animations: {
             self.card.transform = CGAffineTransform(scaleX: 0.2, y: 0.2)
             self.card.alpha = 0
         }, completion: { _ in
             self.removeFromSuperview()
             completion?()
+            self.onDismiss?()
         })
     }
 }

@@ -69,7 +69,9 @@
 		A75FCD387555CBC8F03D73FE /* AppHeaderBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC9EF02E062FD6C49FC6F8D9 /* AppHeaderBar.swift */; };
 		AC4CF93C08183929C472085A /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93FA326C9B762DCAB590F502 /* AppDelegate.swift */; };
 		B0EFF1C4DDDD6E6588C31290 /* WebRTC in Frameworks */ = {isa = PBXBuildFile; productRef = 245A8DCD66CF4BF518D7B079 /* WebRTC */; };
+		B4D4EDF98006BDCDAD271B46 /* TextSelectionController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71A8B15A7E069D34684A5286 /* TextSelectionController.swift */; };
 		B6C83ED8F8E140766B2E7D33 /* MessageAlertPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0C50E815B16D6C055A8900B /* MessageAlertPlayer.swift */; };
+		C4229782D182711410CBEC1B /* TextKitLabel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6830A157A3918B56EE765AF /* TextKitLabel.swift */; };
 		CDD9722F3A5A0B3869684D19 /* PlusMenuView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 400CEB53F49721DDD023955F /* PlusMenuView.swift */; };
 		D39C275731BBA18DD72E1C1B /* AboutViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53A605ADEEFEFF8E5A5674D9 /* AboutViewController.swift */; };
 		D50D77865C2E9DFF7B261829 /* FavGroupListViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDF651A69DA130BE158D8EF1 /* FavGroupListViewController.swift */; };
@@ -141,6 +143,7 @@
 		690D108BAFD2ED791E23C0A9 /* SearchUserViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchUserViewController.swift; sourceTree = "<group>"; };
 		7044AD6B3681821E10EBBD77 /* TextValueRowCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextValueRowCell.swift; sourceTree = "<group>"; };
 		70F222396AF7C79B1E385A67 /* GroupNoticeViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupNoticeViewController.swift; sourceTree = "<group>"; };
+		71A8B15A7E069D34684A5286 /* TextSelectionController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextSelectionController.swift; sourceTree = "<group>"; };
 		767A2D49F043AA9A82A8FFFB /* EmojiPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmojiPanelView.swift; sourceTree = "<group>"; };
 		783F647445420DE668035D28 /* ToggleSwitchCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToggleSwitchCell.swift; sourceTree = "<group>"; };
 		82A66CD515543FC918230A83 /* ConversationViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationViewController.swift; sourceTree = "<group>"; };
@@ -168,6 +171,7 @@
 		E696B814AB99A34483A11EA8 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		E6EDC3D98B09747EAECE1237 /* AppNavigationController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppNavigationController.swift; sourceTree = "<group>"; };
 		EB3814EE6D598EF1B0A74571 /* LocationPreviewViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationPreviewViewController.swift; sourceTree = "<group>"; };
+		F6830A157A3918B56EE765AF /* TextKitLabel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextKitLabel.swift; sourceTree = "<group>"; };
 		F80C53C3D4D0F23E0F18D84E /* MarkdownCodeBlockRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownCodeBlockRenderer.swift; sourceTree = "<group>"; };
 		F83C1F61EA97D38D86CE7324 /* MarkdownRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownRenderer.swift; sourceTree = "<group>"; };
 		F8EB6D5DBC0051B5D576A085 /* ContactListCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactListCell.swift; sourceTree = "<group>"; };
@@ -285,8 +289,10 @@
 				85923E6E0B056A0DFB4951CC /* SettingsViewController.swift */,
 				2A868472B0D7644EECCB4752 /* SingleConversationInfoViewController.swift */,
 				3CE3F018CE1845A6A279978F /* SystemTipMessageCell.swift */,
+				F6830A157A3918B56EE765AF /* TextKitLabel.swift */,
 				648E9F022D0DE7CACE6E5C39 /* TextMessageCell.swift */,
 				01F48A9FE1740DCDDAC2EBD0 /* TextPreviewViewController.swift */,
+				71A8B15A7E069D34684A5286 /* TextSelectionController.swift */,
 				7044AD6B3681821E10EBBD77 /* TextValueRowCell.swift */,
 				E696B814AB99A34483A11EA8 /* Theme.swift */,
 				619515E59C475B7B0ECBF677 /* ThemeMode+UIKit.swift */,
@@ -458,8 +464,10 @@
 				20975C9275A5F1A2D28AB36B /* SettingsViewController.swift in Sources */,
 				17CC56837FF685D1854C1F77 /* SingleConversationInfoViewController.swift in Sources */,
 				364E10AD59CD0F1727BB41EA /* SystemTipMessageCell.swift in Sources */,
+				C4229782D182711410CBEC1B /* TextKitLabel.swift in Sources */,
 				925E32D89E4D590BFE89B808 /* TextMessageCell.swift in Sources */,
 				186A5E818B7717CAF728C853 /* TextPreviewViewController.swift in Sources */,
+				B4D4EDF98006BDCDAD271B46 /* TextSelectionController.swift in Sources */,
 				A2DF324B8AB6D3023C51A0CC /* TextValueRowCell.swift in Sources */,
 				1A8F5F1C4845AC9F553E5CAE /* Theme.swift in Sources */,
 				8C63466A0D9B5726B7F5C6F0 /* ThemeMode+UIKit.swift in Sources */,

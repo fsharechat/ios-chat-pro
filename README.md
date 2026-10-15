@@ -149,6 +149,16 @@ bash Scripts/generate-proto.sh
 生成结果 `Sources/IMProto/Generated/WFCMessage.pb.swift` 需提交到仓库。  
 脚本使用仓库本地的 `protoc`（`.tools/protoc-35.1/`），不依赖系统 `protoc`。
 
+## 更新日志
+
+版本号与 Android 客户端命名规则一致：`CFBundleShortVersionString` 对应 versionName，`CFBundleVersion` 对应 versionCode。
+
+### 2.0.17
+* 文本消息支持微信式选字：长按全选并显示首尾绿色手柄，拖动手柄调整选区，菜单贴着选区弹出
+* 「复制」只复制选中的部分；全选时复制消息原文（保留 Markdown 源文，折叠消息也复制全文）
+* 选字状态下可照常上下滑动列表：滑动时菜单隐藏、静止后在选区旁重新出现；点列表任意处或长按其他消息退出选字
+* 气泡文字改由 TextKit 统一排版与绘制，选区高亮与长 Markdown 消息的文字逐行对齐，链接点击命中也更准确
+
 ## 相关项目
 
 - [chat-server-pro](https://github.com/fshare/chat-server-pro) — 服务端

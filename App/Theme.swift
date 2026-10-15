@@ -51,6 +51,13 @@ public enum Theme {
     }
     public static let textOnAccent = UIColor { traits in traits.userInterfaceStyle == .dark ? .black : .white }
 
+    /// 消息选字（微信式）：手柄用微信绿；接收气泡上铺半透明绿色高亮。
+    /// 发送气泡本身是 accent（深色下就是绿色），绿色高亮会看不出来，
+    /// 日夜都用半透明白——深色下若用黑色，会把气泡里的蓝色链接压得看不见。
+    public static let textSelectionHandle = UIColor(hex: 0x07C160)
+    public static let textSelection = UIColor(hex: 0x07C160).withAlphaComponent(0.35)
+    public static let textSelectionOnAccent = UIColor.white.withAlphaComponent(0.35)
+
     /// 连接状态语义色（连接服务弹窗的状态圆点与「连接状态」行）。
     /// 深色下用偏亮的绿/红，保证在 `popupCard`(#232430) 上仍有足够对比度；
     /// 浅色下取更深的同色系，配白底。刻意不复用 `accent`——它在深色是绿、

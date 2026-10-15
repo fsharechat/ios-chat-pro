@@ -34,6 +34,20 @@ final class ConversationViewController: UIViewController {
     /// 流式输出完成后保持全文展开的消息(占位行被真实消息替换时继承),
     /// 用户点"收起"后移除,回到普通的缩略+查看全文形态。
     private var expandedMessageIds: Set<Int64> = []
+    /// 正处于选字状态的文本气泡及其菜单；菜单关闭时清空。
+    private weak var selectingTextCell: TextMessageCell?
+    private weak var selectionMenu: PlusMenuView?
+    /// 每次进入选字自增。旧菜单的关闭动画晚于新一次选字结束时，凭它认出自己已过期，
+    /// 不去清掉新的选区。
+    private var selectionSession = 0
+    /// 选字状态下点列表任意处退出选字。它要先于气泡自己的点按（打开链接、看图等）识别，
+    /// 所以单独一个手势、只在选字时启用。
+    private lazy var selectionDismissTap: UITapGestureRecognizer = {
+        let tap = UITapGestureRecognizer(target: self, action: #selector(selectionDismissTapped))
+        tap.delegate = self
+        tap.isEnabled = false
+        return tap
+    }()
     /// done 占位行阶段就被用户手动收起的流——替换后的真实消息不再展开。
     private var collapsedDoneStreamIds: Set<String> = []
     /// UIRefreshControl fires .valueChanged mid-drag, the moment the pull
@@ -172,6 +186,7 @@ final class ConversationViewController: UIViewController {
         tap.cancelsTouchesInView = false
         tableView.addGestureRecognizer(tap)
         tableView.addGestureRecognizer(UILongPressGestureRecognizer(target: self, action: #selector(messageLongPressed(_:))))
+        tableView.addGestureRecognizer(selectionDismissTap)
         tableView.keyboardDismissMode = .onDrag
 
         inputBar.translatesAutoresizingMaskIntoConstraints = false
@@ -839,10 +854,87 @@ final class ConversationViewController: UIViewController {
         let rowRect = tableView.convert(tableView.rectForRow(at: indexPath), to: hostView)
         let touchX = recognizer.location(in: hostView).x
         let anchorRect = CGRect(x: touchX, y: rowRect.minY, width: 0, height: rowRect.height)
+        // 选字状态下长按别的消息（或同一条）：先退出当前选字，再按新长按处理。
+        endTextSelection()
+        if isPlainText(message),
+           let cell = tableView.cellForRow(at: indexPath) as? TextMessageCell,
+           cell.beginSelection() {
+            beginTextSelection(on: cell, message: message, hostView: hostView, fallbackAnchor: anchorRect)
+            return
+        }
         PlusMenuView.show(in: hostView, anchorRect: anchorRect, items: buildMenuItems(for: message))
     }
 
-    private func buildMenuItems(for message: StoredMessageRow) -> [PlusMenuView.Item] {
+    /// 文本消息长按：全选 + 首尾手柄（微信式），菜单贴着选区；拖手柄时菜单先隐藏，
+    /// 松手后按新选区重新定位。菜单关闭即退出选字。
+    private func beginTextSelection(on cell: TextMessageCell, message: StoredMessageRow, hostView: UIView, fallbackAnchor: CGRect) {
+        selectionSession += 1
+        let session = selectionSession
+        selectingTextCell = cell
+        let menu = PlusMenuView.show(
+            in: hostView,
+            anchorRect: selectionMenuAnchor(for: cell, in: hostView) ?? fallbackAnchor,
+            items: buildMenuItems(for: message, selectionCell: cell)
+        )
+        selectionMenu = menu
+        selectionDismissTap.isEnabled = true
+        // 列表区域的触摸放行：照常滑动、拖手柄；点一下由 selectionDismissTap 退出选字。
+        // 导航栏、输入栏等列表外区域仍由遮罩接住，点一下关闭。
+        menu.touchPassthrough = { [weak self] windowPoint in
+            guard let self else { return false }
+            return self.tableView.convert(self.tableView.bounds, to: nil).contains(windowPoint)
+        }
+        menu.onDismiss = { [weak self, weak cell] in
+            guard let self, self.selectionSession == session else { return }
+            cell?.clearSelection()
+            self.selectingTextCell = nil
+            self.selectionDismissTap.isEnabled = false
+        }
+        cell.onSelectionDragBegan = { [weak menu] in menu?.setCardHidden(true) }
+        cell.onSelectionDragEnded = { [weak self] in self?.restoreSelectionMenu() }
+        cell.onSelectionCleared = { [weak menu] in menu?.dismiss() }
+    }
+
+    /// 立即退出选字（清选区 + 关菜单）。
+    private func endTextSelection() {
+        selectingTextCell?.clearSelection()
+        selectionMenu?.dismiss()
+        selectingTextCell = nil
+        selectionDismissTap.isEnabled = false
+    }
+
+    @objc private func selectionDismissTapped() {
+        endTextSelection()
+    }
+
+    /// 拖手柄或滑动列表结束后，按选区的新位置把菜单放回来；选区已滑出可见区域则继续藏着，
+    /// 滑回来停下时再出现（与微信一致）。
+    private func restoreSelectionMenu() {
+        guard let cell = selectingTextCell, let menu = selectionMenu, let hostView = menu.superview,
+              let anchor = selectionMenuAnchor(for: cell, in: hostView) else { return }
+        menu.reposition(anchorRect: anchor)
+        menu.setCardHidden(false)
+    }
+
+    /// 选区外接矩形裁到列表可见区域内——长消息全选时选区比屏幕还高，
+    /// 不裁的话菜单会被算到屏幕外。选区完全不可见时返回 nil。
+    private func selectionMenuAnchor(for cell: TextMessageCell, in hostView: UIView) -> CGRect? {
+        guard let bounds = cell.selectionBounds(in: hostView) else { return nil }
+        let visible = tableView.convert(tableView.bounds, to: hostView)
+        let clipped = bounds.intersection(visible)
+        return clipped.isNull || clipped.isEmpty ? nil : clipped
+    }
+
+    /// 纯文本消息（排除语音/文件/位置/视频这些也带 text 的消息）。
+    private func isPlainText(_ message: StoredMessageRow) -> Bool {
+        message.text != nil
+            && message.voiceDuration == nil
+            && message.fileName == nil
+            && message.locationLat == nil
+            && message.videoDuration == nil
+    }
+
+    private func buildMenuItems(for message: StoredMessageRow, selectionCell: TextMessageCell? = nil) -> [PlusMenuView.Item] {
         var items: [PlusMenuView.Item] = []
 
         // 转文字 / 隐藏文字 — 语音消息
@@ -860,13 +952,10 @@ final class ConversationViewController: UIViewController {
         }
 
         // Copy — text-only (excludes voice/file prefixes, location, video)
-        if let text = message.text,
-           message.voiceDuration == nil,
-           message.fileName == nil,
-           message.locationLat == nil,
-           message.videoDuration == nil {
-            items.append(.init(symbolName: "doc.on.doc", title: "复制") {
-                UIPasteboard.general.string = text
+        // 选字状态下只复制选中部分；全选时复制原文（菜单在复制之后才关闭、清选区）。
+        if let text = message.text, isPlainText(message) {
+            items.append(.init(symbolName: "doc.on.doc", title: "复制") { [weak selectionCell] in
+                UIPasteboard.general.string = selectionCell?.partiallySelectedText ?? text
             })
         }
 
@@ -999,11 +1088,21 @@ final class ConversationViewController: UIViewController {
 }
 
 extension ConversationViewController: UITableViewDelegate {
+    // 选字状态下滑动列表：滑动时菜单隐藏，静止后在选区旁重新出现（选区本身保留）。
+    func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
+        selectionMenu?.setCardHidden(true)
+    }
+
     func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
         if pendingHistoryRefresh {
             pendingHistoryRefresh = false
             startHistoryLoad()
         }
+        if !decelerate { restoreSelectionMenu() }
+    }
+
+    func scrollViewDidEndDecelerating(_ scrollView: UIScrollView) {
+        restoreSelectionMenu()
     }
 
 }
@@ -1100,3 +1199,11 @@ extension ConversationViewController: QLPreviewControllerDataSource {
     }
 }
 
+extension ConversationViewController: UIGestureRecognizerDelegate {
+    /// 选字时的「点一下退出」要抢在气泡自己的点按（链接、看图、播放等）之前识别；
+    /// 列表自身的滚动/长按、选区手柄的拖动不受影响。
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldBeRequiredToFailBy otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+        guard gestureRecognizer === selectionDismissTap, selectionDismissTap.isEnabled else { return false }
+        return otherGestureRecognizer.view !== tableView && !(otherGestureRecognizer.view is SelectionHandleView)
+    }
+}
