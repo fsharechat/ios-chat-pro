@@ -44,6 +44,7 @@
 		58655D10A6FADB326DBF61E1 /* ConversationViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82A66CD515543FC918230A83 /* ConversationViewController.swift */; };
 		5CCCCCD8B87CE043CB00EFFA /* FileMessageCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00822E7236C8497D7E1D66E /* FileMessageCell.swift */; };
 		5DF857D59C206BEC63D76B76 /* ThemeViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E848D7102A8E3E27251A49D /* ThemeViewController.swift */; };
+		67A6CD6BE1F7971C10669620 /* RemoveGroupMemberViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78334B401B5DBB1CF612CF05 /* RemoveGroupMemberViewController.swift */; };
 		6DDC45A6F2C81844B6C084FF /* MainTabBarController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17F97F20C13CF16B06EED3A5 /* MainTabBarController.swift */; };
 		72DF9C8D9144BD29B958A810 /* CallRingtonePlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AD23AFE8191A4A283002338 /* CallRingtonePlayer.swift */; };
 		7AB9633A25E6AFDC3D82E429 /* ContactListCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8EB6D5DBC0051B5D576A085 /* ContactListCell.swift */; };
@@ -147,6 +148,7 @@
 		70F222396AF7C79B1E385A67 /* GroupNoticeViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupNoticeViewController.swift; sourceTree = "<group>"; };
 		71A8B15A7E069D34684A5286 /* TextSelectionController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextSelectionController.swift; sourceTree = "<group>"; };
 		767A2D49F043AA9A82A8FFFB /* EmojiPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmojiPanelView.swift; sourceTree = "<group>"; };
+		78334B401B5DBB1CF612CF05 /* RemoveGroupMemberViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoveGroupMemberViewController.swift; sourceTree = "<group>"; };
 		783F647445420DE668035D28 /* ToggleSwitchCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToggleSwitchCell.swift; sourceTree = "<group>"; };
 		82A66CD515543FC918230A83 /* ConversationViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationViewController.swift; sourceTree = "<group>"; };
 		85923E6E0B056A0DFB4951CC /* SettingsViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsViewController.swift; sourceTree = "<group>"; };
@@ -282,6 +284,7 @@
 				1499CDEAF049F73974F200A4 /* NewFriendsEntryView.swift */,
 				0832B3942D777D6A0D67E100 /* NewFriendsViewController.swift */,
 				400CEB53F49721DDD023955F /* PlusMenuView.swift */,
+				78334B401B5DBB1CF612CF05 /* RemoveGroupMemberViewController.swift */,
 				2D5A6962C0779989DD4A64B9 /* ScanQRCodeViewController.swift */,
 				A0E388EB556B39D1EFCF7DEA /* SceneDelegate.swift */,
 				B4CDE3524198DE5097D7D78B /* SearchMessageViewController.swift */,
@@ -458,6 +461,7 @@
 				5419EAD85D7C9132AB94FBA6 /* NewFriendsEntryView.swift in Sources */,
 				D91AD4CA3FBFB2F6A396A9DE /* NewFriendsViewController.swift in Sources */,
 				CDD9722F3A5A0B3869684D19 /* PlusMenuView.swift in Sources */,
+				67A6CD6BE1F7971C10669620 /* RemoveGroupMemberViewController.swift in Sources */,
 				2D467309920A2C8A9DF5D565 /* ScanQRCodeViewController.swift in Sources */,
 				25D0AC4139A0950DB0CD2B4B /* SceneDelegate.swift in Sources */,
 				5178BA7DEFDD3B7EBEFDABE3 /* SearchMessageViewController.swift in Sources */,

@@ -70,6 +70,20 @@ final class GroupStoreTests: XCTestCase {
         XCTAssertEqual(members.first?.memberType, .owner)
     }
 
+    func test_replaceMembers_dropsMembersMissingFromSnapshotOnlyInThatGroup() throws {
+        try store.upsertMember(StoredGroupMember(groupId: "g1", memberId: "u1", memberType: .owner, updateDt: 0))
+        try store.upsertMember(StoredGroupMember(groupId: "g1", memberId: "u2", memberType: .normal, updateDt: 0))
+        try store.upsertMember(StoredGroupMember(groupId: "g2", memberId: "u2", memberType: .normal, updateDt: 0))
+
+        try store.replaceMembers(groupId: "g1", with: [
+            StoredGroupMember(groupId: "g1", memberId: "u1", memberType: .owner, updateDt: 5),
+            StoredGroupMember(groupId: "g1", memberId: "u3", memberType: .normal, updateDt: 5),
+        ])
+
+        XCTAssertEqual(Set(try store.members(groupId: "g1").map(\.memberId)), ["u1", "u3"])
+        XCTAssertEqual(try store.members(groupId: "g2").map(\.memberId), ["u2"])
+    }
+
     func test_membersPublisher_emitsOnUpsert() throws {
         var receivedCounts: [Int] = []
         let expectation = expectation(description: "received 2 emissions")

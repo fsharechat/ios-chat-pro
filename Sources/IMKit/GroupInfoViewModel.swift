@@ -176,8 +176,13 @@ public final class GroupInfoViewModel {
         }
     }
 
-    public func kickMember(_ uid: String, completion: @escaping (Result<Void, Error>) -> Void) {
-        groupActing?.kickMember(groupId: groupId, memberId: uid) { [weak self] result in
+    /// 可被移除的成员：群主不能被踢，自己也不出现在列表里（退群走「退出群组」）。
+    public var removableMembers: [MemberRow] {
+        members.filter { !$0.isOwner && $0.uid != currentUserId }
+    }
+
+    public func kickMembers(_ uids: [String], completion: @escaping (Result<Void, Error>) -> Void) {
+        groupActing?.kickMembers(groupId: groupId, memberIds: uids) { [weak self] result in
             if case .success = result { self?.groupSyncing?.refreshMembers(targetId: self?.groupId ?? "") }
             completion(result)
         }

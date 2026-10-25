@@ -46,6 +46,21 @@ final class GroupMemberSyncHandlerTests: XCTestCase {
         XCTAssertEqual(members.first?.updateDt, 100)
     }
 
+    /// 服务端返回的是当前有效成员的全量列表（被踢/退群的人直接不在里面，
+    /// 不会以 Removed 类型下发），本地不在列表里的成员必须清掉。
+    func test_handle_treatsResultAsFullSnapshot_dropsMembersNoLongerListed() throws {
+        try storage.groups.upsertMember(StoredGroupMember(groupId: "g1", memberId: "owner", memberType: .owner, updateDt: 0))
+        try storage.groups.upsertMember(StoredGroupMember(groupId: "g1", memberId: "kicked", memberType: .normal, updateDt: 0))
+        tracker.track(wireMessageId: 5, groupId: "g1")
+        var owner = Im_GroupMember()
+        owner.memberID = "owner"
+        owner.type = 2
+
+        handler.handle(frame: try makeFrame(members: [owner], messageId: 5))
+
+        XCTAssertEqual(try storage.groups.members(groupId: "g1").map(\.memberId), ["owner"])
+    }
+
     func test_handle_withoutATrackedEntry_doesNothingNoCrash() throws {
         var member = Im_GroupMember()
         member.memberID = "u2"

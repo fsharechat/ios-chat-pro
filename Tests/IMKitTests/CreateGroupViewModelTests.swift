@@ -173,7 +173,12 @@ final class FakeGroupActing: GroupActing {
         lastMemberIds = memberIds
         completion(addMembersResultToReturn)
     }
-    func kickMember(groupId: String, memberId: String, completion: @escaping (Result<Void, Error>) -> Void) {}
+    var kickMembersResult: Result<Void, Error> = .success(())
+    private(set) var lastKickedMemberIds: [String]?
+    func kickMembers(groupId: String, memberIds: [String], completion: @escaping (Result<Void, Error>) -> Void) {
+        lastKickedMemberIds = memberIds
+        completion(kickMembersResult)
+    }
     func modifyGroupInfo(groupId: String, type: ModifyGroupInfoType, value: String, completion: @escaping (Result<Void, Error>) -> Void) {}
     func quitGroup(groupId: String, completion: @escaping (Result<Void, Error>) -> Void) { completion(quitGroupResult) }
     func dismissGroup(groupId: String, completion: @escaping (Result<Void, Error>) -> Void) { completion(dismissGroupResult) }

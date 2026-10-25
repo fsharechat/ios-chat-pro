@@ -71,14 +71,14 @@ final class GroupSyncServiceTests: XCTestCase {
         XCTAssertEqual(request.addedMember.map(\.memberID), ["u2"])
     }
 
-    func test_kickMember_sendsGroupIdAndRemovedMemberList() throws {
-        service.kickMember(groupId: "g1", memberId: "u2") { _ in }
+    func test_kickMembers_sendsGroupIdAndRemovedMemberList() throws {
+        service.kickMembers(groupId: "g1", memberIds: ["u2", "u3"]) { _ in }
 
         let frame = try decodeOnlySentFrame()
         XCTAssertEqual(frame.header.subSignal, .gkm)
         let request = try Im_RemoveGroupMemberRequest(serializedBytes: frame.body)
         XCTAssertEqual(request.groupID, "g1")
-        XCTAssertEqual(request.removedMember, ["u2"])
+        XCTAssertEqual(request.removedMember, ["u2", "u3"])
     }
 
     func test_modifyGroupInfo_sendsGroupIdTypeAndValue() throws {

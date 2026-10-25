@@ -10,7 +10,7 @@ public enum GroupSyncServiceError: Error, Equatable {
 
 /// The single entry point `IMKit`'s `GroupActing`/`GroupSyncing` conformance
 /// wraps: registers every group `MessageHandler` with the given `IMClient`,
-/// and exposes `createGroup`/`addMembers`/`kickMember`/`modifyGroupInfo`/
+/// and exposes `createGroup`/`addMembers`/`kickMembers`/`modifyGroupInfo`/
 /// `quitGroup`/`dismissGroup`/`refreshGroup`/`refreshMembers`. Mirrors
 /// `IMContacts`'s `ContactSyncService` shape exactly.
 ///
@@ -92,10 +92,11 @@ public final class GroupSyncService {
         }
     }
 
-    public func kickMember(groupId: String, memberId: String, completion: @escaping (Result<Void, Error>) -> Void) {
+    /// `removed_member` 是 repeated，一次请求可移除多人（与 Android 一致）。
+    public func kickMembers(groupId: String, memberIds: [String], completion: @escaping (Result<Void, Error>) -> Void) {
         var request = Im_RemoveGroupMemberRequest()
         request.groupID = groupId
-        request.removedMember = [memberId]
+        request.removedMember = memberIds
         guard let body = try? request.serializedData() else {
             completion(.failure(GroupSyncServiceError.requestEncodingFailed))
             return

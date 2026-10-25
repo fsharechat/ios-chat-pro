@@ -27,8 +27,12 @@ public final class GroupMemberSyncHandler: MessageHandler {
         guard let groupId = tracker.resolve(wireMessageId: frame.header.messageId) else { return }
         guard let errorCode = frame.body.first, errorCode == 0 else { return }
         guard let result = try? Im_PullGroupMemberResult(serializedBytes: frame.body.dropFirst()) else { return }
-        for member in result.member {
-            try? storage.groups.upsertMember(StoredGroupMember(
+        // 服务端（MemoryMessagesStore.getGroupMembers）返回的是当前有效成员的
+        // 全量列表，被踢/退群的人直接不在里面、不会以 Removed 类型下发——逐条
+        // upsert 会让他们永远留在本地，必须整体替换。成员没变时服务端回
+        // NOT_MODIFIED 错误码，已在上面被挡掉，不会误清空。
+        let members = result.member.map { member in
+            StoredGroupMember(
                 groupId: groupId,
                 memberId: member.memberID,
                 // Falls back to `.normal` for an unrecognized wire value (today's 5
@@ -39,7 +43,8 @@ public final class GroupMemberSyncHandler: MessageHandler {
                 // permission decisions off `memberType == .owner`.
                 memberType: GroupMemberType(rawValue: Int(member.type)) ?? .normal,
                 updateDt: member.updateDt
-            ))
+            )
         }
+        try? storage.groups.replaceMembers(groupId: groupId, with: members)
     }
 }

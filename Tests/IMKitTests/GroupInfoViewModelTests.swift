@@ -124,6 +124,26 @@ final class GroupInfoViewModelTests: XCTestCase {
         XCTAssertEqual(fakeActing.lastMemberIds, ["newUser"])
     }
 
+    func test_kickMembers_callsGroupActingThenRefreshesMembers() throws {
+        try seedGroup(type: .normal)
+        let viewModel = makeViewModel(currentUserId: "owner1")
+
+        viewModel.kickMembers(["member1", "member2"]) { _ in }
+
+        XCTAssertEqual(fakeActing.lastKickedMemberIds, ["member1", "member2"])
+        XCTAssertEqual(fakeSyncing.lastRefreshedMembersGroupId, "g1")
+    }
+
+    func test_removableMembers_excludesOwnerAndSelf() throws {
+        try seedGroup(type: .normal, owner: "owner1")
+        try storage.groups.upsertMember(StoredGroupMember(groupId: "g1", memberId: "me", memberType: .manager, updateDt: 0))
+        let viewModel = makeViewModel(currentUserId: "me")
+
+        let loaded = expectation(for: NSPredicate { _, _ in viewModel.members.count == 3 }, evaluatedWith: nil)
+        wait(for: [loaded], timeout: 2)
+        XCTAssertEqual(viewModel.removableMembers.map(\.uid), ["member1"])
+    }
+
     func test_refresh_callsGroupSyncingRefreshGroup() {
         let viewModel = makeViewModel(currentUserId: "me")
 

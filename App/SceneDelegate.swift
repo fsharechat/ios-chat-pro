@@ -453,11 +453,12 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
                 groupInfoViewController?.present(AppNavigationController(rootViewController: addVC), animated: true)
             }
 
-            // 移除成员（跳转到 AddGroupMemberViewController 的移除模式，暂用同一 VC）
-            groupInfoViewController.onRemoveMembersTapped = { [weak groupInfoViewController] in
-                let alert = UIAlertController(title: "移除成员", message: "请在成员列表中左滑移除", preferredStyle: .alert)
-                alert.addAction(UIAlertAction(title: "好", style: .default))
-                groupInfoViewController?.present(alert, animated: true)
+            // 移除成员：多选当前成员后一次移出，与群信息页共用同一个 view model。
+            groupInfoViewController.onRemoveMembersTapped = { [weak groupInfoViewController, weak groupInfoViewModel] in
+                guard let groupInfoViewModel else { return }
+                let removeVC = RemoveGroupMemberViewController(viewModel: groupInfoViewModel)
+                removeVC.onMembersRemoved = { [weak removeVC] in removeVC?.dismiss(animated: true) }
+                groupInfoViewController?.present(AppNavigationController(rootViewController: removeVC), animated: true)
             }
 
             // 查看成员资料

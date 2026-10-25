@@ -60,6 +60,19 @@ public final class GroupStore {
         try dbQueue.write { db in try member.save(db) }
     }
 
+    /// 用服务端的全量成员列表整体替换一个群的成员：不在列表里的（被踢、退群）
+    /// 删掉，其余逐条 upsert。同一个事务里完成，观察者只会收到一次变更。
+    public func replaceMembers(groupId: String, with members: [StoredGroupMember]) throws {
+        try dbQueue.write { db in
+            let keptIds = members.map(\.memberId)
+            try StoredGroupMember
+                .filter(Column("groupId") == groupId)
+                .filter(!keptIds.contains(Column("memberId")))
+                .deleteAll(db)
+            for member in members { try member.save(db) }
+        }
+    }
+
     private static func activeMembersQuery(groupId: String) -> QueryInterfaceRequest<StoredGroupMember> {
         StoredGroupMember
             .filter(Column("groupId") == groupId)
