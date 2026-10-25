@@ -60,6 +60,9 @@ final class MainTabBarController: UITabBarController {
     private var dragDirection: CGFloat = 0
     /// 本次手势已判定为不可拖动（已到首/尾 tab），不再重复尝试建立转场。
     private var dragRejected = false
+    /// 本次跟手切换的起点 tab。`beginInteractiveSwitch` 一开始就把 `selectedIndex`
+    /// 改成了目标页，底栏选中块按进度插值时要靠它找回起点。
+    private var swipeFromIndex = 0
     /// 固定顶栏加号的点击动作，由 `SceneDelegate` 注入。
     var onPlusTapped: (() -> Void)?
     /// 顶栏标题的点击动作，由 `SceneDelegate` 注入。
@@ -86,16 +89,42 @@ final class MainTabBarController: UITabBarController {
 
     private let headerBar = AppHeaderBar(title: "飞享IM")
 
+    /// 悬浮玻璃底栏，取代系统 tabBar（后者常驻隐藏）。
+    private let glassTabBar = GlassTabBar()
+
+    /// 未读角标。系统 tabBar 隐藏后 `tabBarItem.badgeValue` 不再有人显示，
+    /// 角标改由这里写到玻璃底栏上。
+    func setBadge(_ text: String?, forTabAt index: Int) {
+        glassTabBar.setBadge(text, at: index)
+    }
+
+    override var selectedIndex: Int {
+        didSet {
+            // 跟手切换期间选中块由手势进度驱动，收尾时再统一归位。
+            guard interaction == nil else { return }
+            glassTabBar.selectedIndex = selectedIndex
+            glassTabBar.setPosition(CGFloat(selectedIndex), animated: !suppressesTransitionAnimation)
+            syncChromeToSelectedTab()
+        }
+    }
+
     /// 三个 tab 的根页面共用固定顶栏，各自的导航栏只在 push 出子页面后才
     /// 出现，所以根页面要额外让出顶栏高度。
     override var viewControllers: [UIViewController]? {
-        didSet { configureNavigationControllers() }
+        didSet {
+            configureNavigationControllers()
+            glassTabBar.setItems(viewControllers?.map(\.tabBarItem) ?? [])
+            glassTabBar.selectedIndex = selectedIndex
+            glassTabBar.setPosition(CGFloat(selectedIndex), animated: false)
+        }
     }
 
     override func viewDidLoad() {
         super.viewDidLoad()
         delegate = self
+        tabBar.isHidden = true
         setupHeaderBar()
+        setupGlassTabBar()
         let pan = UIPanGestureRecognizer(target: self, action: #selector(handlePan(_:)))
         pan.delegate = self
         // 识别成功后必须把触摸从底下的视图上撤销（默认行为），否则横滑时
@@ -122,6 +151,107 @@ final class MainTabBarController: UITabBarController {
             headerBar.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             headerBar.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: AppHeaderBar.contentHeight),
         ])
+    }
+
+    private func setupGlassTabBar() {
+        glassTabBar.onSelect = { [weak self] index in self?.glassTabBarSelected(index) }
+        view.addSubview(glassTabBar)
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        // UIKit 处理 `hidesBottomBarWhenPushed` 时可能把系统 tabBar 放回来，每次
+        // 布局都压一遍。
+        tabBar.isHidden = true
+        let width = min(view.bounds.width - Self.glassTabBarSideMargin * 2, 420)
+        glassTabBar.bounds.size = CGSize(width: width, height: GlassTabBar.height)
+        glassTabBar.center = CGPoint(x: view.bounds.midX, y: view.bounds.maxY - glassTabBarBottomGap - GlassTabBar.height / 2)
+        view.bringSubviewToFront(glassTabBar)
+        applyGlassTabBarInsets()
+    }
+
+    private static let glassTabBarSideMargin: CGFloat = 20
+
+    /// 底栏与屏幕底边的距离：有 Home 指示条的机型压进安全区一部分（悬浮在指示条
+    /// 上方），老机型留一点边距。
+    private var glassTabBarBottomGap: CGFloat {
+        let safeBottom = view.safeAreaInsets.bottom
+        return safeBottom > 0 ? max(safeBottom - 14, 8) : 8
+    }
+
+    /// 底栏可见的页面需要让出的底部安全区：列表照常铺到底栏下面透出毛玻璃，
+    /// 只是最后一行能滚到底栏上方。系统 tabBar 已隐藏、不再贡献安全区，这里
+    /// 补的是「底栏顶边到屏幕底」扣掉窗口自身安全区的那段。
+    private var glassTabBarSafeAreaInset: CGFloat {
+        max(0, glassTabBarBottomGap + GlassTabBar.height - view.safeAreaInsets.bottom)
+    }
+
+    private func applyGlassTabBarInsets() {
+        for nav in viewControllers?.compactMap({ $0 as? UINavigationController }) ?? [] {
+            for viewController in nav.viewControllers where showsGlassTabBar(viewController, in: nav) {
+                applyGlassTabBarInset(to: viewController)
+            }
+        }
+    }
+
+    private func applyGlassTabBarInset(to viewController: UIViewController) {
+        let inset = glassTabBarSafeAreaInset
+        guard viewController.additionalSafeAreaInsets.bottom != inset else { return }
+        viewController.additionalSafeAreaInsets.bottom = inset
+    }
+
+    /// 对齐系统规则：栈里（截至该页）任何一页设了 `hidesBottomBarWhenPushed`
+    /// 就不显示底栏。
+    private func showsGlassTabBar(_ viewController: UIViewController, in nav: UINavigationController) -> Bool {
+        guard let index = nav.viewControllers.firstIndex(of: viewController) else { return true }
+        return !nav.viewControllers[...index].contains { $0.hidesBottomBarWhenPushed }
+    }
+
+    private func glassTabBarSelected(_ index: Int) {
+        guard let viewControllers, viewControllers.indices.contains(index) else { return }
+        // 切页转场还没收尾时不叠加新切换，选中块退回当前页。
+        guard transitionCoordinator == nil else {
+            glassTabBar.setPosition(CGFloat(selectedIndex), animated: true)
+            return
+        }
+        if index == selectedIndex {
+            // 与系统 tabBar 一致：点当前 tab 回到它的根页面。
+            (viewControllers[index] as? UINavigationController)?.popToRootViewController(animated: true)
+        } else {
+            selectedIndex = index
+        }
+    }
+
+    /// 顶栏与底栏的显隐跟随当前 tab 停留的页面（新 tab 可能停在 push 出来的
+    /// 子页面上）。系统 tabBar 隐藏后 `didSelect` 回调不会再来，改由
+    /// `selectedIndex` 变化与切页转场收尾时调用。
+    private func syncChromeToSelectedTab() {
+        guard let nav = selectedViewController as? UINavigationController,
+              let top = nav.topViewController else { return }
+        setHeaderHidden(nav.viewControllers.count > 1, coordinator: nil)
+        setGlassTabBarHidden(!showsGlassTabBar(top, in: nav), coordinator: nil)
+    }
+
+    /// 与 `setHeaderHidden` 同理挂在转场协调器上，侧滑返回时跟手、取消时回滚。
+    /// 除了淡出还往下沉一点，接近系统 tabBar 随 push 让位的观感。
+    private func setGlassTabBarHidden(_ hidden: Bool, coordinator: UIViewControllerTransitionCoordinator?) {
+        let apply: (Bool) -> Void = { hidden in
+            self.glassTabBar.alpha = hidden ? 0 : 1
+            self.glassTabBar.transform = hidden ? CGAffineTransform(translationX: 0, y: 24) : .identity
+        }
+        glassTabBar.isUserInteractionEnabled = !hidden
+        let wasHidden = glassTabBar.alpha == 0
+        guard wasHidden != hidden else { return }
+        guard let coordinator else {
+            apply(hidden)
+            return
+        }
+        coordinator.animate(alongsideTransition: { _ in
+            apply(hidden)
+        }, completion: { context in
+            apply(context.isCancelled ? wasHidden : hidden)
+            self.glassTabBar.isUserInteractionEnabled = !(context.isCancelled ? wasHidden : hidden)
+        })
     }
 
     private func configureNavigationControllers() {
@@ -174,7 +304,9 @@ final class MainTabBarController: UITabBarController {
                     return
                 }
             }
-            interaction?.update(progress(for: translation, width: width))
+            let progress = progress(for: translation, width: width)
+            interaction?.update(progress)
+            glassTabBar.setPosition(CGFloat(swipeFromIndex) + (CGFloat(selectedIndex - swipeFromIndex)) * progress, animated: false)
 
         case .ended, .cancelled, .failed:
             dragRejected = false
@@ -191,13 +323,18 @@ final class MainTabBarController: UITabBarController {
             // 滑过三分之一屏，或者快速甩动（方向与拖动一致）即判定为完成切换。
             let velocity = gesture.velocity(in: view).x * dragDirection
             let progress = progress(for: translation, width: width)
+            let toIndex = selectedIndex
             if progress > 1.0 / 3 || velocity > 500 {
                 interaction.completionSpeed = completionSpeed(remaining: 1 - progress, velocity: velocity, width: width)
                 interaction.finish()
+                glassTabBar.selectedIndex = toIndex
+                glassTabBar.setPosition(CGFloat(toIndex), animated: true)
             } else {
                 // 回弹时剩余的是已滑出的那段，手指速度取反向分量。
                 interaction.completionSpeed = completionSpeed(remaining: progress, velocity: -velocity, width: width)
                 interaction.cancel()
+                glassTabBar.selectedIndex = swipeFromIndex
+                glassTabBar.setPosition(CGFloat(swipeFromIndex), animated: true)
             }
 
         default:
@@ -211,6 +348,7 @@ final class MainTabBarController: UITabBarController {
         let toIndex = selectedIndex + (direction < 0 ? 1 : -1)
         guard let viewControllers, viewControllers.indices.contains(toIndex) else { return false }
         dragDirection = direction
+        swipeFromIndex = selectedIndex
         let interaction = UIPercentDrivenInteractiveTransition()
         // 跟手阶段的线性推进由 animator 的 `.curveLinear` 保证（否则百分比和
         // 实际位移对不上、跟手会发飘）；`completionCurve` 只作用于松手之后的
@@ -278,6 +416,7 @@ extension MainTabBarController: UITabBarControllerDelegate {
         setTabSwipeActive(true)
         return TabSlideAnimator(direction: to > from ? -1 : 1) { [weak self] in
             self?.setTabSwipeActive(false)
+            self?.syncChromeToSelectedTab()
         }
     }
 
@@ -287,12 +426,6 @@ extension MainTabBarController: UITabBarControllerDelegate {
     ) -> UIViewControllerInteractiveTransitioning? {
         interaction
     }
-
-    /// 点按 tab 切换时，新 tab 可能停在 push 出来的子页面上，顶栏要跟着走。
-    func tabBarController(_ tabBarController: UITabBarController, didSelect viewController: UIViewController) {
-        guard let nav = viewController as? UINavigationController else { return }
-        setHeaderHidden(nav.viewControllers.count > 1, coordinator: nil)
-    }
 }
 
 extension MainTabBarController: UINavigationControllerDelegate {
@@ -300,6 +433,12 @@ extension MainTabBarController: UINavigationControllerDelegate {
         let isRoot = viewController === navigationController.viewControllers.first
         navigationController.setNavigationBarHidden(isRoot, animated: animated)
         setHeaderHidden(!isRoot, coordinator: navigationController.transitionCoordinator)
+        let showsTabBar = showsGlassTabBar(viewController, in: navigationController)
+        if showsTabBar { applyGlassTabBarInset(to: viewController) }
+        // 只有当前 tab 的导航栈才影响底栏；后台 tab 的 push（如先切 tab 再 push
+        // 之外的程序化跳转）等切回来时由 `syncChromeToSelectedTab` 处理。
+        guard navigationController === selectedViewController else { return }
+        setGlassTabBarHidden(!showsTabBar, coordinator: navigationController.transitionCoordinator)
     }
 }
 
@@ -334,6 +473,10 @@ extension MainTabBarController: UIGestureRecognizerDelegate {
     private func shouldBeginSwipe(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
         // 转场收尾动画期间不接受新手势，避免两次切换叠加。
         guard transitionCoordinator == nil, presentedViewController == nil else { return false }
+        // 底栏上的横向拖动交给底栏自己（拖动选中块）。
+        if glassTabBar.isUserInteractionEnabled, glassTabBar.frame.contains(gestureRecognizer.location(in: view)) {
+            return false
+        }
         // 竖向为主的拖动留给列表滚动，否则滚列表时会误触发转场。
         if let pan = gestureRecognizer as? UIPanGestureRecognizer {
             let velocity = pan.velocity(in: view)

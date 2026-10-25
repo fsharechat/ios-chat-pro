@@ -82,8 +82,8 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         conversationListNav.tabBarItem = UITabBarItem(title: "消息", image: UIImage(systemName: "message"), selectedImage: UIImage(systemName: "message.fill"))
         conversationListNav.tabBarItem.tag = 0
         conversationListViewModel.$totalUnreadCount
-            .sink { [weak conversationListNav] count in
-                conversationListNav?.tabBarItem.badgeValue = count > 0 ? (count > 99 ? "99+" : "\(count)") : nil
+            .sink { [weak tabBarController] count in
+                tabBarController?.setBadge(count > 0 ? (count > 99 ? "99+" : "\(count)") : nil, forTabAt: 0)
             }
             .store(in: &cancellables)
 
@@ -92,8 +92,8 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         contactListNav.tabBarItem = UITabBarItem(title: "联系人", image: UIImage(systemName: "person.2"), selectedImage: UIImage(systemName: "person.2.fill"))
         contactListNav.tabBarItem.tag = 1
         contactListViewModel.$unreadFriendRequestCount
-            .sink { [weak contactListNav] count in
-                contactListNav?.tabBarItem.badgeValue = count > 0 ? "\(count)" : nil
+            .sink { [weak tabBarController] count in
+                tabBarController?.setBadge(count > 0 ? "\(count)" : nil, forTabAt: 1)
             }
             .store(in: &cancellables)
 

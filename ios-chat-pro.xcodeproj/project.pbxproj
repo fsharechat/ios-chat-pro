@@ -67,6 +67,7 @@
 		A1611CC727D61FF89025CA77 /* IMClient in Frameworks */ = {isa = PBXBuildFile; productRef = 99257818497BC42EED99DC6C /* IMClient */; };
 		A2DF324B8AB6D3023C51A0CC /* TextValueRowCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7044AD6B3681821E10EBBD77 /* TextValueRowCell.swift */; };
 		A75FCD387555CBC8F03D73FE /* AppHeaderBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC9EF02E062FD6C49FC6F8D9 /* AppHeaderBar.swift */; };
+		AB252857C7E784446EBA5D85 /* GlassTabBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31486E9438EF069A35DFB6A2 /* GlassTabBar.swift */; };
 		AC4CF93C08183929C472085A /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93FA326C9B762DCAB590F502 /* AppDelegate.swift */; };
 		B0EFF1C4DDDD6E6588C31290 /* WebRTC in Frameworks */ = {isa = PBXBuildFile; productRef = 245A8DCD66CF4BF518D7B079 /* WebRTC */; };
 		B4D4EDF98006BDCDAD271B46 /* TextSelectionController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71A8B15A7E069D34684A5286 /* TextSelectionController.swift */; };
@@ -117,6 +118,7 @@
 		2A887447B146764C16A4E603 /* GroupInfoViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupInfoViewController.swift; sourceTree = "<group>"; };
 		2BFD92E47E6C5AE1CD51B7EE /* LocationPickerViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationPickerViewController.swift; sourceTree = "<group>"; };
 		2D5A6962C0779989DD4A64B9 /* ScanQRCodeViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScanQRCodeViewController.swift; sourceTree = "<group>"; };
+		31486E9438EF069A35DFB6A2 /* GlassTabBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassTabBar.swift; sourceTree = "<group>"; };
 		3835376AB25AFF2A347A3D4D /* ImageGalleryViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageGalleryViewController.swift; sourceTree = "<group>"; };
 		38D6C28B7BC3F34AF2780264 /* LoginViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginViewController.swift; sourceTree = "<group>"; };
 		3CE3F018CE1845A6A279978F /* SystemTipMessageCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemTipMessageCell.swift; sourceTree = "<group>"; };
@@ -251,6 +253,7 @@
 				0B65530874C01F08C0C8B669 /* ForwardPickerViewController.swift */,
 				14A2F42FFBACA55D6A5741FA /* ForwardPreviewViewController.swift */,
 				E4F8B269AD818644389D362C /* FriendRequestCell.swift */,
+				31486E9438EF069A35DFB6A2 /* GlassTabBar.swift */,
 				4B177F3C5957AF38D8250AC7 /* GroupEntryView.swift */,
 				2A887447B146764C16A4E603 /* GroupInfoViewController.swift */,
 				CDD76938A53906E62E996690 /* GroupMemberGridView.swift */,
@@ -427,6 +430,7 @@
 				47A9ADF6067FC38530A2ABEA /* ForwardPickerViewController.swift in Sources */,
 				E1556A736693B9FCAC98259B /* ForwardPreviewViewController.swift in Sources */,
 				F8875E643BF006517AB52361 /* FriendRequestCell.swift in Sources */,
+				AB252857C7E784446EBA5D85 /* GlassTabBar.swift in Sources */,
 				E9F8B2779486AB4D8F736447 /* GroupEntryView.swift in Sources */,
 				E2E627EE50345A115DB5B2ED /* GroupInfoViewController.swift in Sources */,
 				1C782966278A80CD7C71F772 /* GroupMemberGridView.swift in Sources */,
