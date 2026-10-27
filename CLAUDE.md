@@ -55,6 +55,42 @@ bash Scripts/generate-proto.sh
 
 测试机：iPhone 14 Pro，UDID `00008120-001945391147401E`，bundleID `cn.comsince.fschat`。本机 2017 Intel MacBook Pro（macOS 13.7 到顶）+ Xcode 15.2。
 
+#### 当前做法：pymobiledevice3 装 ipa（测试机 iOS 27 起）
+
+2026-10 测试机升到 iOS 27.0.1 后，`devicectl device install` 报 `Failed to acquire assertion (com.apple.dt.CoreDeviceError error 3.)`。
+根因是 Xcode 15.2 的开发者磁盘镜像（DDI）挂不上 iOS 27：`devicectl device info ddiServices` 报
+`kAMDMobileImageMounterImageMountFailed: Could not support development`，设备 `ddiServicesAvailable: false`。
+macOS 13.7 升不了新 Xcode，所以 **devicectl / Xcode 运行 / 断点调试都不可用**。
+只装 App 不需要 DDI，改用 pymobiledevice3 走 installation_proxy（原理同 Apple Configurator）：
+
+```bash
+# 1. 工具（装在 .tools/，已 gitignore；weekly-reinstall.sh 缺失时会自动装）
+python3 -m venv .tools/pymobiledevice3
+env -u all_proxy .tools/pymobiledevice3/bin/pip install --prefer-binary --only-binary=cryptography pymobiledevice3
+
+# 2. 编译（同下方第 2 步），再把 App.app 打成 ipa
+mkdir -p /tmp/ipa/Payload && cp -R <DerivedData>/Build/Products/Debug-iphoneos/App.app /tmp/ipa/Payload/
+(cd /tmp/ipa && zip -qry App.ipa Payload)
+
+# 3. 安装并确认版本（--native 借 macOS 的 CoreDevice 隧道，有线/无线都行，无需 root；插线时也可去掉走 usbmuxd）
+.tools/pymobiledevice3/bin/pymobiledevice3 apps install --native --udid 00008120-001945391147401E /tmp/ipa/App.ipa
+.tools/pymobiledevice3/bin/pymobiledevice3 apps query cn.comsince.fschat
+```
+
+踩过的坑：
+
+| 现象 | 根因 | 修法 |
+|---|---|---|
+| pip 报 `Using SOCKS proxy, but the 'socksio' package is not installed` | 环境里有 `all_proxy=socks5://…` | 命令前加 `env -u all_proxy` |
+| pip 卡住不动、CPU 0% | `cryptography` 在 Intel Mac 上没有最新 wheel，回退源码编译，经代理下载 Rust 时连接被断 | `--only-binary=cryptography` |
+| `brew install ideviceinstaller` 报 `undefined method 'cellar'` | 本机 Homebrew 太旧 | 不用 brew，用上面的 pymobiledevice3 |
+| `Device is not connected`，`pymobiledevice3 usbmux list` 为 `[]`，但 `system_profiler SPUSBDataType` 能看到 iPhone | 系统 usbmuxd 状态卡死 | `osascript -e 'do shell script "kill <usbmuxd 的 pid>" with administrator privileges'` 弹框杀掉，launchd 自动拉起（`launchctl kickstart` 被 SIP 拒） |
+| 无线 `--mobdev2` 能发现、能过配对，但开任何服务都报 `Connection was terminated abruptly`；无线时 `usbmux list` 为 `[]` | iOS 17+ 无线下旧 lockdown 服务被禁用，只能走 RemoteXPC 隧道（Bonjour 广播里带 `supportsRP`） | 用 `--native`，借 macOS 已建好的 CoreDevice 隧道（前提 `devicectl list devices` 能看到手机） |
+
+每周日 launchd 跑的 `Scripts/weekly-reinstall.sh` 已改用这套流程（优先 `--native`，失败再走 usbmuxd）。
+
+#### 旧做法：devicectl（测试机 iOS 26 及以前可用）
+
 ```bash
 # 1. 检查设备状态
 xcrun devicectl list devices
@@ -95,6 +131,8 @@ xcrun devicectl device copy from --device 00008120-001945391147401E \
 3. 排查完删除埋点与临时日志工具类；设备上残留的 log 文件覆盖安装不会清，删 App 才会。
 
 拉起 App：`xcrun devicectl device process launch --device <UDID> --terminate-existing cn.comsince.fschat`。
+
+> ⚠️ 以上 devicectl 命令是 iOS 26 时期验证的。测试机升到 iOS 27 后 DDI 挂不上，`process launch` 依赖 DDI，必然失败，只能在手机上手动打开 App；`copy from` 在 iOS 27 上还没验证过。
 
 ---
 
