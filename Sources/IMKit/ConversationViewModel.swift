@@ -123,6 +123,31 @@ public final class ConversationViewModel {
             .replaceError(with: [])
             .sink { [weak self] users in self?.handleUsersUpdate(users) }
         bindStreaming()
+        fillTailGapIfNeeded()
+    }
+
+    /// 尾部断层：该会话上次增量拉取一条都没下发，本地缺的是最新的一段。
+    /// 打开会话时立即补拉，补完后断层会下移成普通断层，由 `loadMoreHistory` 接着补。
+    private func fillTailGapIfNeeded() {
+        guard let remoteHistory,
+              (try? storage.gaps.hasTailGap(conversationType: conversationType, target: target, line: line)) == true else { return }
+        remoteHistory.fillGap(
+            conversationType: conversationType, target: target, line: line,
+            beforeUid: Int64.max, count: pageSize
+        ) { [weak self] _ in
+            self?.reprocessMessages()
+        }
+    }
+
+    /// 最高的那个普通断层：`messageUid` 低于它的消息与上面的消息不连续，补完前不显示。
+    private func visibleFloorUid() -> Int64? {
+        try? storage.gaps.visibleFloorUid(conversationType: conversationType, target: target, line: line)
+    }
+
+    /// 尚未 ack 的消息（uid 为 0）总是最新的，永远显示。
+    private func isVisible(_ message: StoredMessage, floor: Int64?) -> Bool {
+        guard let floor else { return true }
+        return message.messageUid == 0 || message.messageUid >= floor
     }
 
     /// A sender's profile resolves asynchronously — the `UPUI` round trip
@@ -342,6 +367,22 @@ public final class ConversationViewModel {
     /// the main queue), so the caller can end its refresh spinner.
     public func loadMoreHistory(completion: @escaping () -> Void) {
         if loadMoreLocalPage() > 0 { completion(); return }
+        // 本地往上翻到了断层：先补断层，补完（或判定已接上）再继续翻本地
+        if let remoteHistory, let floor = visibleFloorUid() {
+            remoteHistory.fillGap(
+                conversationType: conversationType, target: target, line: line,
+                beforeUid: floor, count: pageSize
+            ) { [weak self] inserted in
+                guard let self else { completion(); return }
+                if inserted != nil {
+                    self.canLoadMore = true
+                    self.reprocessMessages()
+                    self.loadMoreLocalPage()
+                }
+                completion()
+            }
+            return
+        }
         guard let remoteHistory, !remoteHistoryExhausted else { completion(); return }
         remoteHistory.loadRemoteMessages(
             conversationType: conversationType, target: target, line: line,
@@ -378,12 +419,15 @@ public final class ConversationViewModel {
             conversationType: conversationType, target: target, line: line,
             beforeTimestamp: oldestTimestamp, beforeId: oldestId, limit: pageSize
         )) ?? []
-        if older.count < pageSize { canLoadMore = false }
-        guard !older.isEmpty else { return 0 }
-        olderMessages.insert(contentsOf: older, at: 0)
+        let floor = visibleFloorUid()
+        let visible = older.filter { isVisible($0, floor: floor) }
+        // 有被断层挡住的消息时不能判定"本地没有更多"，断层补完后还要接着翻
+        if older.count < pageSize, visible.count == older.count { canLoadMore = false }
+        guard !visible.isEmpty else { return 0 }
+        olderMessages.insert(contentsOf: visible, at: 0)
         olderRows = makeRows(olderMessages)
         publishRows()
-        return older.count
+        return visible.count
     }
 
     /// The `beforeUid` cursor for a remote-history request: the uid of the
@@ -535,9 +579,13 @@ public final class ConversationViewModel {
                 }
             }
         }
+        // 断层补完前，断层下方的消息不显示（见 `visibleFloorUid`）
+        let floor = visibleFloorUid()
+        olderMessages.removeAll { !isVisible($0, floor: floor) }
+        let visibleLive = messages.filter { isVisible($0, floor: floor) }
         // Older + live rebuilt together in one batch (a single bulk user
         // fetch) so `reprocessMessages` refreshes paged-in history too.
-        let allRows = makeRows(olderMessages + messages)
+        let allRows = makeRows(olderMessages + visibleLive)
         olderRows = Array(allRows.prefix(olderMessages.count))
         liveRows = Array(allRows.suffix(from: olderMessages.count))
         // 真实消息入库到达 → 移除流式占位行(Android 的"原位替换"):

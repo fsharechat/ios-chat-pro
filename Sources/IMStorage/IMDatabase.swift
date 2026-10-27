@@ -185,6 +185,16 @@ public final class IMDatabase {
             // 与 v8 同理，一次性置为已播放，只有迁移之后新收到的语音才显示红点。
             try db.execute(sql: "UPDATE message SET status = 7 WHERE direction = 1 AND contentType = 2")
         }
+        migrator.registerMigration("v11_addConversationGap") { db in
+            // 增量拉取被服务端截断的会话断层，见 `ConversationGapStore`
+            try db.create(table: "conversationGap") { t in
+                t.column("conversationType", .integer).notNull()
+                t.column("target", .text).notNull()
+                t.column("line", .integer).notNull().defaults(to: 0)
+                t.column("beforeUid", .integer).notNull()
+                t.primaryKey(["conversationType", "target", "line", "beforeUid"])
+            }
+        }
         return migrator
     }
 }

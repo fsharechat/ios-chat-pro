@@ -17,6 +17,18 @@ private final class FakeRemoteHistoryFetching: RemoteHistoryFetching {
             completion(0)
         }
     }
+
+    private(set) var gapCalls: [(beforeUid: Int64, count: Int)] = []
+    var onFillGap: ((_ beforeUid: Int64, _ count: Int, _ completion: @escaping (Int?) -> Void) -> Void)?
+
+    func fillGap(conversationType: ConversationType, target: String, line: Int, beforeUid: Int64, count: Int, completion: @escaping (Int?) -> Void) {
+        gapCalls.append((beforeUid, count))
+        if let onFillGap {
+            onFillGap(beforeUid, count, completion)
+        } else {
+            completion(0)
+        }
+    }
 }
 
 /// Covers `ConversationViewModel.loadMoreHistory` — the pull-to-refresh
@@ -165,5 +177,78 @@ final class ConversationViewModelRemoteHistoryTests: XCTestCase {
         var completed = false
         localOnly.loadMoreHistory { completed = true }
         XCTAssertTrue(completed)
+    }
+
+    // MARK: - 会话断层
+
+    private func recordGap(_ beforeUid: Int64) throws {
+        try storage.write { db in
+            try storage.gaps.record(conversationType: .single, target: "them", line: 0, beforeUid: beforeUid, db: db)
+        }
+    }
+
+    /// 离线前的 old1/old2，断层 100，之后补到的 new100...
+    private func seedGap(newCount: Int) throws {
+        try insertMessage(uid: 1, text: "old1", timestamp: 100)
+        try insertMessage(uid: 2, text: "old2", timestamp: 200)
+        try recordGap(100)
+        for i in 0..<newCount {
+            try insertMessage(uid: Int64(100 + i), text: "new\(100 + i)", timestamp: Int64(1_000 + i))
+        }
+    }
+
+    func test_window_hidesMessagesBelowGap() throws {
+        try seedGap(newCount: 2)
+        waitForFirstNonEmptyRows()
+
+        XCTAssertEqual(rowTexts(), ["new100", "new101"])
+    }
+
+    func test_loadMoreHistory_pagesLocallyUntilGapThenFillsIt() throws {
+        try seedGap(newCount: 5)
+        waitForFirstNonEmptyRows()
+        XCTAssertEqual(rowTexts(), ["new102", "new103", "new104"])
+
+        viewModel.loadMoreHistory {}
+        XCTAssertTrue(remote.gapCalls.isEmpty)
+        XCTAssertEqual(rowTexts(), ["new100", "new101", "new102", "new103", "new104"])
+
+        remote.onFillGap = { [storage] beforeUid, count, completion in
+            // 真实服务在同一事务里落库并收尾断层；这里模拟"一页就接上了"
+            try? storage!.write { db in
+                try storage!.messages.insert(StoredMessage(localMessageId: 50, messageUid: 50, conversationType: .single, target: "them", from: "them", content: .text("filled50"), timestamp: 500, status: .read, direction: .receive), db: db)
+                try storage!.gaps.resolveAfterFill(conversationType: .single, target: "them", line: 0, beforeUid: beforeUid, returnedUids: [50, 2], requestedCount: count, floorUid: 2, db: db)
+            }
+            completion(1)
+        }
+        var completed = false
+        viewModel.loadMoreHistory { completed = true }
+
+        XCTAssertTrue(completed)
+        XCTAssertEqual(remote.gapCalls.first?.beforeUid, 100)
+        XCTAssertEqual(remote.gapCalls.first?.count, 3)
+        XCTAssertTrue(remote.calls.isEmpty)
+        XCTAssertEqual(rowTexts(), ["old1", "old2", "filled50", "new100", "new101", "new102", "new103", "new104"])
+    }
+
+    func test_loadMoreHistory_gapFillFailed_keepsOlderMessagesHidden() throws {
+        try seedGap(newCount: 2)
+        waitForFirstNonEmptyRows()
+        remote.onFillGap = { _, _, completion in completion(nil) }
+
+        viewModel.loadMoreHistory {}
+
+        XCTAssertEqual(remote.gapCalls.count, 1)
+        XCTAssertEqual(rowTexts(), ["new100", "new101"])
+    }
+
+    func test_tailGap_isFilledWhenConversationOpens() throws {
+        try insertMessage(uid: 5, text: "old5", timestamp: 500)
+        try recordGap(Int64.max)
+
+        let opened = ConversationViewModel(storage: storage, messageSending: nil, imageUploading: nil, remoteHistory: remote, target: "them", pageSize: 3, currentUserId: "me")
+
+        XCTAssertEqual(remote.gapCalls.map(\.beforeUid), [Int64.max])
+        withExtendedLifetime(opened) {}
     }
 }

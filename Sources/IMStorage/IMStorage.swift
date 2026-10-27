@@ -1,6 +1,6 @@
 import GRDB
 
-/// Single entry point: construct one `IMStorage`, get all seven stores
+/// Single entry point: construct one `IMStorage`, get all eight stores
 /// sharing the same underlying SQLite connection.
 ///
 /// Otherwise intentionally does not expose the underlying
@@ -18,6 +18,7 @@ public final class IMStorage {
     public let friendRequests: FriendRequestStore
     public let groups: GroupStore
     public let userSettings: UserSettingStore
+    public let gaps: ConversationGapStore
 
     /// Test-only escape hatch for asserting on raw table contents. Not for
     /// production use — production code always goes through one of the
@@ -66,6 +67,7 @@ public final class IMStorage {
             try StoredFriendRequest.deleteAll(db)
             try groups.clearAllFav(db: db)
             try userSettings.deleteAll(db: db)
+            try gaps.deleteAll(db: db)
             try StoredSyncState(msgHead: 0, friendHead: 0, friendRequestHead: 0, settingHead: 0).save(db)
         }
     }
@@ -81,6 +83,7 @@ public final class IMStorage {
         friendRequests = FriendRequestStore(dbQueue: database.dbQueue)
         groups = GroupStore(dbQueue: database.dbQueue)
         userSettings = UserSettingStore(dbQueue: database.dbQueue)
+        gaps = ConversationGapStore(dbQueue: database.dbQueue)
     }
 
     public static func open(atPath path: String) throws -> IMStorage {

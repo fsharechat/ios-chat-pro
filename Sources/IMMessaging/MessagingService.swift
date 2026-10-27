@@ -44,6 +44,15 @@ public final class MessagingService {
         let startedAtMillis: Int64
         /// 已观察到的 body 字节数，用于忽略不推进的重复进度回调。
         var receivedBodyBytes: Int
+        /// 非 nil 表示这是一次断层补拉（`fillGap`），响应落库时要顺带收尾断层。
+        let gapFill: GapFill?
+    }
+    private struct GapFill {
+        let conversationType: ConversationType
+        let target: String
+        let line: Int
+        let beforeUid: Int64
+        let count: Int
     }
     private var pendingRemoteLoads: [UInt16: PendingRemoteLoad] = [:]
 
@@ -432,6 +441,34 @@ public final class MessagingService {
         count: Int,
         completion: @escaping (Int?) -> Void
     ) {
+        sendRemoteLoad(conversationType: conversationType, target: target, line: line, beforeUid: beforeUid, count: count, gapFill: nil, completion: completion)
+    }
+
+    /// 补拉 `beforeUid` 处的会话断层（见 `ConversationGapStore`）。请求与
+    /// `loadRemoteMessages` 相同，区别在落库：不插入 uid 不超过断层下方本地最新
+    /// 一条的消息（用户本地删过的不复活），并在同一事务里删除或下移断层。
+    /// `completion` 语义同 `loadRemoteMessages`；失败（nil）时断层保留，下次重试。
+    public func fillGap(
+        conversationType: ConversationType,
+        target: String,
+        line: Int,
+        beforeUid: Int64,
+        count: Int,
+        completion: @escaping (Int?) -> Void
+    ) {
+        let gapFill = GapFill(conversationType: conversationType, target: target, line: line, beforeUid: beforeUid, count: count)
+        sendRemoteLoad(conversationType: conversationType, target: target, line: line, beforeUid: beforeUid, count: count, gapFill: gapFill, completion: completion)
+    }
+
+    private func sendRemoteLoad(
+        conversationType: ConversationType,
+        target: String,
+        line: Int,
+        beforeUid: Int64,
+        count: Int,
+        gapFill: GapFill?,
+        completion: @escaping (Int?) -> Void
+    ) {
         var request = Im_LoadRemoteMessages()
         request.conversation.type = Int32(conversationType.rawValue)
         request.conversation.target = target
@@ -444,7 +481,8 @@ public final class MessagingService {
             timeoutToken: scheduleRemoteLoadTimeout(wireId: wireId),
             completion: completion,
             startedAtMillis: nowMillis(),
-            receivedBodyBytes: 0
+            receivedBodyBytes: 0,
+            gapFill: gapFill
         )
     }
 
@@ -493,11 +531,27 @@ public final class MessagingService {
         // `nil` = server-reported error → a failed request; an empty page is
         // a *successful* "no more history" and completes with 0.
         guard let messages else { pending?.completion(nil); return }
-        guard !messages.isEmpty else { pending?.completion(0); return }
+        let gapFill = pending?.gapFill
+        guard !messages.isEmpty || gapFill != nil else { pending?.completion(0); return }
         var inserted = 0
         try? storage.write { db in
-            for wireMessage in messages where persistHistory(wireMessage, db: db) {
+            // 断层下方本地最新一条：补拉回来的消息不超过它就是已经接上了
+            var floorUid: Int64 = 0
+            if let gapFill {
+                floorUid = (try? storage.gaps.localFloorUid(
+                    conversationType: gapFill.conversationType, target: gapFill.target, line: gapFill.line,
+                    below: gapFill.beforeUid, db: db
+                )) ?? 0
+            }
+            for wireMessage in messages where (gapFill == nil || wireMessage.messageID > floorUid) && persistHistory(wireMessage, db: db) {
                 inserted += 1
+            }
+            if let gapFill {
+                try? storage.gaps.resolveAfterFill(
+                    conversationType: gapFill.conversationType, target: gapFill.target, line: gapFill.line,
+                    beforeUid: gapFill.beforeUid, returnedUids: messages.map(\.messageID),
+                    requestedCount: gapFill.count, floorUid: floorUid, db: db
+                )
             }
         }
         pending?.completion(inserted)

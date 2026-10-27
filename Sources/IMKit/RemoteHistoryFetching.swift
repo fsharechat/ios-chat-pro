@@ -20,6 +20,17 @@ public protocol RemoteHistoryFetching: AnyObject {
         count: Int,
         completion: @escaping (Int?) -> Void
     )
+
+    /// 补拉 `beforeUid` 处的会话断层（`ConversationGapStore`），落库时顺带
+    /// 删除或下移断层。`completion` 语义同上。
+    func fillGap(
+        conversationType: ConversationType,
+        target: String,
+        line: Int,
+        beforeUid: Int64,
+        count: Int,
+        completion: @escaping (Int?) -> Void
+    )
 }
 
 extension MessagingService: RemoteHistoryFetching {}

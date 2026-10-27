@@ -676,12 +676,47 @@ public struct Im_PullMessageResult: Sendable {
   /// Clears the value of `head`. Subsequent reads from it will return its default value.
   public mutating func clearHead() {self._head = nil}
 
+  public var gap: [Im_ConversationGap] = []
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
 
   fileprivate var _current: Int64? = nil
   fileprivate var _head: Int64? = nil
+}
+
+/// 增量拉取时某会话被截断：比 before_uid 更早的消息未下发，客户端需按需补拉。
+/// before_uid 为 int64 最大值表示该会话本次一条都没下发（尾部断层）
+public struct Im_ConversationGap: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var conversation: Im_Conversation {
+    get {return _conversation ?? Im_Conversation()}
+    set {_conversation = newValue}
+  }
+  /// Returns true if `conversation` has been explicitly set.
+  public var hasConversation: Bool {return self._conversation != nil}
+  /// Clears the value of `conversation`. Subsequent reads from it will return its default value.
+  public mutating func clearConversation() {self._conversation = nil}
+
+  public var beforeUid: Int64 {
+    get {return _beforeUid ?? 0}
+    set {_beforeUid = newValue}
+  }
+  /// Returns true if `beforeUid` has been explicitly set.
+  public var hasBeforeUid: Bool {return self._beforeUid != nil}
+  /// Clears the value of `beforeUid`. Subsequent reads from it will return its default value.
+  public mutating func clearBeforeUid() {self._beforeUid = nil}
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _conversation: Im_Conversation? = nil
+  fileprivate var _beforeUid: Int64? = nil
 }
 
 public struct Im_PullGroupInfoResult: Sendable {
@@ -3571,12 +3606,14 @@ extension Im_PullMessageResult: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
     1: .same(proto: "message"),
     2: .same(proto: "current"),
     3: .same(proto: "head"),
+    4: .same(proto: "gap"),
   ]
 
   public var isInitialized: Bool {
     if self._current == nil {return false}
     if self._head == nil {return false}
     if !SwiftProtobuf.Internal.areAllInitialized(self.message) {return false}
+    if !SwiftProtobuf.Internal.areAllInitialized(self.gap) {return false}
     return true
   }
 
@@ -3589,6 +3626,7 @@ extension Im_PullMessageResult: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
       case 1: try { try decoder.decodeRepeatedMessageField(value: &self.message) }()
       case 2: try { try decoder.decodeSingularInt64Field(value: &self._current) }()
       case 3: try { try decoder.decodeSingularInt64Field(value: &self._head) }()
+      case 4: try { try decoder.decodeRepeatedMessageField(value: &self.gap) }()
       default: break
       }
     }
@@ -3608,6 +3646,9 @@ extension Im_PullMessageResult: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
     try { if let v = self._head {
       try visitor.visitSingularInt64Field(value: v, fieldNumber: 3)
     } }()
+    if !self.gap.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.gap, fieldNumber: 4)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -3615,6 +3656,56 @@ extension Im_PullMessageResult: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
     if lhs.message != rhs.message {return false}
     if lhs._current != rhs._current {return false}
     if lhs._head != rhs._head {return false}
+    if lhs.gap != rhs.gap {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension Im_ConversationGap: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".ConversationGap"
+  public static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
+    1: .same(proto: "conversation"),
+    2: .standard(proto: "before_uid"),
+  ]
+
+  public var isInitialized: Bool {
+    if self._conversation == nil {return false}
+    if self._beforeUid == nil {return false}
+    if let v = self._conversation, !v.isInitialized {return false}
+    return true
+  }
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularMessageField(value: &self._conversation) }()
+      case 2: try { try decoder.decodeSingularInt64Field(value: &self._beforeUid) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    try { if let v = self._conversation {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
+    } }()
+    try { if let v = self._beforeUid {
+      try visitor.visitSingularInt64Field(value: v, fieldNumber: 2)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Im_ConversationGap, rhs: Im_ConversationGap) -> Bool {
+    if lhs._conversation != rhs._conversation {return false}
+    if lhs._beforeUid != rhs._beforeUid {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

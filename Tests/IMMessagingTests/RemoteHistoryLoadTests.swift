@@ -324,4 +324,104 @@ final class RemoteHistoryLoadTests: XCTestCase {
 
         XCTAssertEqual(completions, 1)
     }
+
+    // MARK: - fillGap
+
+    private func insertLocal(uid: Int64) throws {
+        try storage.messages.insert(StoredMessage(localMessageId: uid, messageUid: uid, conversationType: .single, target: "them", from: "them", content: .text("local-\(uid)"), timestamp: uid * 10, status: .read, direction: .receive))
+    }
+
+    private func recordGap(_ beforeUid: Int64) throws {
+        try storage.write { db in
+            try storage.gaps.record(conversationType: .single, target: "them", line: 0, beforeUid: beforeUid, db: db)
+        }
+    }
+
+    private func gapUids() throws -> [Int64] {
+        try storage.gaps.gaps(conversationType: .single, target: "them", line: 0).map(\.beforeUid)
+    }
+
+    func test_fillGap_sendsLRMRequestBeforeGap() throws {
+        service.fillGap(conversationType: .single, target: "them", line: 0, beforeUid: 100, count: 2) { _ in }
+
+        let request = try Im_LoadRemoteMessages(serializedBytes: decodeOnlySentFrame().body)
+        XCTAssertEqual(request.beforeUid, 100)
+        XCTAssertEqual(request.count, 2)
+    }
+
+    func test_fillGap_fullPageAboveLocalHistory_persistsAndMovesGapDown() throws {
+        try insertLocal(uid: 5)
+        try insertLocal(uid: 100)
+        try recordGap(100)
+        var inserted: Int?
+        service.fillGap(conversationType: .single, target: "them", line: 0, beforeUid: 100, count: 2) { inserted = $0 }
+
+        try simulateLRMAck(messageId: decodeOnlySentFrame().header.messageId, messages: [
+            makeHistoryWireMessage(uid: 90, from: "them", text: "m90", timestamp: 900),
+            makeHistoryWireMessage(uid: 80, from: "them", text: "m80", timestamp: 800),
+        ])
+
+        XCTAssertEqual(inserted, 2)
+        XCTAssertEqual(try gapUids(), [80])
+    }
+
+    func test_fillGap_pageReachingLocalHistory_closesGapWithoutResurrectingDeletedRows() throws {
+        // 本地 6 被用户删过：补拉回来的 6 不能被重新插入，且能判定"已经接上"
+        try insertLocal(uid: 7)
+        try insertLocal(uid: 100)
+        try recordGap(100)
+        var inserted: Int?
+        service.fillGap(conversationType: .single, target: "them", line: 0, beforeUid: 100, count: 3) { inserted = $0 }
+
+        try simulateLRMAck(messageId: decodeOnlySentFrame().header.messageId, messages: [
+            makeHistoryWireMessage(uid: 90, from: "them", text: "m90", timestamp: 900),
+            makeHistoryWireMessage(uid: 7, from: "them", text: "m7", timestamp: 70),
+            makeHistoryWireMessage(uid: 6, from: "them", text: "m6", timestamp: 60),
+        ])
+
+        XCTAssertEqual(inserted, 1)
+        XCTAssertNotNil(try storage.messages.message(uid: 90))
+        XCTAssertNil(try storage.messages.message(uid: 6))
+        XCTAssertTrue(try gapUids().isEmpty)
+    }
+
+    func test_fillGap_emptyPage_closesGap() throws {
+        try insertLocal(uid: 5)
+        try recordGap(100)
+        var inserted: Int?
+        service.fillGap(conversationType: .single, target: "them", line: 0, beforeUid: 100, count: 2) { inserted = $0 }
+
+        try simulateLRMAck(messageId: decodeOnlySentFrame().header.messageId, messages: [])
+
+        XCTAssertEqual(inserted, 0)
+        XCTAssertTrue(try gapUids().isEmpty)
+    }
+
+    func test_fillGap_serverError_keepsGap() throws {
+        try insertLocal(uid: 5)
+        try recordGap(100)
+        var completions: [Int?] = []
+        service.fillGap(conversationType: .single, target: "them", line: 0, beforeUid: 100, count: 2) { completions.append($0) }
+        let sentFrame = try decodeOnlySentFrame()
+
+        fakeTransport.simulateReceivedData(FrameEncoder.encode(signal: .pubAck, subSignal: .lrm, messageId: sentFrame.header.messageId, body: Data([0x01])))
+
+        XCTAssertEqual(completions.count, 1)
+        XCTAssertNil(completions[0] ?? nil)
+        XCTAssertEqual(try gapUids(), [100])
+    }
+
+    func test_fillGap_tailGap_fetchesNewestAndLeavesGapAboveLocalHistory() throws {
+        try insertLocal(uid: 5)
+        try recordGap(Int64.max)
+        service.fillGap(conversationType: .single, target: "them", line: 0, beforeUid: Int64.max, count: 2) { _ in }
+
+        try simulateLRMAck(messageId: decodeOnlySentFrame().header.messageId, messages: [
+            makeHistoryWireMessage(uid: 200, from: "them", text: "m200", timestamp: 2000),
+            makeHistoryWireMessage(uid: 190, from: "them", text: "m190", timestamp: 1900),
+        ])
+
+        XCTAssertNotNil(try storage.messages.message(uid: 200))
+        XCTAssertEqual(try gapUids(), [190])
+    }
 }

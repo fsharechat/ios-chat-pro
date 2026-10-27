@@ -131,6 +131,15 @@ message PullMessageResult
 	repeated Message message = 1;
 	required int64 current = 2;
 	required int64 head = 3;
+	repeated ConversationGap gap = 4;
+}
+
+// 增量拉取时某会话被截断：比 before_uid 更早的消息未下发，客户端需按需补拉。
+// before_uid 为 int64 最大值表示该会话本次一条都没下发（尾部断层）
+message ConversationGap
+{
+	required Conversation conversation = 1;
+	required int64 before_uid = 2;
 }
 
 message PullGroupInfoResult

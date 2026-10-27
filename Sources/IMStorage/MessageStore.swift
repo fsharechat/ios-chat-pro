@@ -119,6 +119,11 @@ public final class MessageStore {
             sql: "DELETE FROM message WHERE conversationType = ? AND target = ? AND line = ?",
             arguments: [conversationType.rawValue, target, line]
         )
+        // 消息清空后断层失去意义，留着反而会把以后重新拉到的消息错误地隐藏
+        try db.execute(
+            sql: "DELETE FROM conversationGap WHERE conversationType = ? AND target = ? AND line = ?",
+            arguments: [conversationType.rawValue, target, line]
+        )
     }
 
     public func searchMessages(conversationType: ConversationType, target: String, keyword: String) throws -> [StoredMessage] {

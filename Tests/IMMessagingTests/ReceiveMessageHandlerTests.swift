@@ -40,6 +40,64 @@ final class ReceiveMessageHandlerTests: XCTestCase {
         return Frame(header: Header(signal: .pubAck, subSignal: .mp, bodyLength: UInt32(body.count), messageId: 1), body: body)
     }
 
+    private func makeGap(target: String, type: Int32 = 0, beforeUid: Int64) -> Im_ConversationGap {
+        var gap = Im_ConversationGap()
+        gap.conversation.type = type
+        gap.conversation.target = target
+        gap.conversation.line = 0
+        gap.beforeUid = beforeUid
+        return gap
+    }
+
+    private func makePullResultFrame(messages: [Im_Message], gaps: [Im_ConversationGap], head: Int64) throws -> Frame {
+        var result = Im_PullMessageResult()
+        result.message = messages
+        result.gap = gaps
+        result.head = head
+        result.current = head
+        var body = Data([0x00])
+        body += try result.serializedData()
+        return Frame(header: Header(signal: .pubAck, subSignal: .mp, bodyLength: UInt32(body.count), messageId: 1), body: body)
+    }
+
+    // MARK: - 会话断层
+
+    func test_handle_gapWithOlderLocalHistory_recordsGap() throws {
+        try storage.messages.insert(StoredMessage(localMessageId: 5, messageUid: 5, conversationType: .single, target: "them", from: "them", content: .text("old"), timestamp: 500, status: .read, direction: .receive))
+        let frame = try makePullResultFrame(
+            messages: [makeWireMessage(uid: 100, from: "them", target: "me"), makeWireMessage(uid: 101, from: "them", target: "me")],
+            gaps: [makeGap(target: "them", beforeUid: 100)],
+            head: 101
+        )
+
+        handler.handle(frame: frame)
+
+        XCTAssertEqual(try storage.gaps.gaps(conversationType: .single, target: "them", line: 0).map(\.beforeUid), [100])
+        XCTAssertEqual(try storage.messages.message(uid: 101)?.content, .text("hi"))
+        XCTAssertEqual(try storage.syncState.get().msgHead, 101)
+    }
+
+    func test_handle_gapWithoutOlderLocalHistory_isIgnored() throws {
+        let frame = try makePullResultFrame(
+            messages: [makeWireMessage(uid: 100, from: "them", target: "me")],
+            gaps: [makeGap(target: "them", beforeUid: 100)],
+            head: 100
+        )
+
+        handler.handle(frame: frame)
+
+        XCTAssertTrue(try storage.gaps.gaps(conversationType: .single, target: "them", line: 0).isEmpty)
+    }
+
+    func test_handle_groupGap_usesGroupConversation() throws {
+        try storage.messages.insert(StoredMessage(localMessageId: 5, messageUid: 5, conversationType: .group, target: "g1", from: "x", content: .text("old"), timestamp: 500, status: .read, direction: .receive))
+        let frame = try makePullResultFrame(messages: [], gaps: [makeGap(target: "g1", type: 1, beforeUid: Int64.max)], head: 100)
+
+        handler.handle(frame: frame)
+
+        XCTAssertTrue(try storage.gaps.hasTailGap(conversationType: .group, target: "g1", line: 0))
+    }
+
     func test_canHandle_onlyMatchesPubAckAndMP() {
         XCTAssertTrue(handler.canHandle(signal: .pubAck, subSignal: .mp))
         XCTAssertFalse(handler.canHandle(signal: .pubAck, subSignal: .ms))

@@ -114,6 +114,18 @@ public final class ReceiveMessageHandler: MessageHandler {
             for wireMessage in result.message {
                 persist(wireMessage, db: db, suppressUnread: shouldSuppressUnread, groupNotificationTargets: &groupNotificationTargets, callEvents: &callEvents, alertCandidates: &alertCandidates, incomingVoices: &incomingVoices)
             }
+            // 服务端截断的会话：与消息、syncHead 同一事务记录断层，否则 head
+            // 推进后被截掉的那段消息再也不会出现在增量同步里
+            for gap in result.gap {
+                guard let conversationType = ConversationType(rawValue: Int(gap.conversation.type)) else { continue }
+                try? storage.gaps.record(
+                    conversationType: conversationType,
+                    target: gap.conversation.target,
+                    line: Int(gap.conversation.line),
+                    beforeUid: gap.beforeUid,
+                    db: db
+                )
+            }
             advanceSyncHead(to: result.head, db: db)
         }
         print("[DEBUG-FP][\({ let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"; return f.string(from: Date()) }())] ReceiveMessageHandler: write done, elapsed=\(String(format:"%.3f",ProcessInfo.processInfo.systemUptime-t0))s")
