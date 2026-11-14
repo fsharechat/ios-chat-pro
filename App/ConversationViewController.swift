@@ -28,7 +28,8 @@ final class ConversationViewController: UIViewController {
     private let tableView = UITableView()
     private let refreshControl = UIRefreshControl()
     private let inputBar = MessageInputBar()
-    private var inputBarBottomConstraint: NSLayoutConstraint!
+    private let composerProtection = ComposerBottomProtectionView()
+    private var updatingComposerInsets = false
     private var previousRawRows: [ChatMessageRow] = []
     private var tableReady = false
     /// 流式输出完成后保持全文展开的消息(占位行被真实消息替换时继承),
@@ -105,6 +106,7 @@ final class ConversationViewController: UIViewController {
         // 离开(pop、push 出资料页等)即恢复计数;回来时 viewWillAppear
         // 会重新标记并 clearUnread,覆盖期间产生的未读。
         viewModel.markInactive()
+        inputBar.cancelRecording()
     }
 
 
@@ -192,19 +194,25 @@ final class ConversationViewController: UIViewController {
         inputBar.translatesAutoresizingMaskIntoConstraints = false
 
         view.addSubview(tableView)
+        composerProtection.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(composerProtection)
         view.addSubview(inputBar)
 
-        inputBarBottomConstraint = inputBar.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor)
+        tableView.contentInsetAdjustmentBehavior = .never
 
         NSLayoutConstraint.activate([
             tableView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             tableView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             tableView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
-            tableView.bottomAnchor.constraint(equalTo: inputBar.topAnchor),
+            tableView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
 
             inputBar.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             inputBar.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            inputBarBottomConstraint,
+            inputBar.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor),
+            composerProtection.topAnchor.constraint(equalTo: inputBar.topAnchor, constant: -16),
+            composerProtection.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            composerProtection.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            composerProtection.trailingAnchor.constraint(equalTo: view.trailingAnchor),
         ])
     }
 
@@ -609,7 +617,6 @@ final class ConversationViewController: UIViewController {
             self?.viewModel.sendVoice(audioData: audioData, duration: duration, fileName: fileName)
         }
         inputBar.onMentionTriggered = { [weak self] in self?.presentMentionPicker() }
-        inputBar.onPanelShown = { [weak self] in self?.scrollToBottom(animated: true) }
     }
 
     private func presentMentionPicker() {
@@ -832,15 +839,44 @@ final class ConversationViewController: UIViewController {
         NotificationCenter.default.addObserver(self, selector: #selector(keyboardWillChangeFrame), name: UIResponder.keyboardWillChangeFrameNotification, object: nil)
     }
 
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        updateComposerInsets()
+    }
+
+    private func updateComposerInsets() {
+        guard !updatingComposerInsets else { return }
+        let bottom = max(0, tableView.frame.maxY - inputBar.frame.minY + 8)
+        guard abs(tableView.contentInset.bottom - bottom) > 0.5 else { return }
+        updatingComposerInsets = true
+        defer { updatingComposerInsets = false }
+        let previousBottom = max(-tableView.adjustedContentInset.top,
+            tableView.contentSize.height - tableView.bounds.height + tableView.adjustedContentInset.bottom)
+        let followsBottom = tableReady && previousBottom - tableView.contentOffset.y < 64
+        let offset = tableView.contentOffset
+        tableView.contentInset.bottom = bottom
+        tableView.verticalScrollIndicatorInsets.bottom = bottom
+        if followsBottom && !tableView.isDragging && !tableView.isDecelerating {
+            tableView.contentOffset.y = max(-tableView.adjustedContentInset.top,
+                tableView.contentSize.height - tableView.bounds.height + bottom)
+        } else {
+            // Only the inset changes, so the existing visible rows keep their screen positions.
+            tableView.contentOffset = offset
+        }
+    }
+
     @objc private func keyboardWillChangeFrame(_ notification: Notification) {
         guard let endFrame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect,
               let duration = notification.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double else { return }
-        let keyboardHeight = max(0, view.bounds.maxY - endFrame.minY - view.safeAreaInsets.bottom)
-        inputBarBottomConstraint.constant = -keyboardHeight
-        UIView.animate(withDuration: duration) {
+        let frame = view.window?.screen.coordinateSpace.convert(endFrame, to: view) ?? endFrame
+        let docked = frame.minX <= view.bounds.minX + 1 && frame.maxX >= view.bounds.maxX - 1
+            && frame.maxY >= view.bounds.maxY - 1
+        let height = docked ? max(0, view.bounds.maxY - frame.minY - view.safeAreaInsets.bottom) : 0
+        let curve = (notification.userInfo?[UIResponder.keyboardAnimationCurveUserInfoKey] as? UInt) ?? 7
+        UIView.animate(withDuration: duration, delay: 0,
+                       options: [UIView.AnimationOptions(rawValue: curve << 16), .beginFromCurrentState, .allowUserInteraction]) {
+            self.inputBar.updateKeyboard(height: height)
             self.view.layoutIfNeeded()
-            // 键盘弹出时跟随滚到底部，最新消息不被键盘盖住。
-            if keyboardHeight > 0 { self.scrollToBottom(animated: false) }
         }
     }
 
@@ -1091,6 +1127,9 @@ extension ConversationViewController: UITableViewDelegate {
     // 选字状态下滑动列表：滑动时菜单隐藏，静止后在选区旁重新出现（选区本身保留）。
     func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
         selectionMenu?.setCardHidden(true)
+        // keyboardDismissMode only dismisses the system keyboard. Custom panels need the
+        // same user-drag boundary; programmatic scrolling and scrolling inside panels do not.
+        inputBar.collapseInput()
     }
 
     func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {

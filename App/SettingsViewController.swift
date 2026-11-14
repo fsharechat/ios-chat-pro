@@ -27,6 +27,7 @@ final class SettingsViewController: UIViewController {
     init() {
         super.init(nibName: nil, bundle: nil)
         title = "设置"
+        hidesBottomBarWhenPushed = true
     }
 
     @available(*, unavailable)
@@ -73,6 +74,8 @@ extension SettingsViewController: UITableViewDataSource, UITableViewDelegate {
             return toggle
         }
         let cell = tableView.dequeueReusableCell(withIdentifier: "cell") ?? UITableViewCell(style: .default, reuseIdentifier: "cell")
+        // Match ToggleSwitchCell instead of relying on the OS's legacy-cell default font.
+        cell.textLabel?.font = .systemFont(ofSize: 16)
         switch Row(rawValue: indexPath.row)! {
         case .theme:
             cell.textLabel?.text = "主题"

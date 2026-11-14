@@ -24,6 +24,7 @@ final class MyProfileViewController: UIViewController {
         self.imageUploading = imageUploading
         super.init(nibName: nil, bundle: nil)
         title = "我的资料"
+        hidesBottomBarWhenPushed = true
     }
 
     @available(*, unavailable)

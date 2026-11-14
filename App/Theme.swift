@@ -10,6 +10,16 @@ import UIKit
 /// Automatic via `UITraitCollection.userInterfaceStyle` — manual in-app
 /// theme switching is explicitly Phase 4 scope ("设置/换肤"), not built here.
 public enum Theme {
+    public static let composerTint = UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(white: 0.12, alpha: 0.24) : UIColor(hex: 0xDFE6F1).withAlphaComponent(0.62)
+    }
+    public static let composerOpaqueBackground = dynamicColor(dark: 0x1B1C22, light: 0xE9EDF6)
+    public static let composerBorder = UIColor { traits in
+        if UIAccessibility.isDarkerSystemColorsEnabled { return .separator }
+        return traits.userInterfaceStyle == .dark
+            ? UIColor.white.withAlphaComponent(0.16) : UIColor(hex: 0xB8C4D8).withAlphaComponent(0.75)
+    }
     public static let backgroundPrimary = dynamicColor(dark: 0x14151A, light: 0xFFFFFF)
     public static let backgroundSecondary = dynamicColor(dark: 0x1B1C22, light: 0xF5F7FC)
     public static let backgroundTertiary = dynamicColor(dark: 0x232430, light: 0xE9EDF6)

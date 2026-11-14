@@ -24,10 +24,7 @@ final class EmojiPanelView: UIView {
     private static let perPage = columns * rows - 1  // 20
 
     private lazy var collectionView: UICollectionView = {
-        let layout = UICollectionViewFlowLayout()
-        layout.scrollDirection = .horizontal
-        layout.minimumInteritemSpacing = 0
-        layout.minimumLineSpacing = 0
+        let layout = EmojiPagedLayout()
         let cv = UICollectionView(frame: .zero, collectionViewLayout: layout)
         cv.isPagingEnabled = true
         cv.showsHorizontalScrollIndicator = false
@@ -43,6 +40,9 @@ final class EmojiPanelView: UIView {
     override init(frame: CGRect) {
         super.init(frame: frame)
         backgroundColor = Theme.backgroundSecondary
+        layer.cornerRadius = 22
+        layer.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner]
+        clipsToBounds = true
         addSubview(collectionView)
         addSubview(pageControl)
         pageControl.currentPageIndicatorTintColor = Theme.accent
@@ -72,15 +72,7 @@ final class EmojiPanelView: UIView {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
 
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        if let layout = collectionView.collectionViewLayout as? UICollectionViewFlowLayout {
-            let w = collectionView.bounds.width / CGFloat(Self.columns)
-            let h = collectionView.bounds.height / CGFloat(Self.rows)
-            layout.itemSize = CGSize(width: w, height: h)
-            layout.sectionInset = .zero
-        }
-    }
+
 }
 
 extension EmojiPanelView: UICollectionViewDataSource, UICollectionViewDelegate {
@@ -116,6 +108,7 @@ extension EmojiPanelView: UICollectionViewDataSource, UICollectionViewDelegate {
     }
 
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
+        guard scrollView.bounds.width > 0 else { return }
         let page = Int(round(scrollView.contentOffset.x / scrollView.bounds.width))
         pageControl.currentPage = page
     }
@@ -149,5 +142,40 @@ private final class EmojiCell: UICollectionViewCell {
         label.isHidden = isDelete || emoji == nil
         deleteLabel.isHidden = !isDelete
         label.text = emoji
+        isAccessibilityElement = emoji != nil || isDelete
+        accessibilityLabel = isDelete ? "删除" : emoji
+        accessibilityTraits = .button
+    }
+}
+
+/// Row-major pages. A horizontal flow layout otherwise fills columns before rows and splits pages.
+private final class EmojiPagedLayout: UICollectionViewLayout {
+    private var attributes: [UICollectionViewLayoutAttributes] = []
+    override func prepare() {
+        super.prepare()
+        guard let collectionView else { return }
+        let size = collectionView.bounds.size
+        attributes = (0..<collectionView.numberOfItems(inSection: 0)).map { index in
+            let item = UICollectionViewLayoutAttributes(forCellWith: IndexPath(item: index, section: 0))
+            let position = index % 21
+            item.frame = CGRect(x: CGFloat(index / 21) * size.width + CGFloat(position % 7) * size.width / 7,
+                                y: CGFloat(position / 7) * size.height / 3,
+                                width: size.width / 7, height: size.height / 3)
+            return item
+        }
+    }
+    override var collectionViewContentSize: CGSize {
+        guard let collectionView else { return .zero }
+        let pages = (collectionView.numberOfItems(inSection: 0) + 20) / 21
+        return CGSize(width: CGFloat(pages) * collectionView.bounds.width, height: collectionView.bounds.height)
+    }
+    override func layoutAttributesForElements(in rect: CGRect) -> [UICollectionViewLayoutAttributes]? {
+        attributes.filter { $0.frame.intersects(rect) }
+    }
+    override func layoutAttributesForItem(at indexPath: IndexPath) -> UICollectionViewLayoutAttributes? {
+        attributes.indices.contains(indexPath.item) ? attributes[indexPath.item] : nil
+    }
+    override func shouldInvalidateLayout(forBoundsChange newBounds: CGRect) -> Bool {
+        newBounds.size != collectionView?.bounds.size
     }
 }

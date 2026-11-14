@@ -1,9 +1,7 @@
 import UIKit
-import AVFoundation
+import IMKit
 
 final class MessageInputBar: UIView {
-
-    // MARK: - Public callbacks
     var onSendText: ((_ text: String, _ mentionedType: Int32, _ mentionedTargets: [String]) -> Void)?
     var onPickImage: (() -> Void)?
     var onCamera: (() -> Void)?
@@ -13,429 +11,515 @@ final class MessageInputBar: UIView {
     var onVideoCall: (() -> Void)?
     var onSendVoice: ((_ audioData: Data, _ duration: Int, _ fileName: String, _ localM4AURL: URL?) -> Void)?
     var onMentionTriggered: (() -> Void)?
-    /// 表情/扩展面板弹出时回调（键盘弹出走系统通知，面板弹出没有系统信号），
-    /// 会话页借此把消息列表滚到底部，避免面板盖住最新消息。
-    var onPanelShown: (() -> Void)?
 
-    // MARK: - Mention state
-    private var mentionedType: Int32 = 0
-    private var mentionedTargets: [String] = []
-    /// 输入框里已插入的 @ 块字面量（"@昵称 "），uid nil 表示「所有人」。
-    /// 退格删到某块的末字符时整块删除（微信行为），避免逐字删到只剩
-    /// "@" 又误触选人页；删除后据此重算 mentionedType/Targets。
-    private var mentionTokens: [(text: String, uid: String?)] = []
-    /// 仅当用户刚敲入 "@" 字符时才允许弹选人页；删除、粘贴多字符、
-    /// 程序改文本（insertMention 等直接调 textViewDidChange）都不弹。
-    private var justTypedMentionTrigger = false
-
-    // MARK: - Panel state
-    private enum PanelState { case none, emoji, ext }
-    private var panelState: PanelState = .none
-    private var isVoiceMode = false
-
-    // MARK: - Subviews
-    private let voiceToggleButton = UIButton(type: .system)
+    private var state = ComposerState()
+    private let glass = ComposerGlassBackgroundView()
+    private let plusGlass = ComposerGlassBackgroundView()
+    private let dock = UIView()
+    private let editingHost = UIView()
     private let textView = UITextView()
     private let placeholderLabel = UILabel()
     private let recordButton = UIButton(type: .system)
+    private let keyboardButton = UIButton(type: .system)
+    private let voiceRow = UIStackView()
     private let emojiButton = UIButton(type: .system)
     private let extButton = UIButton(type: .system)
+    private let voiceButton = UIButton(type: .system)
     private let sendButton = UIButton(type: .system)
-    private var textViewHeightConstraint: NSLayoutConstraint!
-    /// ext(+) 与发送按钮共用输入栏右侧区域但宽度不同（32 vs 文字+内边距），
-    /// 两者的右缘钉边约束互斥激活，否则隐藏方的约束仍参与布局，
-    /// 会把发送按钮压回 + 号的 32pt 槽位，宽度设置全部失效。
-    private var extTrailingConstraint: NSLayoutConstraint!
-    private var sendLeadingConstraint: NSLayoutConstraint!
-
+    private let sendCircle = UIView()
+    private let tailHost = UIView()
+    private var editorHeight: NSLayoutConstraint!
+    private var placeholderCenterY: NSLayoutConstraint!
     private let panelContainer = UIView()
-    private var panelContainerHeightConstraint: NSLayoutConstraint!
+    private var panelHeight: NSLayoutConstraint!
     private let emojiPanel = EmojiPanelView()
     private let extPanel = ExtPanelView()
+    private let recording = VoiceRecordingController()
+    private let noticeLabel = UILabel()
+    private var noticeTask: DispatchWorkItem?
+    private var keyboardHeight: CGFloat = 0
+    private var lastKeyboardHeight: CGFloat = 260
+    private var keyboardReservation: CGFloat = 0
+    private var transitionID = 0
+    private var justTypedMention = false
+    private var recordStartY: CGFloat = 0
+    private var lastEditorWidth: CGFloat = 0
+    private var isLayingOut = false
 
-    // MARK: - Voice recording
-    private var audioRecorder: AVAudioRecorder?
-    private var recordingURL: URL?
+    private var textAttributes: [NSAttributedString.Key: Any] {
+        [.font: UIFont.preferredFont(forTextStyle: .body), .foregroundColor: Theme.textPrimary]
+    }
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        backgroundColor = Theme.backgroundSecondary
+        backgroundColor = .clear
         setupInputRow()
         setupPanelContainer()
         wireCallbacks()
+        NotificationCenter.default.addObserver(self, selector: #selector(contentSizeChanged),
+            name: UIContentSizeCategory.didChangeNotification, object: nil)
+        render()
     }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
 
-    // MARK: - Public API (mention)
-    func insertMention(uid: String?, displayName: String) {
-        textView.text += "@\(displayName) "
-        mentionTokens.append(("@\(displayName) ", uid))
-        recomputeMentionState()
-        textViewDidChange(textView)
-    }
-
-    /// 由 mentionTokens 重算 wire 字段：含「所有人」块即 type 2（targets
-    /// 置空），否则按剩余个人块去重收集 type 1；全删光回到 0。插入和
-    /// 整块删除共用，保证删掉「所有人」后个人 @ 能恢复生效。
-    private func recomputeMentionState() {
-        if mentionTokens.contains(where: { $0.uid == nil }) {
-            mentionedType = 2; mentionedTargets = []
-            return
-        }
-        var targets: [String] = []
-        for token in mentionTokens {
-            if let uid = token.uid, !targets.contains(uid) { targets.append(uid) }
-        }
-        mentionedTargets = targets
-        mentionedType = targets.isEmpty ? 0 : 1
-    }
-
-    func removeTrailingMentionTrigger() {
-        guard textView.text.hasSuffix("@") else { return }
-        textView.text.removeLast()
-        textViewDidChange(textView)
-    }
-
-    /// 收起键盘和表情/扩展面板，输入栏回到最小高度。
-    func collapseInput() {
-        textView.resignFirstResponder()
-        if panelState != .none { setPanelState(.none, animated: true) }
-    }
-
-    // MARK: - Layout
-    private func setupInputRow() {
-        voiceToggleButton.setImage(UIImage(systemName: "mic.fill"), for: .normal)
-        voiceToggleButton.tintColor = Theme.accent
-        voiceToggleButton.addTarget(self, action: #selector(voiceToggleTapped), for: .touchUpInside)
-
-        textView.font = .systemFont(ofSize: 16)
-        textView.backgroundColor = Theme.backgroundTertiary
-        textView.layer.cornerRadius = Theme.cardCornerRadius
-        textView.isScrollEnabled = false
-        textView.delegate = self
-
-        placeholderLabel.text = "发消息..."
-        placeholderLabel.textColor = Theme.textSecondary
-        placeholderLabel.font = .systemFont(ofSize: 16)
-
-        recordButton.setTitle("按住说话", for: .normal)
-        recordButton.titleLabel?.font = .systemFont(ofSize: 16)
-        recordButton.backgroundColor = Theme.backgroundTertiary
-        recordButton.layer.cornerRadius = Theme.cardCornerRadius
-        recordButton.isHidden = true
-        recordButton.addTarget(self, action: #selector(recordTouchDown), for: .touchDown)
-        recordButton.addTarget(self, action: #selector(recordTouchUp), for: [.touchUpInside, .touchUpOutside])
-        recordButton.addTarget(self, action: #selector(recordTouchCancel), for: .touchCancel)
-
-        emojiButton.setImage(UIImage(systemName: "face.smiling"), for: .normal)
-        emojiButton.tintColor = Theme.accent
-        emojiButton.addTarget(self, action: #selector(emojiTapped), for: .touchUpInside)
-
-        extButton.setImage(UIImage(systemName: "plus.circle"), for: .normal)
-        extButton.tintColor = Theme.accent
-        extButton.addTarget(self, action: #selector(extTapped), for: .touchUpInside)
-
-        sendButton.setTitle("发送", for: .normal)
-        sendButton.setTitleColor(.white, for: .normal)
-        sendButton.titleLabel?.font = .systemFont(ofSize: 15, weight: .medium)
-        sendButton.backgroundColor = Theme.accent
-        sendButton.layer.cornerRadius = 6
-        sendButton.contentEdgeInsets = UIEdgeInsets(top: 0, left: 18, bottom: 0, right: 18)
-        sendButton.setContentHuggingPriority(.required, for: .horizontal)
-        sendButton.setContentCompressionResistancePriority(.required, for: .horizontal)
-        sendButton.isHidden = true
-        sendButton.addTarget(self, action: #selector(sendTapped), for: .touchUpInside)
-
-        for v in [voiceToggleButton, textView, recordButton, emojiButton, extButton, sendButton] {
-            v.translatesAutoresizingMaskIntoConstraints = false
-            addSubview(v)
-        }
-        placeholderLabel.translatesAutoresizingMaskIntoConstraints = false
-        textView.addSubview(placeholderLabel)
-
-        textViewHeightConstraint = textView.heightAnchor.constraint(equalToConstant: 36)
-
-        NSLayoutConstraint.activate([
-            voiceToggleButton.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
-            voiceToggleButton.bottomAnchor.constraint(equalTo: textView.bottomAnchor),
-            voiceToggleButton.widthAnchor.constraint(equalToConstant: 32),
-            voiceToggleButton.heightAnchor.constraint(equalToConstant: 32),
-
-            textView.leadingAnchor.constraint(equalTo: voiceToggleButton.trailingAnchor, constant: 6),
-            textView.topAnchor.constraint(equalTo: topAnchor, constant: 8),
-            textViewHeightConstraint,
-
-            recordButton.leadingAnchor.constraint(equalTo: textView.leadingAnchor),
-            recordButton.trailingAnchor.constraint(equalTo: textView.trailingAnchor),
-            recordButton.topAnchor.constraint(equalTo: textView.topAnchor),
-            recordButton.bottomAnchor.constraint(equalTo: textView.bottomAnchor),
-
-            placeholderLabel.leadingAnchor.constraint(equalTo: textView.leadingAnchor, constant: 8),
-            placeholderLabel.centerYAnchor.constraint(equalTo: textView.topAnchor, constant: 18),
-
-            emojiButton.leadingAnchor.constraint(equalTo: textView.trailingAnchor, constant: 6),
-            emojiButton.bottomAnchor.constraint(equalTo: textView.bottomAnchor),
-            emojiButton.widthAnchor.constraint(equalToConstant: 32),
-            emojiButton.heightAnchor.constraint(equalToConstant: 32),
-
-            extButton.leadingAnchor.constraint(equalTo: emojiButton.trailingAnchor, constant: 4),
-            extButton.bottomAnchor.constraint(equalTo: textView.bottomAnchor),
-            extButton.widthAnchor.constraint(equalToConstant: 32),
-            extButton.heightAnchor.constraint(equalToConstant: 32),
-
-            sendButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
-            sendButton.bottomAnchor.constraint(equalTo: textView.bottomAnchor),
-            sendButton.heightAnchor.constraint(equalToConstant: 36),
-        ])
-
-        extTrailingConstraint = extButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8)
-        sendLeadingConstraint = sendButton.leadingAnchor.constraint(equalTo: emojiButton.trailingAnchor, constant: 4)
-        extTrailingConstraint.isActive = true
-    }
-
-    private func setupPanelContainer() {
-        panelContainer.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(panelContainer)
-        panelContainerHeightConstraint = panelContainer.heightAnchor.constraint(equalToConstant: 0)
-
-        // panelContainer sits between the text row and inputBar.bottom.
-        // When height = 0: inputBar.height = 8 + textViewHeight + 8 = 52.
-        // When height = panelHeight: inputBar.height = 52 + panelHeight.
-        // Safe area (home indicator) is handled by ConversationViewController which pins
-        // inputBar.bottom to view.safeAreaLayoutGuide.bottomAnchor.
-        NSLayoutConstraint.activate([
-            panelContainer.topAnchor.constraint(equalTo: textView.bottomAnchor, constant: 8),
-            panelContainer.leadingAnchor.constraint(equalTo: leadingAnchor),
-            panelContainer.trailingAnchor.constraint(equalTo: trailingAnchor),
-            panelContainer.bottomAnchor.constraint(equalTo: bottomAnchor),
-            panelContainerHeightConstraint,
-        ])
-
-        emojiPanel.translatesAutoresizingMaskIntoConstraints = false
-        extPanel.translatesAutoresizingMaskIntoConstraints = false
-        panelContainer.addSubview(emojiPanel)
-        panelContainer.addSubview(extPanel)
-        emojiPanel.isHidden = true
-        extPanel.isHidden = true
-
-        for panel in [emojiPanel, extPanel] as [UIView] {
-            NSLayoutConstraint.activate([
-                panel.topAnchor.constraint(equalTo: panelContainer.topAnchor),
-                panel.leadingAnchor.constraint(equalTo: panelContainer.leadingAnchor),
-                panel.trailingAnchor.constraint(equalTo: panelContainer.trailingAnchor),
-                panel.bottomAnchor.constraint(equalTo: panelContainer.bottomAnchor),
-            ])
-        }
-    }
-
-    private func wireCallbacks() {
-        emojiPanel.onEmojiTapped = { [weak self] emoji in
-            self?.textView.insertText(emoji)
-        }
-        emojiPanel.onDeleteTapped = { [weak self] in
-            guard let tv = self?.textView, !tv.text.isEmpty else { return }
-            tv.deleteBackward()
-            self?.textViewDidChange(tv)
-        }
-        extPanel.onAlbum = { [weak self] in self?.onPickImage?() }
-        extPanel.onCamera = { [weak self] in self?.onCamera?() }
-        extPanel.onFile = { [weak self] in self?.onPickFile?() }
-        extPanel.onLocation = { [weak self] in self?.onPickLocation?() }
-        extPanel.onAudioCall = { [weak self] in self?.onAudioCall?() }
-        extPanel.onVideoCall = { [weak self] in self?.onVideoCall?() }
-    }
-
-    /// 音视频通话入口仅单聊显示 —— 由 ConversationViewController 按会话类型设置。
     var showsCallItems: Bool {
         get { extPanel.showsCallItems }
         set { extPanel.showsCallItems = newValue }
     }
 
-    // MARK: - Button Actions
-    @objc private func voiceToggleTapped() {
-        isVoiceMode.toggle()
-        textView.isHidden = isVoiceMode
-        recordButton.isHidden = !isVoiceMode
-        let icon = isVoiceMode ? "keyboard" : "mic.fill"
-        voiceToggleButton.setImage(UIImage(systemName: icon), for: .normal)
-        if isVoiceMode {
-            textView.resignFirstResponder()
-            setPanelState(.none, animated: true)
+    // Mention metadata lives on text ranges, so cursor edits and selection replacement stay in sync.
+    func insertMention(uid: String?, displayName: String) {
+        if state.mode == .voice {
+            recording.finish(cancelled: true)
+            state.show(.keyboard)
+            state.collapse()
+        }
+        var attributes = textAttributes
+        attributes[ComposerMentions.attributeKey] = ComposerMentions.Reference(uid: uid)
+        let mention = NSAttributedString(string: "@\(displayName) ", attributes: attributes)
+        let range = textView.selectedRange
+        textView.textStorage.replaceCharacters(in: range, with: mention)
+        textView.selectedRange = NSRange(location: range.location + mention.length, length: 0)
+        textView.typingAttributes = textAttributes
+        textViewDidChange(textView)
+    }
+
+    func removeTrailingMentionTrigger() {
+        let position = textView.selectedRange.location
+        let text = textView.text as NSString
+        guard position > 0, position <= text.length, text.substring(with: NSRange(location: position - 1, length: 1)) == "@" else { return }
+        textView.textStorage.deleteCharacters(in: NSRange(location: position - 1, length: 1))
+        textView.selectedRange = NSRange(location: position - 1, length: 0)
+        textViewDidChange(textView)
+    }
+
+    func collapseInput() {
+        recording.finish(cancelled: true)
+        state.collapse()
+        keyboardReservation = 0
+        textView.resignFirstResponder()
+        render(animated: true)
+    }
+
+    /// Called when leaving the page. Submitted conversions cannot deliver into another conversation.
+    func cancelRecording() { recording.cancelAll() }
+
+    /// A single spacer hosts either IME or a custom panel, never the sum of their heights.
+    func updateKeyboard(height: CGFloat) {
+        if height > 0, keyboardHeight == 0, !textView.isFirstResponder { return }
+        keyboardHeight = max(0, height)
+        if height > 0 {
+            lastKeyboardHeight = height
+            keyboardReservation = 0
+        } else if state.surface == .keyboard, !textView.isFirstResponder {
+            state.collapse()
+        }
+        render()
+    }
+
+    private func setupInputRow() {
+        addSubview(dock)
+        dock.translatesAutoresizingMaskIntoConstraints = false
+        dock.addSubview(plusGlass)
+        dock.addSubview(glass)
+        dock.addSubview(extButton)
+        let stack = UIStackView(arrangedSubviews: [editingHost, emojiButton, tailHost])
+        stack.spacing = 0
+        glass.isUserInteractionEnabled = true
+        glass.addSubview(stack)
+        editingHost.addSubview(textView)
+        editingHost.addSubview(voiceRow)
+        voiceRow.axis = .horizontal
+        voiceRow.addArrangedSubview(keyboardButton)
+        voiceRow.addArrangedSubview(recordButton)
+        tailHost.addSubview(sendCircle)
+        tailHost.addSubview(voiceButton)
+        tailHost.addSubview(sendButton)
+        for v in [plusGlass, glass, extButton, stack, textView, voiceRow, keyboardButton,
+                  emojiButton, tailHost, voiceButton, sendButton, sendCircle] {
+            v.translatesAutoresizingMaskIntoConstraints = false
+        }
+        textView.font = .preferredFont(forTextStyle: .body)
+        textView.adjustsFontForContentSizeCategory = true
+        textView.textColor = Theme.textPrimary
+        textView.backgroundColor = .clear
+        textView.textContainerInset = UIEdgeInsets(top: 10, left: 4, bottom: 10, right: 0)
+        textView.textContainer.lineFragmentPadding = 0
+        textView.isScrollEnabled = false
+        textView.delegate = self
+        textView.accessibilityLabel = "消息输入框"
+        textView.returnKeyType = .default
+        textView.typingAttributes = textAttributes
+        placeholderLabel.text = "发消息…"
+        placeholderLabel.textColor = .secondaryLabel
+        placeholderLabel.font = .preferredFont(forTextStyle: .body)
+        placeholderLabel.adjustsFontForContentSizeCategory = true
+        placeholderLabel.isAccessibilityElement = false
+        placeholderLabel.translatesAutoresizingMaskIntoConstraints = false
+        textView.addSubview(placeholderLabel)
+
+        configureButton(extButton, symbol: "plus", label: "更多功能", action: #selector(extTapped))
+        configureButton(emojiButton, symbol: "face.smiling", label: "表情", action: #selector(emojiTapped))
+        configureButton(voiceButton, symbol: "waveform", label: "语音输入", action: #selector(voiceTapped))
+        // Waveform has a larger visual footprint than the face at the same point size.
+        let voiceSymbol = UIImage.SymbolConfiguration(pointSize: 16, weight: .regular)
+        voiceButton.setImage(UIImage(systemName: "waveform", withConfiguration: voiceSymbol), for: .normal)
+        voiceButton.setPreferredSymbolConfiguration(voiceSymbol, forImageIn: .normal)
+        voiceButton.imageView?.contentMode = .center
+        voiceButton.accessibilityHint = "切换到按住说话，发送语音消息"
+        configureButton(keyboardButton, symbol: "keyboard", label: "键盘输入", action: #selector(keyboardTapped))
+        // The keyboard symbol is wider than the face symbol at the same point size.
+        let keyboardSymbol = UIImage.SymbolConfiguration(pointSize: 16, weight: .regular)
+        keyboardButton.setImage(UIImage(systemName: "keyboard", withConfiguration: keyboardSymbol), for: .normal)
+        keyboardButton.setPreferredSymbolConfiguration(keyboardSymbol, forImageIn: .normal)
+        keyboardButton.imageView?.contentMode = .center
+        configureButton(sendButton, symbol: "arrow.up", label: "发送", action: #selector(sendTapped))
+        let sendSymbol = UIImage.SymbolConfiguration(pointSize: 16, weight: .semibold)
+        sendButton.setImage(UIImage(systemName: "arrow.up", withConfiguration: sendSymbol), for: .normal)
+        sendButton.setPreferredSymbolConfiguration(sendSymbol, forImageIn: .normal)
+        sendButton.imageView?.contentMode = .center
+        sendButton.tintColor = Theme.textOnAccent
+        sendCircle.backgroundColor = Theme.accent
+        sendCircle.layer.cornerRadius = 18
+        sendCircle.isUserInteractionEnabled = false
+        recordButton.setTitle("按住说话", for: .normal)
+        recordButton.titleLabel?.font = .preferredFont(forTextStyle: .subheadline)
+        recordButton.titleLabel?.adjustsFontForContentSizeCategory = true
+        recordButton.titleLabel?.numberOfLines = 2
+        recordButton.titleLabel?.textAlignment = .center
+        recordButton.setTitleColor(Theme.textPrimary, for: .normal)
+        recordButton.accessibilityLabel = "按住说话"
+        recordButton.accessibilityHint = "按住录音，松开发送，上滑取消；也可使用辅助操作开始和停止"
+        recordButton.addTarget(self, action: #selector(recordDown(_:event:)), for: .touchDown)
+        recordButton.addTarget(self, action: #selector(recordMoved(_:event:)), for: [.touchDragInside, .touchDragOutside])
+        recordButton.addTarget(self, action: #selector(recordUp), for: [.touchUpInside, .touchUpOutside])
+        recordButton.addTarget(self, action: #selector(recordCancel), for: .touchCancel)
+        recordButton.accessibilityCustomActions = [
+            UIAccessibilityCustomAction(name: "开始录音", target: self, selector: #selector(accessibleRecordStart)),
+            UIAccessibilityCustomAction(name: "停止并发送", target: self, selector: #selector(accessibleRecordSend)),
+            UIAccessibilityCustomAction(name: "取消录音", target: self, selector: #selector(accessibleRecordCancel))
+        ]
+        let tailWidth = tailHost.widthAnchor.constraint(equalToConstant: 44)
+        tailWidth.priority = UILayoutPriority(999)
+        editorHeight = textView.heightAnchor.constraint(equalToConstant: 44)
+        placeholderCenterY = placeholderLabel.centerYAnchor.constraint(equalTo: textView.topAnchor, constant: 22)
+        NSLayoutConstraint.activate([
+            dock.topAnchor.constraint(equalTo: topAnchor, constant: 8),
+            dock.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
+            dock.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
+            glass.topAnchor.constraint(equalTo: dock.topAnchor),
+            glass.bottomAnchor.constraint(equalTo: dock.bottomAnchor),
+            glass.leadingAnchor.constraint(equalTo: extButton.trailingAnchor, constant: 8),
+            glass.trailingAnchor.constraint(equalTo: dock.trailingAnchor),
+            extButton.leadingAnchor.constraint(equalTo: dock.leadingAnchor),
+            extButton.bottomAnchor.constraint(equalTo: dock.bottomAnchor),
+            extButton.widthAnchor.constraint(equalToConstant: 48),
+            extButton.heightAnchor.constraint(equalToConstant: 48),
+            plusGlass.leadingAnchor.constraint(equalTo: extButton.leadingAnchor),
+            plusGlass.trailingAnchor.constraint(equalTo: extButton.trailingAnchor),
+            plusGlass.topAnchor.constraint(equalTo: extButton.topAnchor),
+            plusGlass.bottomAnchor.constraint(equalTo: extButton.bottomAnchor),
+            stack.leadingAnchor.constraint(equalTo: glass.leadingAnchor, constant: 10),
+            stack.trailingAnchor.constraint(equalTo: glass.trailingAnchor, constant: -4),
+            stack.topAnchor.constraint(equalTo: glass.topAnchor, constant: 4),
+            stack.bottomAnchor.constraint(equalTo: glass.bottomAnchor, constant: -4),
+            textView.leadingAnchor.constraint(equalTo: editingHost.leadingAnchor),
+            textView.trailingAnchor.constraint(equalTo: editingHost.trailingAnchor),
+            textView.topAnchor.constraint(equalTo: editingHost.topAnchor),
+            textView.bottomAnchor.constraint(equalTo: editingHost.bottomAnchor), editorHeight,
+            voiceRow.leadingAnchor.constraint(equalTo: editingHost.leadingAnchor),
+            voiceRow.trailingAnchor.constraint(equalTo: editingHost.trailingAnchor),
+            voiceRow.topAnchor.constraint(equalTo: editingHost.topAnchor),
+            voiceRow.bottomAnchor.constraint(equalTo: editingHost.bottomAnchor),
+            keyboardButton.widthAnchor.constraint(equalToConstant: 44),
+            emojiButton.widthAnchor.constraint(equalToConstant: 44),
+            tailWidth,
+            sendCircle.widthAnchor.constraint(equalToConstant: 36),
+            sendCircle.heightAnchor.constraint(equalToConstant: 36),
+            sendCircle.centerXAnchor.constraint(equalTo: tailHost.centerXAnchor),
+            sendCircle.bottomAnchor.constraint(equalTo: tailHost.bottomAnchor, constant: -4),
+            placeholderLabel.leadingAnchor.constraint(equalTo: textView.leadingAnchor, constant: 4),
+            placeholderCenterY
+        ])
+        for button in [voiceButton, sendButton] {
+            NSLayoutConstraint.activate([
+                button.leadingAnchor.constraint(equalTo: tailHost.leadingAnchor),
+                button.trailingAnchor.constraint(equalTo: tailHost.trailingAnchor),
+                button.bottomAnchor.constraint(equalTo: tailHost.bottomAnchor),
+                button.heightAnchor.constraint(equalToConstant: 44)
+            ])
+        }
+        // Keep the emoji aligned with the bottom line as the text grows upwards.
+        emojiButton.contentVerticalAlignment = .bottom
+        emojiButton.contentEdgeInsets = UIEdgeInsets(top: 0, left: 0, bottom: 11, right: 0)
+        plusGlass.cornerRadius = 24
+        noticeLabel.textAlignment = .center
+        noticeLabel.font = .preferredFont(forTextStyle: .footnote)
+        noticeLabel.numberOfLines = 0
+        noticeLabel.backgroundColor = Theme.popupCard
+        noticeLabel.textColor = Theme.textPrimary
+        noticeLabel.layer.cornerRadius = 12
+        noticeLabel.clipsToBounds = true
+        noticeLabel.isHidden = true
+        noticeLabel.isUserInteractionEnabled = false
+        addSubview(noticeLabel)
+        noticeLabel.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            noticeLabel.bottomAnchor.constraint(equalTo: dock.topAnchor, constant: -8),
+            noticeLabel.centerXAnchor.constraint(equalTo: centerXAnchor),
+            noticeLabel.widthAnchor.constraint(lessThanOrEqualTo: widthAnchor, constant: -32),
+            noticeLabel.heightAnchor.constraint(greaterThanOrEqualToConstant: 32)
+        ])
+    }
+
+    private func configureButton(_ button: UIButton, symbol: String, label: String, action: Selector) {
+        button.setImage(UIImage(systemName: symbol, withConfiguration: UIImage.SymbolConfiguration(pointSize: 21, weight: .regular)), for: .normal)
+        button.tintColor = Theme.textPrimary
+        button.accessibilityLabel = label
+        button.addTarget(self, action: action, for: .touchUpInside)
+    }
+
+    private func setupPanelContainer() {
+        panelContainer.clipsToBounds = true
+        panelContainer.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(panelContainer)
+        panelHeight = panelContainer.heightAnchor.constraint(equalToConstant: 0)
+        NSLayoutConstraint.activate([
+            panelContainer.topAnchor.constraint(equalTo: dock.bottomAnchor, constant: 8),
+            panelContainer.leadingAnchor.constraint(equalTo: leadingAnchor),
+            panelContainer.trailingAnchor.constraint(equalTo: trailingAnchor),
+            panelContainer.bottomAnchor.constraint(equalTo: bottomAnchor), panelHeight
+        ])
+        for panel in [emojiPanel, extPanel] as [UIView] {
+            panel.translatesAutoresizingMaskIntoConstraints = false
+            panelContainer.addSubview(panel)
+            NSLayoutConstraint.activate([
+                panel.leadingAnchor.constraint(equalTo: panelContainer.leadingAnchor),
+                panel.trailingAnchor.constraint(equalTo: panelContainer.trailingAnchor),
+                panel.topAnchor.constraint(equalTo: panelContainer.topAnchor),
+                panel.bottomAnchor.constraint(equalTo: panelContainer.bottomAnchor)
+            ])
         }
     }
 
+    private func wireCallbacks() {
+        emojiPanel.onEmojiTapped = { [weak self] emoji in self?.textView.insertText(emoji) }
+        emojiPanel.onDeleteTapped = { [weak self] in self?.textView.deleteBackward() }
+        // Keep MORE in state while an external picker is presented. Its return restores the panel,
+        // with no keyboard resurrection and with the same text view/selection/mention attributes.
+        extPanel.onAlbum = { [weak self] in self?.onPickImage?() }
+        extPanel.onCamera = { [weak self] in self?.onCamera?() }
+        extPanel.onFile = { [weak self] in self?.onPickFile?() }
+        extPanel.onLocation = { [weak self] in self?.onPickLocation?() }
+        extPanel.onAudioCall = { [weak self] in
+            self?.collapseInput(); self?.onAudioCall?()
+        }
+        extPanel.onVideoCall = { [weak self] in
+            self?.collapseInput(); self?.onVideoCall?()
+        }
+        extPanel.onVoiceMessage = { [weak self] in self?.voiceTapped() }
+        recording.onSend = { [weak self] data, duration, name, url in self?.onSendVoice?(data, duration, name, url) }
+        recording.onNotice = { [weak self] in self?.showNotice($0) }
+        recording.onUpdate = { [weak self] title, active in
+            guard let self else { return }
+            self.recordButton.setTitle(title, for: .normal)
+            self.recordButton.accessibilityValue = active ? title : nil
+            self.extButton.isEnabled = !active
+            self.emojiButton.isEnabled = !active
+            self.keyboardButton.isEnabled = !active
+        }
+    }
+
+    private func render(animated: Bool = false) {
+        let voice = state.mode == .voice
+        let hasText = !textView.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        textView.isHidden = voice
+        voiceRow.isHidden = !voice
+        tailHost.isHidden = voice
+        sendButton.isHidden = !hasText
+        sendCircle.isHidden = !hasText
+        voiceButton.isHidden = hasText
+        placeholderLabel.isHidden = !textView.text.isEmpty
+        extButton.setImage(UIImage(systemName: state.surface == .more ? "xmark" : "plus"), for: .normal)
+        extButton.accessibilityLabel = state.surface == .more ? "收起更多" : "更多功能"
+        emojiButton.setImage(UIImage(systemName: state.surface == .emoji ? "keyboard" : "face.smiling"), for: .normal)
+        emojiButton.accessibilityLabel = state.surface == .emoji ? "键盘输入" : "表情"
+        emojiPanel.isHidden = state.surface != .emoji || keyboardHeight > 0
+        extPanel.isHidden = state.surface != .more || keyboardHeight > 0
+        let maximum = max(120, (window?.bounds.height ?? 600) * 0.45)
+        let custom: CGFloat = (state.surface == .emoji || state.surface == .more) ? min(max(lastKeyboardHeight, 220), maximum) : 0
+        panelHeight.constant = CGFloat(ComposerState.occupiedHeight(keyboard: Double(keyboardHeight), panel: Double(max(custom, keyboardReservation))))
+        updateHeight()
+        setNeedsLayout()
+        if animated, let host = superview {
+            UIView.animate(withDuration: UIAccessibility.isReduceMotionEnabled ? 0 : 0.2,
+                           delay: 0, options: [.beginFromCurrentState, .allowUserInteraction]) { host.layoutIfNeeded() }
+        }
+    }
+
+    private func showKeyboard() {
+        transitionID += 1
+        let id = transitionID
+        keyboardReservation = panelHeight.constant
+        state.show(.keyboard)
+        render()
+        textView.becomeFirstResponder()
+        // Hardware keyboards may not deliver an IME frame notification.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { [weak self] in
+            guard let self, self.transitionID == id, self.state.surface == .keyboard else { return }
+            self.keyboardReservation = 0
+            self.render(animated: true)
+        }
+    }
+
+    @objc private func voiceTapped() {
+        state.enterVoice()
+        keyboardReservation = 0
+        transitionID += 1
+        textView.resignFirstResponder()
+        render(animated: true)
+    }
+
+    @objc private func keyboardTapped() { showKeyboard() }
+
     @objc private func emojiTapped() {
-        setPanelState(panelState == .emoji ? .none : .emoji, animated: true)
-        if panelState == .none { textView.becomeFirstResponder() } else { textView.resignFirstResponder() }
+        guard !recording.isRecording else { return }
+        if state.surface == .emoji { showKeyboard(); return }
+        transitionID += 1
+        keyboardReservation = 0
+        state.show(.emoji)
+        textView.resignFirstResponder()
+        render(animated: true)
     }
 
     @objc private func extTapped() {
-        setPanelState(panelState == .ext ? .none : .ext, animated: true)
-        if panelState == .none { textView.becomeFirstResponder() } else { textView.resignFirstResponder() }
+        guard !recording.isRecording else { return }
+        transitionID += 1
+        keyboardReservation = 0
+        if state.surface == .more { collapseInput(); return }
+        state.show(.more)
+        textView.resignFirstResponder()
+        render(animated: true)
     }
 
     @objc private func sendTapped() {
+        guard textView.markedTextRange == nil else { return }
         let text = textView.text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
-        onSendText?(text, mentionedType, mentionedTargets)
+        let recipients = ComposerMentions.recipients(in: textView.textStorage)
+        onSendText?(text, recipients.type, recipients.targets)
         textView.text = ""
-        mentionedType = 0; mentionedTargets = []; mentionTokens = []
-        placeholderLabel.isHidden = false
-        updateSendExtVisibility()
-        updateHeight()
+        textView.typingAttributes = textAttributes
+        render(animated: true)
     }
 
-    // MARK: - Voice Recording
-    @objc private func recordTouchDown() {
-        startRecording()
-        recordButton.setTitle("松开发送 (上滑取消)", for: .normal)
+    @objc private func recordDown(_ sender: UIButton, event: UIEvent) {
+        recordStartY = event.touches(for: sender)?.first?.location(in: self).y ?? 0
+        recording.begin()
     }
 
-    @objc private func recordTouchUp() {
-        guard let url = recordingURL else { return }
-        let duration = Int(audioRecorder?.currentTime ?? 0)
-        stopRecording()
-        resetRecordButton()
-        guard duration >= 1 else { return }
-
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            // Save M4A to caches so local playback can bypass AMR decode.
-            let cacheDir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
-                .appendingPathComponent("VoiceMessages")
-            try? FileManager.default.createDirectory(at: cacheDir, withIntermediateDirectories: true)
-            let m4aCacheURL = cacheDir.appendingPathComponent(url.lastPathComponent)
-            try? FileManager.default.copyItem(at: url, to: m4aCacheURL)
-
-            let amrData = VoiceConverter.convertToAMR(from: url)
-            let data: Data
-            let fileName: String
-            // Require > 20 bytes to guard against empty AMR containers.
-            if let amrData, amrData.count > 20 {
-                data = amrData
-                fileName = url.deletingPathExtension().appendingPathExtension("amr").lastPathComponent
-            } else if let m4aData = try? Data(contentsOf: url) {
-                data = m4aData
-                fileName = url.lastPathComponent
-            } else {
-                return
-            }
-            DispatchQueue.main.async { self?.onSendVoice?(data, duration, fileName, m4aCacheURL) }
-        }
+    @objc private func recordMoved(_ sender: UIButton, event: UIEvent) {
+        guard let touch = event.touches(for: sender)?.first else { return }
+        recording.move(upwardDistance: recordStartY - touch.location(in: self).y)
     }
 
-    @objc private func recordTouchCancel() {
-        stopRecording()
-        if let url = recordingURL { try? FileManager.default.removeItem(at: url) }
-        resetRecordButton()
+    @objc private func recordUp() { recording.finish(cancelled: false) }
+    @objc private func recordCancel() { recording.finish(cancelled: true) }
+    @objc private func accessibleRecordStart() -> Bool { recording.begin(); return true }
+    @objc private func accessibleRecordSend() -> Bool { recording.finish(cancelled: false); return true }
+    @objc private func accessibleRecordCancel() -> Bool { recording.finish(cancelled: true); return true }
+
+    private func showNotice(_ text: String) {
+        noticeTask?.cancel()
+        noticeLabel.text = "  \(text)  "
+        noticeLabel.isHidden = false
+        UIAccessibility.post(notification: .announcement, argument: text)
+        let task = DispatchWorkItem { [weak self] in self?.noticeLabel.isHidden = true }
+        noticeTask = task
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3, execute: task)
     }
 
-    private func resetRecordButton() { recordButton.setTitle("按住说话", for: .normal) }
-
-    private func startRecording() {
-        AVAudioSession.sharedInstance().requestRecordPermission { granted in
-            guard granted else { return }
-            DispatchQueue.main.async {
-                try? AVAudioSession.sharedInstance().setCategory(.record, mode: .default)
-                try? AVAudioSession.sharedInstance().setActive(true)
-                let fileName = "voice-\(Int(Date().timeIntervalSince1970)).m4a"
-                let url = FileManager.default.temporaryDirectory.appendingPathComponent(fileName)
-                self.recordingURL = url
-                let settings: [String: Any] = [
-                    AVFormatIDKey: Int(kAudioFormatMPEG4AAC),
-                    AVSampleRateKey: 44100,
-                    AVNumberOfChannelsKey: 1,
-                    AVEncoderAudioQualityKey: AVAudioQuality.medium.rawValue,
-                ]
-                self.audioRecorder = try? AVAudioRecorder(url: url, settings: settings)
-                self.audioRecorder?.record()
-            }
-        }
-    }
-
-    private func stopRecording() {
-        audioRecorder?.stop()
-        audioRecorder = nil
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
-    }
-
-    // MARK: - Panel visibility
-    private func setPanelState(_ state: PanelState, animated: Bool) {
-        panelState = state
-        let newHeight: CGFloat
-        switch state {
-        case .none: newHeight = 0
-        case .emoji: newHeight = EmojiPanelView.panelHeight
-        case .ext: newHeight = ExtPanelView.panelHeight
-        }
-        panelContainerHeightConstraint.constant = newHeight
-        emojiPanel.isHidden = state != .emoji
-        extPanel.isHidden = state != .ext
-        emojiButton.setImage(UIImage(systemName: state == .emoji ? "keyboard" : "face.smiling"), for: .normal)
-        if animated {
-            UIView.animate(withDuration: 0.25) { self.window?.layoutIfNeeded() }
-        }
-        if state != .none { onPanelShown?() }
-    }
-
-    private func updateSendExtVisibility() {
-        let hasText = !textView.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        sendButton.isHidden = !hasText
-        extButton.isHidden = hasText
-        // 先全部松开再激活当前方的钉边约束，避免瞬时互相冲突。
-        extTrailingConstraint.isActive = false
-        sendLeadingConstraint.isActive = false
-        extTrailingConstraint.isActive = !hasText
-        sendLeadingConstraint.isActive = hasText
+    @objc private func contentSizeChanged() {
+        placeholderLabel.font = .preferredFont(forTextStyle: .body)
+        textView.textStorage.addAttributes(textAttributes, range: NSRange(location: 0, length: textView.textStorage.length))
+        textView.typingAttributes = textAttributes
+        render()
     }
 
     private func updateHeight() {
-        let size = textView.sizeThatFits(CGSize(width: textView.bounds.width, height: .greatestFiniteMagnitude))
-        let capped = min(max(size.height, 36), 120)
-        textView.isScrollEnabled = size.height > 120
-        textViewHeightConstraint.constant = capped
+        guard editorHeight != nil else { return }
+        let font = UIFont.preferredFont(forTextStyle: .body)
+        let size = textView.sizeThatFits(CGSize(width: max(textView.bounds.width, 50), height: .greatestFiniteMagnitude))
+        // Measure the text independently of the previous centering padding so height cannot drift
+        // when a one-line draft wraps, shrinks again, or changes Dynamic Type size.
+        let textHeight = max(font.lineHeight, size.height - textView.textContainerInset.top - textView.textContainerInset.bottom)
+        let maximum = min(max(120, font.lineHeight * 5 + 20), (window?.bounds.height ?? 600) * 0.3)
+        let height = state.mode == .voice ? max(44, UIFont.preferredFont(forTextStyle: .subheadline).lineHeight * 2 + 8) : min(max(ceil(textHeight) + 20, 44), maximum)
+        let verticalPadding = max(10, (height - textHeight) / 2)
+        let insets = UIEdgeInsets(top: verticalPadding, left: 4, bottom: verticalPadding, right: 0)
+        if textView.textContainerInset != insets { textView.textContainerInset = insets }
+        placeholderCenterY.constant = height / 2
+        textView.isScrollEnabled = textHeight + 20 > maximum && state.mode == .text
+        if abs(editorHeight.constant - height) > 0.5 { editorHeight.constant = height }
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        guard !isLayingOut else { return }
+        isLayingOut = true
+        defer { isLayingOut = false }
+        if abs(lastEditorWidth - textView.bounds.width) > 0.5 {
+            lastEditorWidth = textView.bounds.width
+            render()
+        }
+    }
+
+    // Transparent gaps and the keyboard spacer must not eat message-list touches.
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        guard !isHidden, alpha > 0.01, isUserInteractionEnabled else { return nil }
+        for child in [panelContainer, dock] where !child.isHidden {
+            let converted = child.convert(point, from: self)
+            guard child.bounds.contains(converted) else { continue }
+            if child === dock {
+                for control in [extButton, glass] {
+                    let local = control.convert(point, from: self)
+                    let radius: CGFloat = control === extButton ? 24 : 26
+                    guard UIBezierPath(roundedRect: control.bounds, cornerRadius: radius).contains(local) else { continue }
+                    if let hit = control.hitTest(local, with: event) { return hit }
+                }
+            } else if state.surface == .emoji || state.surface == .more {
+                return child.hitTest(converted, with: event)
+            }
+        }
+        return nil
     }
 }
 
-// MARK: - UITextViewDelegate
 extension MessageInputBar: UITextViewDelegate {
     func textView(_ textView: UITextView, shouldChangeTextIn range: NSRange, replacementText text: String) -> Bool {
-        justTypedMentionTrigger = (text == "@")
-        // 退格单字符删除且删的是某个 @ 块的末字符 → 整块删除。
-        guard text.isEmpty, range.length == 1 else { return true }
-        let ns = textView.text as NSString
-        let deleteEnd = range.location + 1
-        for (index, token) in mentionTokens.enumerated() {
-            var searchLocation = 0
-            while searchLocation < ns.length {
-                let found = ns.range(of: token.text, range: NSRange(location: searchLocation, length: ns.length - searchLocation))
-                if found.location == NSNotFound { break }
-                if found.location + found.length == deleteEnd {
-                    textView.text = ns.replacingCharacters(in: found, with: "")
-                    textView.selectedRange = NSRange(location: found.location, length: 0)
-                    mentionTokens.remove(at: index)
-                    recomputeMentionState()
-                    textViewDidChange(textView)
-                    return false
-                }
-                searchLocation = found.location + 1
-            }
-        }
-        return true
+        justTypedMention = text == "@"
+        let expanded = ComposerMentions.expandedRange(for: range, in: textView.textStorage)
+        guard expanded != range else { return true }
+        textView.textStorage.replaceCharacters(in: expanded, with: NSAttributedString(string: text, attributes: textAttributes))
+        textView.selectedRange = NSRange(location: expanded.location + (text as NSString).length, length: 0)
+        textViewDidChange(textView)
+        return false
     }
 
     func textViewDidChange(_ textView: UITextView) {
-        placeholderLabel.isHidden = !textView.text.isEmpty
-        updateSendExtVisibility()
-        updateHeight()
-        // 只在用户刚敲入 "@" 时弹选人页——整块删除后残留文本以 "@" 结尾、
-        // 粘贴含 "@" 的内容等场景都不该弹。
-        if justTypedMentionTrigger, textView.text.hasSuffix("@") { onMentionTriggered?() }
-        justTypedMentionTrigger = false
+        textView.typingAttributes = textAttributes
+        render(animated: true)
+        if justTypedMention { onMentionTriggered?() }
+        justTypedMention = false
+    }
+
+    func textViewDidChangeSelection(_ textView: UITextView) {
+        if textView.markedTextRange == nil { textView.typingAttributes = textAttributes }
     }
 
     func textViewDidBeginEditing(_ textView: UITextView) {
-        if panelState != .none { setPanelState(.none, animated: false) }
+        if state.surface != .keyboard { showKeyboard() }
     }
 }

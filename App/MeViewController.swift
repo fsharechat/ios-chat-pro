@@ -124,6 +124,7 @@ extension MeViewController: UITableViewDataSource, UITableViewDelegate {
         case .settings:
             cell = tableView.dequeueReusableCell(withIdentifier: "cell") ?? UITableViewCell(style: .default, reuseIdentifier: "cell")
             cell.textLabel?.text = "设置"
+            cell.textLabel?.font = .systemFont(ofSize: 16)
             cell.textLabel?.textColor = Theme.textPrimary
             cell.accessoryType = .disclosureIndicator
         }

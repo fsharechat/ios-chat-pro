@@ -45,6 +45,7 @@
 		5CCCCCD8B87CE043CB00EFFA /* FileMessageCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00822E7236C8497D7E1D66E /* FileMessageCell.swift */; };
 		5DF857D59C206BEC63D76B76 /* ThemeViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E848D7102A8E3E27251A49D /* ThemeViewController.swift */; };
 		67A6CD6BE1F7971C10669620 /* RemoveGroupMemberViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 78334B401B5DBB1CF612CF05 /* RemoveGroupMemberViewController.swift */; };
+		69EF37A971BD4922FA12CFC5 /* ComposerGlassBackgroundView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE9A174D70D323A3F9C1DE2E /* ComposerGlassBackgroundView.swift */; };
 		6DDC45A6F2C81844B6C084FF /* MainTabBarController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17F97F20C13CF16B06EED3A5 /* MainTabBarController.swift */; };
 		72DF9C8D9144BD29B958A810 /* CallRingtonePlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AD23AFE8191A4A283002338 /* CallRingtonePlayer.swift */; };
 		7AB9633A25E6AFDC3D82E429 /* ContactListCell.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8EB6D5DBC0051B5D576A085 /* ContactListCell.swift */; };
@@ -70,6 +71,7 @@
 		A75FCD387555CBC8F03D73FE /* AppHeaderBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = DC9EF02E062FD6C49FC6F8D9 /* AppHeaderBar.swift */; };
 		AB252857C7E784446EBA5D85 /* GlassTabBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31486E9438EF069A35DFB6A2 /* GlassTabBar.swift */; };
 		AC4CF93C08183929C472085A /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93FA326C9B762DCAB590F502 /* AppDelegate.swift */; };
+		AE4D18289E2ECEEDF219DED5 /* VoiceRecordingController.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFAB5D24B5E967ACE03F1890 /* VoiceRecordingController.swift */; };
 		B0EFF1C4DDDD6E6588C31290 /* WebRTC in Frameworks */ = {isa = PBXBuildFile; productRef = 245A8DCD66CF4BF518D7B079 /* WebRTC */; };
 		B4D4EDF98006BDCDAD271B46 /* TextSelectionController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71A8B15A7E069D34684A5286 /* TextSelectionController.swift */; };
 		B6C83ED8F8E140766B2E7D33 /* MessageAlertPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0C50E815B16D6C055A8900B /* MessageAlertPlayer.swift */; };
@@ -158,6 +160,7 @@
 		A00822E7236C8497D7E1D66E /* FileMessageCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileMessageCell.swift; sourceTree = "<group>"; };
 		A0E388EB556B39D1EFCF7DEA /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
 		AD5904F1F07CC229CCF0DA07 /* VoiceMessageCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceMessageCell.swift; sourceTree = "<group>"; };
+		AFAB5D24B5E967ACE03F1890 /* VoiceRecordingController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceRecordingController.swift; sourceTree = "<group>"; };
 		B0C50E815B16D6C055A8900B /* MessageAlertPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageAlertPlayer.swift; sourceTree = "<group>"; };
 		B151EC37B62DE68EFA590FB8 /* LocationMessageCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationMessageCell.swift; sourceTree = "<group>"; };
 		B2F3F3D8AB0E764052611AEA /* incoming_call_ring.mp3 */ = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = incoming_call_ring.mp3; sourceTree = "<group>"; };
@@ -167,6 +170,7 @@
 		BBC2A561BBA6202E28B826DA /* TimeHeaderCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeHeaderCell.swift; sourceTree = "<group>"; };
 		BDF651A69DA130BE158D8EF1 /* FavGroupListViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FavGroupListViewController.swift; sourceTree = "<group>"; };
 		CDD76938A53906E62E996690 /* GroupMemberGridView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupMemberGridView.swift; sourceTree = "<group>"; };
+		CE9A174D70D323A3F9C1DE2E /* ComposerGlassBackgroundView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposerGlassBackgroundView.swift; sourceTree = "<group>"; };
 		CEF4749B0FA1FE54BE243607 /* ServerInfoCardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerInfoCardView.swift; sourceTree = "<group>"; };
 		DC9EF02E062FD6C49FC6F8D9 /* AppHeaderBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppHeaderBar.swift; sourceTree = "<group>"; };
 		E0FEE3A84C6B0830276652AE /* VideoMessageCell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoMessageCell.swift; sourceTree = "<group>"; };
@@ -241,6 +245,7 @@
 				0AD23AFE8191A4A283002338 /* CallRingtonePlayer.swift */,
 				433A3515C086B0178E667801 /* CallViewController.swift */,
 				5B6F41DEDAB57E7F88291C88 /* CameraCaptureViewController.swift */,
+				CE9A174D70D323A3F9C1DE2E /* ComposerGlassBackgroundView.swift */,
 				F8EB6D5DBC0051B5D576A085 /* ContactListCell.swift */,
 				8DFDF68D07E4AD79AFB0B169 /* ContactListViewController.swift */,
 				60C53CDF7ECE24AB7925139E /* ConversationListCell.swift */,
@@ -309,6 +314,7 @@
 				E0FEE3A84C6B0830276652AE /* VideoMessageCell.swift */,
 				5803A5A486BFF04BC8C60228 /* VoiceConverter.swift */,
 				AD5904F1F07CC229CCF0DA07 /* VoiceMessageCell.swift */,
+				AFAB5D24B5E967ACE03F1890 /* VoiceRecordingController.swift */,
 				F9236DD0D535E41EFD9B1ECF /* Resources */,
 			);
 			path = App;
@@ -419,6 +425,7 @@
 				72DF9C8D9144BD29B958A810 /* CallRingtonePlayer.swift in Sources */,
 				DFE88FBF3B3A22EEF47634EB /* CallViewController.swift in Sources */,
 				E863F4A314899B0B64CF572F /* CameraCaptureViewController.swift in Sources */,
+				69EF37A971BD4922FA12CFC5 /* ComposerGlassBackgroundView.swift in Sources */,
 				7AB9633A25E6AFDC3D82E429 /* ContactListCell.swift in Sources */,
 				951AC39EF02FC7F336FCCFCB /* ContactListViewController.swift in Sources */,
 				D91FAF18E648543CFB927ED6 /* ConversationListCell.swift in Sources */,
@@ -486,6 +493,7 @@
 				8E767651E511E3DC65B66846 /* VideoMessageCell.swift in Sources */,
 				DA32151AD7668352890D9013 /* VoiceConverter.swift in Sources */,
 				1B79BB5974B6C9D4C24D1877 /* VoiceMessageCell.swift in Sources */,
+				AE4D18289E2ECEEDF219DED5 /* VoiceRecordingController.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
